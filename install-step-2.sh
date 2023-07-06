@@ -8,24 +8,37 @@ mkdir -p ${rootdir}/software && pushd ${rootdir}/software
 ### IMPORTNT-NOTE: UVC (along with UVC-delins) is free for non-commercial use only. For commercial use, please contact Genetron Health
 export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${CONDA_PREFIX}/include"
 
-if [$1 != "*skip-uvc*" ]; then
-        git clone https://gitlab.com/cndfeifei/uvc.git
-        pushd uvc
-        ./install-dependencies.sh && make -j 6 && make deploy
-        cp bin/uvc* $CONDA_PREFIX/bin/ || true
-        popd
+if [ $(echo "$1" | grep -cP "skip-uvc|skip-all-software") -eq 0 ]; then
+    mv uvc uvc.bak || true
+    git clone https://gitlab.com/cndfeifei/uvc.git
+    pushd uvc
+    ./install-dependencies.sh && make -j 6 && make deploy
+    cp bin/uvc* "${CONDA_PREFIX}/bin/" || true
+    popd
 
-        git clone https://gitlab.com/cndfeifei/uvc-delins.git
-        pushd uvc-delins
-        ./install-dependencies.sh && make -j 6 && make deploy
-        cp bin/uvc* $CONDA_PREFIX/bin/ || true
-        popd
+    mv uvc-delins uvc-delins.bak || true
+    git clone https://gitlab.com/cndfeifei/uvc-delins.git
+    pushd uvc-delins
+    ./install-dependencies.sh && make -j 6 && make deploy
+    cp bin/uvc* "${CONDA_PREFIX}/bin/" || true
+    popd
 fi
 
 ### IMPORTNT-NOTE: MixCR is free for non-commercial use only. For commercial use, please contact MiLaboratories Inc
 # You have to activate MixCR with a license obtained from https://licensing.milaboratories.com/ in order to use it
-wget -c https://github.com/milaboratory/mixcr/releases/download/v4.0.0/mixcr-4.0.0.zip
-unzip mixcr-4.0.0.zip
+if [ $(echo "$1" | grep -cP "skip-mixcr|skip-all-software") -eq 0 ]; then
+    wget -c https://github.com/milaboratory/mixcr/releases/download/v4.0.0/mixcr-4.0.0.zip
+    unzip mixcr-4.0.0.zip
+fi
+if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
+    mv ERGO-II ERGO-II.bak || true
+    git clone https://github.com/IdoSpringer/ERGO-II.git
+    sed -i "s;ae_dir = 'TCR_Autoencoder';ae_dir = 'Models/AE' # CHANGED_FROM ae_dir = 'TCR_Autoencoder';g" ERGO-II/Models.py 
+    sed -i "s;checkpoint = torch.load(ae_file);checkpoint = torch.load(ae_file, map_location='cuda:0') # CHANGED_FROM checkpoint = torch.load(ae_file);g" ERGO-II/Models.py 
+    sed -i "s;from pytorch_lightning.logging import TensorBoardLogger;from pytorch_lightning.loggers import TensorBoardLogger # CHANGED_FROM from pytorch_lightning.logging import TensorBoardLogger;g" ERGO-II/Trainer.py
+    sed -i "s;self.hparams = hparams;self.save_hyperparameters(hparams) # CHANGED_FROM self.hparams = hparams;g" ERGO-II/Trainer.py
+    sed -i 's;@pl.data_loader;#@pl.data_loader # CHANGED_FROM @pl.data_loader;g' ERGO-II/Trainer.py
+fi
 
 # IMPORTNT-NOTE: netMHCpan and netMHCstabpan are free for non-commercial use only. For commercial use, please contact DTU Health Tech
 ## You have to go to the following three web-pages to manually download netMHCpan and netMHCstabpan and manually request for the licenses to use them
