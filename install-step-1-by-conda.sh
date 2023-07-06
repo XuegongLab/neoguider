@@ -27,3 +27,6 @@ $conda install -y -n $neohunter python=3.10 \
 
 pip install sj2psi # for ASNEO.py
 
+# The following command can be run to generate the freeze and requirement files
+# conda env export > freeze.yml &&  conda list -e > requirements.txt
+
