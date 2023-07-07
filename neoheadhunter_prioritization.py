@@ -81,8 +81,6 @@ def getR(neo_seq,iedb_seq):
         aln_score = aligner(neo_seq,seq)
         if aln_score:            
             localds_core = max([line[2] for line in aln_score])
-            #if neo_seq == 'ILDTAGHEEY' and (seq in 'MLDHAGNMSACAGAL' or localds_core >= 20):
-            #    print('NeoSeq={} WTseq={} aln_score={}'.format(neo_seq, seq, aln_score))
             align_score.append(localds_core)
 
     bindingEnergies = list(map(lambda x: -k * (a - x), align_score))
@@ -91,7 +89,6 @@ def getR(neo_seq,iedb_seq):
     # bindingEnergies = [max(bindingEnergies)] 
     sumExpEnergies = sum([exp(x) for x in bindingEnergies])
     Zk = (1 + sumExpEnergies)
-    if neo_seq == 'YLYHRVDVI': print(F'__________>>>>>>>>>  YLYHRVDVI.ENERGY = {sumExpEnergies}')
     return float(sumExpEnergies) / Zk
     
     #lZk = logSum(bindingEnergies + [0])
@@ -154,7 +151,6 @@ def write_file(a_list, name):
 #     os.system("cat "+output_folder+"/tmp_netmhc/* > "+output_folder+"/"+prefix+"_snv_indel_wt_netmhc.csv")
 
 def get_wt_bindaff(wt_seq,hla,output_folder,netmhc_path):
-    # write_file(wt_seq, "stage.pep")
     os.system("mkdir "+output_folder+"/tmp")
     with open(output_folder+"/tmp/wt.pep", "w") as pepfile:
         pepfile.write("%s"% wt_seq)
@@ -177,8 +173,6 @@ def runblast(query_seq, target_fasta, output_folder):
     query_fasta = F"{output_folder}/tmp/foreignness_query.{query_seq}.fasta"
     with open(query_fasta, 'w') as query_fasta_file:
         query_fasta_file.write(F'>{query_seq}\n{query_seq}\n')
-        #for q in sorted(list(set(query_seqs))):
-        #    query_fasta_file.write('>{q}\n{q}\n')
     # from https://github.com/andrewrech/antigen.garnish/blob/main/R/antigen.garnish_predict.R
     cmd = F'''blastp \
         -query {query_fasta} -db {target_fasta} \
@@ -196,42 +190,30 @@ def runblast(query_seq, target_fasta, output_folder):
             if is_canonical: ret.append(sseq)
     return ret
 
-def max2(a, b): return np.maximum(a, b)
-def max3(a, b, c): return max2(a, max2(b, c))
-def max4(a, b, c, d): return max2(a, max3(b, c, d))
-
-def min2(a, b): return np.minimum(a, b)
-def min3(a, b, c): return min2(a, min2(b, c))
-def min4(a, b, c, d): return min2(a, min3(b, c, d))
-
-def or2prob(a): return a/(1+a)
-
-def stepwise(a): return np.where(a >= 1.0, 1e20, 1e-20)
-
 def indicator(x): return np.where(x, 1, 0)
-
 def compute_immunogenic_probs(data, 
         t0Abundance = 33,    t0Agretopicity = 0.1,   t0Foreignness = 1e-16,
         t1Abundance = 11,    t1BindAff      = 34,    t1BindStab    = 1.4,
         t2Abundance = 11/11, t2BindAff      = 34*11, t2BindStab    = round(1.4/11,3),
         snvindel_location_param = 1.5, non_snvindel_location_param = 0.5, prior_strength = 1):
+    
     are_snvs_or_indels_bool = (data.Identity.isin(['SNV', 'INS', 'DEL', 'INDEL']))
     are_snvs_or_indels = indicator(are_snvs_or_indels_bool)
     
     t0foreign_nfilters = indicator(np.logical_and((t0Foreignness > data.Foreignness), (t0Agretopicity < data.Agretopicity)))
     t0recognized_nfilters = (
-        indicator(t1BindAff > data.BindAff) +
-        indicator(t1BindStab < data.BindStab) +
-        indicator(t0Abundance < data.Quantification) + 
+        indicator(data.BindAff > t1BindAff) +
+        indicator(data.BindStab < t1BindStab) +
+        indicator(data.Quantification < t0Abundance) + 
         t0foreign_nfilters)
     t1presented_nfilters = (
-        indicator(t1BindAff > data.BindAff) +
-        indicator(t1BindStab < data.BindStab) +
-        indicator(t1Abundance < data.Quantification))
+        indicator(data.BindAff > t1BindAff) +
+        indicator(data.BindStab < t1BindStab) +
+        indicator(data.Quantification < t1Abundance)) 
     t2presented_nfilters = (
-        indicator(t2BindAff > data.BindAff) +
-        indicator(t2BindStab < data.BindStab) +
-        indicator(t2Abundance < data.Quantification))
+        indicator(data.BindAff > t2BindAff) +
+        indicator(data.BindStab < t2BindStab) +
+        indicator(data.Quantification < t2Abundance))
     
     t0_are_foreign = (t0foreign_nfilters == 0)
     t1_are_presented = (t1presented_nfilters == 0)
@@ -258,54 +240,33 @@ def compute_immunogenic_probs(data,
         presented_not_recog_burden, presented_and_recog_burden, 
         immuno_strength)
 
-def compute_prob(data, thresRNAseqDPratio, thresBindAff, thresAgretopicity, thresForeignness, thresBindStab): # thresRNAseqVariantQuality
-    # Reference: https://www.sciencedirect.com/science/article/pii/S0092867420311569 Figure 4H
+def read_tesla_xls(tesla_xls, patientID):
+    # cat GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.gtf.mini.sortu  | awk '{print $NF}' | sort | uniq | wc
+    #  57055   57055 1688510 # 57055 genes, so averageTMP = 1e6 / 57055
+    df1 = pd.read_excel(tesla_xls)
+    df1.PATIENT_ID = df1.PATIENT_ID.astype(int)
+    df = df1.loc[df1.PATIENT_ID == patientID,]
+    if 'NETMHC_BINDING_AFFINITY' in df.columns:
+        df['BindAff'] = df.NETMHC_BINDING_AFFINITY.astype(float)
+    elif 'NETMHC_PAN_BINDING_AFFINITY' in df.columns:
+        df['BindAff'] = df.NETMHC_PAN_BINDING_AFFINITY.astype(float)
+    else:
+        sys.stderr.write(F'BindAff is not present in {tesla_xls}')
+        exit(1)
+    df['BindStab'] = df.BINDING_STABILITY.astype(float)
+    df['Quantification'] = df.TUMOR_ABUNDANCE.astype(float)
+    df['Agretopicity'] = df.AGRETOPICITY.astype(float)
+    df['Foreignness'] = df.FOREIGNNESS.astype(float)
+    df['RNA_normAD'] = df.Quantification * 0.02 # 0.02 is empirical
+    df['Identity'] = 'SNV' # most neo-epitope candidates are from SNVs
+    ret = df.dropna(subset=['BindAff', 'BindStab', 'Quantification', 'Agretopicity', 'Foreignness'])
+    return ret
     
-    # cat /mnt/d/TESLA/results/TESLA_91_90_97/alteration_detection/TESLA_91_90_97_transcript_quantification/abundance.tsv | wc
-    #  180254  901270 7613266
-    # python -c 'print(33/(1e6 / 180000)/(2*3))' # == 0.99 is_approx 1.0 assuming diploid allele with 33% tumor purity
-    # thresRNAseqDPratio = 2.0
-    are_snvs_or_indels_bool = (data.Identity.isin(['SNV', 'INS', 'DEL', 'INDEL']))
-    are_snvs_or_indels = indicator(are_snvs_or_indels_bool)
-    
-    are_tumor_not_present = indicator((data.Quantification < 11 - 1e-9))
-    are_tumor_not_abundant = indicator((data.Quantification < 33 - 1e-9))
-    
-    are_not_recognized = (
-        indicator(thresBindAff < data.BindAff) + 
-        indicator(data.BindStab < thresBindStab) + 
-        are_tumor_not_abundant +
-        indicator(np.logical_and((data.Foreignness < thresForeignness), (thresAgretopicity < data.Agretopicity)))
-    )
-    are_not_presented = (
-        indicator(thresBindAff < data.BindAff) +
-        indicator(data.BindStab < thresBindStab) +
-        are_tumor_not_present
-    )
-    are_recognized_only = indicator(np.logical_or((data.Foreignness >= thresForeignness), (thresAgretopicity >= data.Agretopicity)))
-    
-    are_presented = (1 - indicator(are_not_presented)) * are_snvs_or_indels
-    are_recognized = (1 - indicator(are_not_recognized)) * are_snvs_or_indels
-    
-    presented_not_recog = (1 - indicator(are_not_presented)) * are_snvs_or_indels * (1 - are_recognized_only)
-    presented_and_recog = (1 - indicator(are_not_presented)) * are_snvs_or_indels * (0 + are_recognized_only)
-    presented_not_recog_burden = sum(data.RNA_normAD * presented_not_recog)
-    presented_and_recog_burden = sum(data.RNA_normAD * presented_and_recog)
-    
-    prior_avg_burden = (presented_and_recog_burden + presented_not_recog_burden + 0.5) / (sum(presented_not_recog) + sum(presented_and_recog) + 1)
-    presented_and_recog_avg_burden = (prior_avg_burden * 1 + presented_and_recog_burden) / (1 + sum(presented_and_recog))
-    presented_not_recog_avg_burden = (prior_avg_burden * 1 + presented_not_recog_burden) / (1 + sum(presented_not_recog))
-    offset = log(presented_and_recog_avg_burden / presented_not_recog_avg_burden) * 2
-    log_odds_ratios = (thresBindAff / (thresBindAff + data.BindAff) - are_not_presented + np.minimum(-offset + are_recognized, 1)) - 1.5 
-    p = 1 / (1 + np.exp(-log_odds_ratios + 1 - are_snvs_or_indels))
-    return (p, 3 - are_not_presented, 4 - are_not_recognized, sum(presented_not_recog), sum(presented_and_recog), presented_not_recog_burden, presented_and_recog_burden, offset)
-
 def datarank(data, outcsv):
     
     probs, t2presented_filters, t1presented_filters, t0recognized_filters, \
             n_presented, n_recognized, presented_and_not_recog_burden, presented_and_recognized_burden, immuno_strength \
             = compute_immunogenic_probs(data)
-    # compute_prob(data, 0.15, 34, 0.1, 1e-16, 1.4) # rna_seq_variant_quality
     data['Probability'] = probs
     data['PresentationPreFilters'] = t2presented_filters
     data['PresentationFilters'] = t1presented_filters
@@ -314,7 +275,7 @@ def datarank(data, outcsv):
 
     data=data.sort_values("Rank")
     data=data.astype({"Rank":int})
-    data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g')
+    data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
     with open(outcsv + ".extrainfo", "w") as extrafile:
         extrafile.write(F'n_presented={n_presented}\n')
         extrafile.write(F'n_recognized={n_recognized}\n')
@@ -326,7 +287,7 @@ def datarank(data, outcsv):
 def main():
     opts,args=getopt.getopt(sys.argv[1:],"hi:I:o:n:f:a:t:p:T:",
         ["input_folder=","iedb_fasta=","output_folder=","netmhc_path=","foreignness_score=","agretopicity=","alteration_type=", "prefix=", 
-         "dna_vcf=", "rna_vcf=", "rna_depth=", "function=", "tumor_RNA_tmp_threshold="])
+         "dna_vcf=", "rna_vcf=", "rna_depth=", "function=", "tumor_RNA_tmp_threshold=", "tesla_xls=", "tesla_patientID="])
     input_folder=""
     iedb_fasta=""
     output_folder=""
@@ -342,27 +303,36 @@ def main():
     rna_depth = ''
     function = ''
     tumor_RNA_TPM_threshold = 1.0
-    USAGE='''
-        This script computes the probability that each neoantigen candidate is validated to be a true neoantigen. 
-        usage: python bindaff_related_prioritization.py -i <input_folder> -o <output_folder> \
-            -f <foreignness_score> -a <agretopicity> -t <alteration_type> -p <prefix>
-            required argument:
-                -i | --input_folder : input folder including result file from bindstab output
-                -I | --iedb_fasta : path to iedb fasta reference file
-                -o | --output_folder : output folder to store result
-                -n | --netmhc_path : path to run netmhcpan
-                -b | --binding_affinity : binding affinity threshold for neoantigen candidates
-                -f | --foreignness_score : foreignness threshold for neoantigen candidates
-                -a | --agretopicity : agretopicity threshold for neoantigen candidates
-                -q | --rna_seq_variant_quality : RNA-seq variant quality of the neoantigen candidate
-                -t | --alteration_type : neoantigen from alteration type to rank (default is "snv,indel,fusion,splicing")
-                -p | --prefix : prefix of output file
-                -T | --tumor_RNA_tmp_threshold : tumor RNA TPM threshold below which the neoepitope candidate is filtered out.
-                --dna_vcf : VCF file (which can be block-gzipped) generated by calling small variants from DNA-seq data (optional)
-                --rna_vcf : VCF file (which can be block-gzipped) generated by calling small variants from RNA-seq data (optional)
-                --rna_depth : TSV flagstat file obtained by running (samtools flagstat -O tsv ...) on the RNA-seq BAM file (optional)
-                --function : The keyword rerank means using existing stats (affinity, stability, etc.) to re-rank the neoantigen candidates.
-    '''
+    tesla_xls = ''
+    tesla_patientID = -1
+    USAGE=F'''
+This script computes the probability that each neoantigen candidate is validated to be a true neoantigen. 
+usage: python bindaff_related_prioritization.py -i <input_folder> -o <output_folder> -f <foreignness_score> -a <agretopicity> -t <alteration_type> -p <prefix>
+required argument:
+    -i | --input_folder : input folder including result file from bindstab output
+    -I | --iedb_fasta : path to iedb fasta reference file
+    -o | --output_folder : output folder to store result
+    -n | --netmhc_path : path to run netmhcpan
+    -b | --binding_affinity : binding affinity threshold for neoantigen candidates
+    -f | --foreignness_score : foreignness threshold for neoantigen candidates
+    -a | --agretopicity : agretopicity threshold for neoantigen candidates
+    -q | --rna_seq_variant_quality : RNA-seq variant quality of the neoantigen candidate
+    -t | --alteration_type : neoantigen from alteration type to rank (default is "snv,indel,fusion,splicing")
+    -p | --prefix : prefix of output file
+optional arguments:
+    -T | --tumor_RNA_tmp_threshold : tumor RNA TPM threshold below which the neoepitope candidate is filtered out (default is 1).
+    --dna_vcf : VCF file (which can be block-gzipped) generated by calling small variants from DNA-seq data (optional)
+    --rna_vcf : VCF file (which can be block-gzipped) generated by calling small variants from RNA-seq data (optional)
+    --rna_depth : TSV flagstat file obtained by running (samtools flagstat -O tsv ...) on the RNA-seq BAM file (optional)
+    --function : The keyword rerank means using existing stats (affinity, stability, etc.) to re-rank the neoantigen candidates.
+    --tesla_xls : Table S4 and S7 at https://doi.org/10.1016/j.cell.2020.09.015
+    --tesla_patientID: the ID in the PATIENT_ID column to select the rows in tesla_xls
+note: 
+    If (output_folder, tesla_xls, tesla_patientID) are set, 
+        then (input_folder, iedb_fasta, netmhc_path, alteration_type) are all irrelevant and therefore unused.
+    If the keyword rerank is in function,
+        then (iedb_fasta, netmhc_path, alteration_type) are all irrelevant and therefore unused.
+    '''.strip()
     for opt,value in opts:
         if opt =="h":
             print (USAGE)
@@ -397,27 +367,30 @@ def main():
             rna_depth = value
         elif opt in ("--function"):
             function = value
+        elif opt in ("--tesla_xls"):
+            tesla_xls = value
+        elif opt in ("--tesla_patientID"):
+            tesla_patientID = int(value)
+    
+    if tesla_xls != '':
+        data = read_tesla_xls(tesla_xls, tesla_patientID)
+        data2, _ = datarank(data, output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.from_tesla_excel.tsv")
+        exit(0)
     if function == 'rerank':
         data = pd.read_csv(output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.tsv",sep='\t')
         data2, _ = datarank(data, output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.rerank.tsv")
         exit(0)
-        
+    
     if (input_folder =="" or iedb_fasta=="" or output_folder=="" or netmhc_path==""):
         print (USAGE)
         sys.exit(2)
 
-    #wt_bindaff_list = []
-    #wt_list = []
     wt_pep_to_bindaff = {}
     tmp_wt_bindaff_file =csv.reader(open(input_folder+"/tmp_identity/"+prefix+"_bindaff_filtered.tsv"), delimiter="\t")
     for line in tmp_wt_bindaff_file:
         if line[7] != "":
-            #wt_bindaff_list.append(line[7])
-            #wt_list.append(line[2])
             wt_pep_to_bindaff[line[2]] = line[7]
-    #wt_bindaff_list.pop(0)
-    #wt_list.pop(0)
-
+    
     snv_indel_file = open(output_folder+"/../info/"+prefix+"_snv_indel.annotation.tsv")
     if os.path.exists(output_folder+"/../info/"+prefix+"_fusion.tsv"):
         fusion_file = open(output_folder+"/../info/"+prefix+"_fusion.tsv")
@@ -432,7 +405,6 @@ def main():
         dnaseq_small_variants_file = pysam.VariantFile(dna_vcf, 'r')
     else:
         dnaseq_small_variants_file = []
-    #rnaseq_small_variants_filename = output_folder+"/../info/"+prefix+"_rnaseq_small_variants.vcf.gz"
     if rna_vcf:
         rnaseq_small_variants_file = pysam.VariantFile(rna_vcf, 'r')
     else:
@@ -452,10 +424,7 @@ def main():
     if snv_indel_file: snv_indel_file.close()
     if fusion_file: fusion_file.close()
     if splicing_file: splicing_file.close() 
-    # if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
 
-    #iedb_seq = getiedbseq(iedb_fasta)
-    #iedb_dict = iedb_fasta_to_dict(iedb_fasta)
     reader = csv.reader(open(input_folder+"/"+prefix+"_candidate_pmhc.csv"), delimiter=",")
     fields=next(reader)
     fields.append("Foreignness")
@@ -521,7 +490,6 @@ def main():
                 if dnaseq_small_variants_file:                    
                     for vcfrecord in dnaseq_small_variants_file.fetch(chrom, int(pos) - 6, int(pos) + 6):
                         vepvar, varqual, varRD, varAD = var_vcf2vep(vcfrecord)
-                        #print('var-equal-test {} == {}'.format(vepvar, ele[0]))
                         if vep_lenient_equal(vepvar, ele[0]):
                             dna_varqual = max((dna_varqual, varqual))
                             dna_ref_depth = max((dna_ref_depth, varRD))
@@ -530,7 +498,6 @@ def main():
                 if rnaseq_small_variants_file:
                     for vcfrecord in rnaseq_small_variants_file.fetch(chrom, int(pos) - 6, int(pos) + 6):
                         vepvar, varqual, varRD, varAD = var_vcf2vep(vcfrecord)
-                        #print('var-equal-test {} == {}'.format(vepvar, ele[0]))
                         if vep_lenient_equal(vepvar, ele[0]):
                             rna_varqual = max((rna_varqual, varqual))
                             rna_ref_depth = max((rna_ref_depth, varRD))
@@ -595,7 +562,6 @@ def main():
     keptdata.insert(len(keptdata.columns)-1, 'SourceAlterationDetail', keptdata.pop('SourceAlterationDetail'))
     keptdata.drop(['BindLevel'], axis=1)
     data2, _ = datarank(keptdata, output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.tsv")
-    # keptdata.to_csv(output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.tsv",header=1,sep='\t',index=0, float_format='%6g')
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
