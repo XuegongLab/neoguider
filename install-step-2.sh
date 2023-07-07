@@ -67,7 +67,7 @@ tar xvzf GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 ########## index construction ##########
 
 bwa index $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta
-makeblastdb -in iedb.fasta # in database
+makeblastdb -in iedb.fasta -dbtype prot # in database
 samtools faidx iedb.fasta
 
 bedtools sort \
