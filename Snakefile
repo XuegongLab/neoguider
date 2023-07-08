@@ -1,54 +1,66 @@
 import csv,logging,multiprocessing,os,subprocess
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
-# hard filters
-tumor_depth, tumor_vaf, normal_vaf = (5, 0.1, 0.05)
-binding_affinity_thres = 34.0 * 14.0
-binding_stability_thres = 1.4 / 14.0
-tumor_abundance_thres = 1.0 # transcript-per-million
-alteration_type = 'snv,indel,fusion,splicing'
+######### Setup #########
 
-# soft filters
-binding_affinity_presentation_thres = 34.0
-binding_stability_presentation_thres = 1.4
-binding_affinity_recognition_thres = 34.0
-binding_stability_recognition_thres = 1.4
-agretopicity_recognition_thres = 0.1
-foreignness_recognition_thres = 1e-16
-
-script_directory = F'{workflow.basedir}' # os.path.dirname(os.path.abspath(sys.argv[0]))
-script_basedir = script_directory
-print(F'script_basedir = {script_basedir}')
-
-# config
-
-RES = config['res'] # output result directory path
-PREFIX = config['prefix']
+### Section 1: required input and output ###
 DNA_TUMOR_FQ1 = config['dna_tumor_fq1']
 DNA_TUMOR_FQ2 = config['dna_tumor_fq2']
 DNA_NORMAL_FQ1 = config['dna_normal_fq1']
 DNA_NORMAL_FQ2 = config['dna_normal_fq2']
 RNA_TUMOR_FQ1 = config['rna_tumor_fq1']
 RNA_TUMOR_FQ2 = config['rna_tumor_fq2']
-CTAT = config['ctat']
-REF = F'{CTAT}/ref_genome.fa'
-HLA_REF = config['hla_ref']
 
-MIXCR_PATH = config.get('mixcr_path', F'{script_basedir}/software/mixcr.jar')
-ERGO_EXE_DIR = config.get('ergo_exe_dir', F'{script_basedir}/software/ERGO-II')
-ERGO_PATH = config.get('ergo_path', F'{ERGO_EXE_DIR}/Predict.py')
+RES = config['res'] # output result directory path
+PREFIX = config['prefix']
 
-netmhcpan_cmd = '/mnt/d/code/neohunter/netMHCpan-4.1/netMHCpan'
-netmhcpan_path = netmhcpan_cmd
-netmhcstabpan_cmd = 'ssh://zxf@166.111.130.101:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
-netmhcstabpan_path = netmhcstabpan_cmd
+### Section 2: paramters having no default values ###
+netmhcpan_cmd = config['netmhcpan_cmd']
+netmhcstabpan_cmd = config['netmhcstabpan_cmd']
 
-vep_exe = '/home/zhaoxiaofei/miniconda3/envs/neohunter-env2/bin/vep'
-vep_cache = '/mnt/d/code/neohunter/NeoHunter'
-asneo_ref = '/mnt/d/code/neohunter/Neohunter/hg19.fa' # The {CTAT} {REF} does not work with ASNEO
-asneo_gtf = '/mnt/d/code/neohunter/Neohunter/hg19.refGene.gtf' # The {CTAT} .gtf does not work with ASNEO
+### Section 3: parameters having some default values ###
 
-ref_pep_fa = '{script_basedir}/Homo_sapiens.GRCh37.pep.all.fa'
+tumor_depth = config['tumor_depth']
+tumor_vaf = config['tumor_vaf']
+normal_vaf = config['normal_vaf']
+tumor_normal_var_qual = config['tumor_normal_var_qual']
+
+binding_affinity_hard_thres = config['binding_affinity_hard_thres']
+binding_affinity_soft_thres = config['binding_affinity_soft_thres']
+binding_stability_hard_thres = config['binding_stability_hard_thres']
+binding_stability_soft_thres = config['binding_stability_soft_thres']
+tumor_abundance_hard_thres = config['tumor_abundance_hard_thres']
+tumor_abundance_soft_thres = config['tumor_abundance_soft_thres']
+agretopicity_thres = config['agretopicity_thres']
+foreignness_thres = config['foreignness_thres']
+alteration_type = config['alteration_type']
+
+num_cores = config['num_cores']
+
+### Section 4: parameters having some default values of relative paths
+HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
+PEP_REF = config.get('pep_ref', F'{workflow.basedir}/database/Homo_sapiens.GRCh37.pep.all.fa')
+VEP_CACHE = config.get('vep_cache', F'{workflow.basedir}/database')
+CTAT = config.get('ctat', F'{workflow.basedir}/database/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/')
+MIXCR_PATH = config.get('mixcr_path',  F'{workflow.basedir}/software/mixcr.jar')
+ERGO_EXE_DIR = config.get('ergo_exe_dir', F'{workflow.basedir}/software/ERGO-II')
+ASNEO_REF = config.get('asneo_ref', F'{workflow.basedir}/database/hg19.fa')          # The {CTAT} REF does not work with ASNEO
+ASNEO_GTF = config.get('asneo_gtf', F'{workflow.basedir}/database/hg19.refGene.gtf') # The {CTAT} gtf does not work with ASNEO
+
+### Section 5: parameters having some default values depending on other values
+REF = config.get('REF', F'{CTAT}/ref_genome.fa')
+ERGO_PATH = config.get('ERGO_PATH', F'{ERGO_EXE_DIR}/Predict.py')
+
+script_basedir = F'{workflow.basedir}' # os.path.dirname(os.path.abspath(sys.argv[0]))
+logging.debug(F'script_basedir = {script_basedir}')
+
+### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
+samtools_nthreads = 4
+bcftools_nthreads = 4
+bwa_nthreads = 8
+star_nthreads = 8
+uvc_nthreads = 8
+vep_nthreads = 8
 
 ### usually you should not modify the code below (please think twice before doing so) ###
 
@@ -71,43 +83,53 @@ snvindel_info_file = F'{info_dir}/{PREFIX}_snv_indel.annotation.tsv'
 fusion_info_file = F'{info_dir}/{PREFIX}_fusion.tsv'
 splicing_info_file = F'{info_dir}/{PREFIX}_splicing.tsv'
 
-#def get_hla_typing_result(wildcards):
-#    return sorted(glob.glob(wildcards.date + '*_result.tsv'))[-1]
+neoheadhunter_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_neoheadhunter.tsv'
+tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity_with_detail.tsv'
+rule all:
+    input: neoheadhunter_prioritization_tsv, tcr_specificity_result
 
 hla_fq_r1 = F'{RES}/hla_typing/{PREFIX}.rna_hla_r1.fastq.gz'
 hla_fq_r2 = F'{RES}/hla_typing/{PREFIX}.rna_hla_r2.fastq.gz'
 hla_fq_se = F'{RES}/hla_typing/{PREFIX}.rna_hla_se.fastq.gz'
 hla_bam   = F'{RES}/hla_typing/{PREFIX}.rna_hla_typing.bam'
 hla_out   = F'{RES}/hla_typing/{PREFIX}_hlatype.tsv'
-rule hla_typing:
-    output:
-        out = F'{hla_out}',
-    run:
-        shell('''echo BEGIN hla_typing_helper '''
-            ''' && bwa mem -t {workflow.cores} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | samtools view -bh -F4 -o {hla_bam}'''
-            # Note: razers3 is too memory intensive
-            # ' && razers3 --percent-identity 90 --max-hits 1 --distance-range 0 --output {hla_bam} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2}'
-            ''' && samtools fastq {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se}'''
-            ''' && rm -r {RES}/hla_typing/optitype_out/ || true'''
-            ''' && mkdir -p {RES}/hla_typing/optitype_out''')
-        if RNA_TUMOR_ISPE:
-            shell('''OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout''')
-        else:
-            shell('''OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout''')
-        shell('''cp {RES}/hla_typing/optitype_out/*/*_result.tsv {output.out}''')
+logging.info(F'HLA_REF = {HLA_REF}')
 
+rule hla_typing_prep:
+    output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
+    resources: mem_mb = 7500
+    threads: bwa_nthreads
+    # Note: razers3 is too memory intensive, so bwa mem is used instead of the command
+    # (razers3 --percent-identity 90 --max-hits 1 --distance-range 0 --output {hla_bam} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2})
+    shell : '''
+        bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | samtools view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
+        samtools fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
+
+rule hla_typing:
+    input: hla_fq_r1, hla_fq_r2, hla_fq_se
+    output: out = hla_out
+    resources: mem_mb = 20000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
+    threads: 1
+    run:
+        shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out')
+        if RNA_TUMOR_ISPE:
+            shell('OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
+        else:
+            shell('OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
+        shell('cp {RES}/hla_typing/optitype_out/*/*_result.tsv {output.out}')
+    
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
 rule rna_quantification:
-    output:
-        out = outf_rna_quantification
+    output: out = outf_rna_quantification
+    resources: mem_mb = 4000 # as benchmarked at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
     run:
         if RNA_TUMOR_ISPE:
             shell('kallisto quant -i {CTAT}/ref_annot.cdna.fa.kallisto-idx -b 100 -o {kallisto_out} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2}')
         else:
             shell('kallisto quant -i {CTAT}/ref_annot.cdna.fa.kallisto-idx -b 100 -o {kallisto_out} --single -l 200 -s 30 {RNA_TUMOR_FQ1}')
-        shell('cp {kallisto_out}/abundance.tsv {output.out}')
-
+        shell('cp {kallisto_out}/abundance.tsv {outf_rna_quantification}')
+    
 starfusion_out = F'{RES}/fusion/starfusion_out'
 starfusion_bam = F'{starfusion_out}/Aligned.out.bam'
 starfusion_res = F'{starfusion_out}/star-fusion.fusion_predictions.abridged.coding_effect.tsv'
@@ -118,12 +140,14 @@ rule rna_fusion_detection:
         outbam = starfusion_bam,
         outres = starfusion_res,
         outsjo = starfusion_sjo,
+    resources: mem_mb = 28000 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
+    threads: star_nthreads
     run:
         if RNA_TUMOR_ISPE:
-            shell('STAR-Fusion {starfusion_params} --CPU {workflow.cores} --left_fq {RNA_TUMOR_FQ1} --right_fq {RNA_TUMOR_FQ2}')
+            shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --right_fq {RNA_TUMOR_FQ2}')
         else:
-            shell('STAR-Fusion {starfusion_params} --CPU {workflow.cores} --left_fq {RNA_TUMOR_FQ1}')
-
+            shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1}')
+        
 fusion_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_fusion.fasta'
 rule rna_fusion_neopeptide_generation:
     input:
@@ -146,32 +170,26 @@ rna_t_spl_bai = F'{alignment_dir}/{PREFIX}_RNA_t_spl.bam.bai'
 dna_tumor_bai = F'{alignment_dir}/{PREFIX}_DNA_tumor.bam.bai'
 dna_normal_bai = F'{alignment_dir}/{PREFIX}_DNA_normal.bam.bai'
 
-bam2fqs = {
-    rna_tumor_bam : (RNA_TUMOR_FQ1, RNA_TUMOR_FQ2, RNA_TUMOR_ISPE),
-    dna_tumor_bam : (DNA_TUMOR_FQ1, DNA_TUMOR_FQ2, DNA_TUMOR_ISPE),
-    dna_normal_bam : (DNA_NORMAL_FQ1, DNA_NORMAL_FQ2, DNA_NORMAL_ISPE)
-}
-
 HIGH_DP=1000*1000
 rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
 rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
 rule rna_preprocess:
-    input:
-        starfusion_bam
+    input: starfusion_bam
     output:
         outbam = rna_tumor_bam,
         outbai = rna_tumor_bai,
         outdepth = rna_tumor_depth,
         outsummary = rna_tumor_depth_summary,
+    threads: samtools_nthreads
     shell:
         'rm {output.outbam}.tmp.*.bam || true '
-        ' && samtools fixmate -@ {workflow.cores} -m {starfusion_bam} - '
-        ' | samtools sort -@ {workflow.cores} -o - - '
-        ' | samtools markdup -@ {workflow.cores} - {rna_tumor_bam}'
-        ' && samtools index -@ {workflow.cores} {rna_tumor_bam}'
-        ' && samtools view -hu -@ {workflow.cores} -F 0xD04 {rna_tumor_bam} '
-        ' | bcftools mpileup --threads {workflow.cores} -a DP,AD -d {HIGH_DP} -f {REF} -q 0 -Q 0 -T {CTAT}/ref_annot.gtf.mini.sortu.bed - -o {rna_tumor_depth} '
-        ' && bcftools index --threads {workflow.cores} -ft {rna_tumor_depth} '
+        ' && samtools fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
+        ' | samtools sort -@ {samtools_nthreads} -o - - '
+        ' | samtools markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
+        ' && samtools index -@ {samtools_nthreads} {rna_tumor_bam}'
+        ' && samtools view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
+        ' | bcftools mpileup --threads {bcftools_nthreads} -a DP,AD -d {HIGH_DP} -f {REF} -q 0 -Q 0 -T {CTAT}/ref_annot.gtf.mini.sortu.bed - -o {rna_tumor_depth} '
+        ' && bcftools index --threads {bcftools_nthreads} -ft {rna_tumor_depth} '
         ''' && cat {CTAT}/ref_annot.gtf.mini.sortu.bed | awk '{{ i += 1; s += $3-$2 }} END {{ print "exome_total_bases\t" s; }}' > {rna_tumor_depth_summary} '''
         ''' && bcftools query -f '%DP\n' {rna_tumor_depth} | awk '{{ i += 1 ; s += $1 }} END {{ print "exome_total_depth\t" s; }}' >> {rna_tumor_depth_summary} '''
    
@@ -180,46 +198,54 @@ asneo_sjo = F'{asneo_out}/SJ.out.tab'
 splicing_neopeptide_faa=F'{neopeptide_dir}/{PREFIX}_splicing.fasta'
 rule rna_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
+    resources: mem_mb = 36000 # as benchmarked at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
+    threads: star_nthreads
     shell: # same as in PMC7425491 except for --sjdbOverhang 100
-        'STAR --genomeDir {REF}.star.idx --readFilesIn {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --runThreadN {workflow.cores} '
+        'STAR --genomeDir {REF}.star.idx --readFilesIn {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --runThreadN {star_nthreads} '
         ' –-outFilterMultimapScoreRange 1 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --alignIntronMax 500000 –alignMatesGapMax 1000000 '
         ' --sjdbScore 2 --alignSJDBoverhangMin 1 --genomeLoad NoSharedMemory --outFilterMatchNminOverLread 0.33 --outFilterScoreMinOverLread 0.33 '
-        ''' --sjdbOverhang 150 --outSAMstrandField intronMotif –sjdbGTFfile {asneo_gtf} --outFileNamePrefix {asneo_out}/ --readFilesCommand 'gunzip -c' ''' 
+        ''' --sjdbOverhang 150 --outSAMstrandField intronMotif –sjdbGTFfile {ASNEO_GTF} --outFileNamePrefix {asneo_out}/ --readFilesCommand 'gunzip -c' ''' 
         ' --outSAMtype BAM Unsorted '
-        ' && samtools fixmate -@ {workflow.cores} -m {asneo_out}/Aligned.out.bam - '
-        ' | samtools sort -@ {workflow.cores} -o - -'
-        ' | samtools markdup -@ {workflow.cores} - {rna_t_spl_bam}'
-        ' && samtools index -@ {workflow.cores} {rna_t_spl_bam}'
+        ' && samtools fixmate -@ {samtools_nthreads} -m {asneo_out}/Aligned.out.bam - '
+        ' | samtools sort -@ {samtools_nthreads} -o - -'
+        ' | samtools markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
+        ' && samtools index -@ {samtools_nthreads} {rna_t_spl_bam}'
+
 rule rna_splicing_neopeptide_generation:
     input: rna_quant=outf_rna_quantification, sj=asneo_sjo # starfusion_sjo may also work (we didn't test this)
     output: splicing_neopeptide_faa
+    resources: mem_mb = 20000
     threads: 1
     shell:
         'mkdir -p {info_dir} '
-        ' && python {script_basedir}/software/ASNEO/neoheadhunter_ASNEO.py -j {input.sj} -g {asneo_ref} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t 1.0 '
+        ' && python {script_basedir}/software/ASNEO/neoheadhunter_ASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t 1.0 '
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {neopeptide_dir}/{PREFIX}_splicing.fasta'
 
 rule dna_alignment_tumor:
     output: dna_tumor_bam, dna_tumor_bai
+    resources: mem_mb = 12000
+    threads: bwa_nthreads
     shell:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
-        ' && bwa mem -t {workflow.cores} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
-        ' | samtools fixmate -@ {workflow.cores} -m - -'
-        ' | samtools sort -@ {workflow.cores} -o - -'
-        ' | samtools markdup -@ {workflow.cores} - {dna_tumor_bam}'
-        ' && samtools index -@ {workflow.cores} {dna_tumor_bam}'
-
+        ' && bwa mem -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
+        ' | samtools fixmate -@ {samtools_nthreads} -m - -'
+        ' | samtools sort -@ {samtools_nthreads} -o - -'
+        ' | samtools markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
+        ' && samtools index -@ {samtools_nthreads} {dna_tumor_bam}'
+    
 rule dna_alignment_normal:
     output: dna_normal_bam, dna_normal_bai
+    resources: mem_mb = 12000
+    threads: bwa_nthreads
     shell:
         'rm {dna_normal_bam}.tmp.*.bam || true'
-        ' && bwa mem -t {workflow.cores} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
-        ' | samtools fixmate -@ {workflow.cores} -m - -'
-        ' | samtools sort -@ {workflow.cores} -o - -'
-        ' | samtools markdup -@ {workflow.cores} - {dna_normal_bam}'
-        ' && samtools index -@ {workflow.cores} {dna_normal_bam}'
-
+        ' && bwa mem -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
+        ' | samtools fixmate -@ {samtools_nthreads} -m - -'
+        ' | samtools sort -@ {samtools_nthreads} -o - -'
+        ' | samtools markdup -@ {samtools_nthreads} - {dna_normal_bam}'
+        ' && samtools index -@ {samtools_nthreads} {dna_normal_bam}'
+    
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
 rule snvindel_detection_with_DNA_tumor:
     input: tbam=dna_tumor_bam, tbai=dna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai,
@@ -227,8 +253,10 @@ rule snvindel_detection_with_DNA_tumor:
         vcf1 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',        
+    resources: mem_mb = 9000
+    threads: uvc_nthreads
     shell:
-        'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal '
+        'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 63) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
@@ -242,8 +270,10 @@ rule snvindel_detection_with_RNA_tumor:
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',
+    resources: mem_mb = 9000
+    threads: uvc_nthreads
     shell:
-        'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal '
+        'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 63) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
@@ -254,19 +284,21 @@ dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effe
 rule snvindel_effect_prediction:
     input: dna_vcf
     output: dna_variant_effect
-    shell: '''{vep_exe} --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
-        --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_esp --af_gnomad \
+    resources: mem_mb = 8000
+    threads: vep_nthreads
+    shell: '''vep --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
+        --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_gnomad \
         --regulatory --force_overwrite --assembly GRCh37 --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
         --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
-        --dir {vep_cache} --fasta {REF} --fork {workflow.cores} --input_file {dna_vcf} --output_file {dna_variant_effect}'''
-
+        --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {dna_vcf} --output_file {dna_variant_effect}'''
+    
 snvindel_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_snv_indel.fasta'
 snvindel_wt_peptide_faa = F'{neopeptide_dir}/{PREFIX}_snv_indel_wt.fasta'
 rule snvindel_neopeptide_generation:
     input: dna_variant_effect,
     output: snvindel_neopeptide_faa, snvindel_wt_peptide_faa, snvindel_info_file
-    shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {neopeptide_dir} -p {ref_pep_fa} \
-        -r {REF} -s VEP -e {outf_rna_quantification} -t {workflow.cores} -P {PREFIX}
+    shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
+        -r {REF} -s VEP -e {outf_rna_quantification} -t {vep_nthreads} -P {PREFIX}
         cp {neopeptide_dir}/{PREFIX}_tmp_fasta/{PREFIX}_snv_indel_wt.fasta {snvindel_wt_peptide_faa}
         cp {dna_variant_effect} {snvindel_info_file}'''
    
@@ -315,12 +347,11 @@ rule pmhc_binding_affinity_prediction:
         peptide_to_pmhc_binding_affinity(splicing_neopeptide_faa, splicing_pmhc_mt_txt, retrieve_hla_alleles(), workflow.cores)
         logging.info('Finished running pmhc_binding_affinity_prediction')
 
-print(F'snvindel_pmhc_mt_txt = {snvindel_pmhc_mt_txt}')
-
 wt_bindaff_filtered_tsv = F'{pmhc_dir}/tmp_identity/{PREFIX}_bindaff_filtered.tsv'
 mt_bindaff_filtered_tsv = F'{pmhc_dir}/{PREFIX}_bindaff_filtered.tsv'
 
-print(F'snvindel_pmhc_XX_tsv = {wt_bindaff_filtered_tsv} and {mt_bindaff_filtered_tsv}')
+logging.debug(F'snvindel_pmhc_mt_txt = {snvindel_pmhc_mt_txt}')
+logging.debug(F'snvindel_pmhc_XX_tsv = {wt_bindaff_filtered_tsv} and {mt_bindaff_filtered_tsv}')
 
 rule pmhc_binding_affinity_filter:
     input: snvindel_pmhc_mt_txt, snvindel_pmhc_wt_txt, fusion_pmhc_mt_txt, splicing_pmhc_mt_txt
@@ -329,7 +360,7 @@ rule pmhc_binding_affinity_filter:
         cat {snvindel_pmhc_mt_txt} {fusion_pmhc_mt_txt} {splicing_pmhc_mt_txt} > {all_vars_pmhc_mt_tsv} || true
         cp {snvindel_pmhc_wt_txt} {snvindel_pmhc_wt_tsv}
         cat {snvindel_neopeptide_faa} {fusion_neopeptide_faa} {splicing_neopeptide_faa} > {all_vars_neopeptide_faa}
-        python {script_basedir}/parse_netMHC.py -i {pmhc_dir} -g {all_vars_neopeptide_faa} -b {binding_affinity_thres} -l N/A -p {PREFIX} -o {pmhc_dir}'''
+        python {script_basedir}/parse_netMHC.py -i {pmhc_dir} -g {all_vars_neopeptide_faa} -b {binding_affinity_hard_thres} -l N/A -p {PREFIX} -o {pmhc_dir}'''
 
 try:
     from urllib.parse import urlparse
@@ -354,16 +385,16 @@ def uri_to_user_address_port_path(uri):
     return (None, None, None, uri)
 
 def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bindaff_filtered.tsv', outdir = pmhc_dir):
-    user, address, port, path = uri_to_user_address_port_path(netmhcstabpan_path)
-    if netmhcstabpan_path == path:
-        run_calculation = F'python {bindstab_filter_py} -i {inputfile} -o {outdir} -n {path} -b {binding_stability_thres} -p {PREFIX}'
+    user, address, port, path = uri_to_user_address_port_path(netmhcstabpan_cmd)
+    if netmhcstabpan_cmd == path:
+        run_calculation = F'python {bindstab_filter_py} -i {inputfile} -o {outdir} -n {path} -b {binding_stability_hard_thres} -p {PREFIX}'
         call_with_infolog(run_calculation)
     else:
         outputfile1 = F'{outdir}/{PREFIX}_bindstab_raw.csv'
         outputfile2 = F'{outdir}/{PREFIX}_candidate_pmhc.csv'
         remote_mkdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:/tmp/{outdir}/'
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_thres} -p {PREFIX}'
+        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_hard_thres} -p {PREFIX}'
         remote_exe = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'
         remote_receive1 = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1} {outdir}'
         remote_receive2 = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile2} {outdir}'
@@ -383,24 +414,36 @@ rule pmhc_binding_stability_filter:
         run_netMHCstabpan(bindstab_filter_py, F'{mt_bindaff_filtered_tsv}', F'{pmhc_dir}')
 
 iedb_path = '/mnt/d/code/neohunter/NeoHunter/database/iedb.fasta'
-prioritization_params = ''
-neoheadhunter_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_neoheadhunter.tsv'
-print(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
+prioritization_thres_params = ' '.join([x.strip() for x in F'''
+--binding-affinity-hard-thres {binding_affinity_hard_thres}
+--binding-affinity-soft-thres {binding_affinity_soft_thres}
+--binding-stability-hard-thres {binding_stability_hard_thres}
+--binding-stability-soft-thres {binding_stability_soft_thres}
+--tumor-abundance-hard-thres {tumor_abundance_hard_thres}
+--tumor-abundance-soft-thres {tumor_abundance_soft_thres}
+--agretopicity-thres {agretopicity_thres}
+--foreignness-thres {foreignness_thres}
+--alteration-type {alteration_type}
+'''.strip().split()])
+prioritization_function_params = ''
+
+logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
 rule prioritization_with_all_tcr:
     input: iedb_path, wt_bindaff_filtered_tsv, mt_bindaff_filtered_tsv, mt_bindstab_filtered_tsv, rna_vcf, rna_tumor_depth_summary, 
         snvindel_info_file, fusion_info_file
     output: neoheadhunter_prioritization_tsv
     run: 
+        call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')
         call_with_infolog(F'bcftools view {rna_vcf} -Oz -o {rna_vcf}.gz && bcftools index -ft {rna_vcf}.gz')
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {pmhc_dir} -I {iedb_path} -o {prioritization_dir}'
-            F' -n {netmhcpan_path} -a {agretopicity_recognition_thres} -f {foreignness_recognition_thres} -t {alteration_type} -p {PREFIX} '
-            F' -T {tumor_abundance_thres} --rna_vcf={rna_vcf}.gz --rna_depth={rna_tumor_depth_summary} ' # --var_effect={dna_variant_effect}
-            F''' {prioritization_params.replace('_', '-')}''')
+            F' -n {netmhcpan_cmd} -p {PREFIX} -t {alteration_type} '
+            F' --dna-vcf {dna_vcf}.gz --rna-vcf {rna_vcf}.gz --rna-depth {rna_tumor_depth_summary} ' # --var_effect={dna_variant_effect}
+            F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
 
 mixcr_output_dir = F'{prioritization_dir}/{PREFIX}_mixcr_output'
 mixcr_output_pref = F'{mixcr_output_dir}/{PREFIX}'
 tcr_specificity_software = 'ERGO'
-tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity_with_detail.tsv'
+logging.info(F'MIXCR_PATH = {MIXCR_PATH}')
 rule prioritization_with_each_tcr:
     input: mt_bindstab_filtered_tsv
     output: tcr_specificity_result
