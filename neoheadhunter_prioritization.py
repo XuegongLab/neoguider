@@ -1,7 +1,4 @@
-import copy,csv,getopt,logging,multiprocessing,os,sys,subprocess # ,os
-#import csv
-#import logging
-#import multiprocessing
+import argparse,copy,csv,getopt,logging,multiprocessing,os,sys,subprocess # ,os
 import pandas as pd
 import numpy as np
 from Bio import pairwise2
@@ -10,6 +7,23 @@ from Bio.SeqIO.FastaIO import SimpleFastaParser
 from math import log, exp
 
 import pysam
+
+class Paramset:
+    def __init__():
+        self.t0Abundance = 33
+        self.t0Agretopicity = 0.1
+        self.t0Foreignness = 1e-16
+        self.t1Abundance = 10
+        self.t1BindAff   = 34
+        self.t1BindStab  = 1.4
+        self.t2Abundance = 11/11
+        self.t2BindAff   = 34*11
+        self.t2BindStab = 1.4/11
+        self.snvindel_location_param = -0.5
+        self.non_snvindel_location_param = -1.5
+        prior_weight = 1
+
+def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 
 def get_avg_depth_from_rna_depth_filename(rna_depth):
     regsize = -1
@@ -23,7 +37,7 @@ def get_avg_depth_from_rna_depth_filename(rna_depth):
     assert sumDP > -1
     return float(sumDP) / float(regsize)
 
-# Result using this measure is dependent on RNA-seq read length, so it is not recommended to use it. 
+# Result using this measure is dependent on RNA-seq read length, so it is not recommended to use it (and hence not used).
 def get_total_transcript_num_from_rna_flagstat_filename(rna_flagstat):    
     prim_mapped = -1
     prim_duped = -1
@@ -90,11 +104,6 @@ def getR(neo_seq,iedb_seq):
     sumExpEnergies = sum([exp(x) for x in bindingEnergies])
     Zk = (1 + sumExpEnergies)
     return float(sumExpEnergies) / Zk
-    
-    #lZk = logSum(bindingEnergies + [0])
-    #lGb = logSum(bindingEnergies)
-    #R=exp(lGb-lZk)
-    #return R
 
 def getiedbseq(iedb_path):
     iedb_seq = []
@@ -112,10 +121,6 @@ def iedb_fasta_to_dict(iedb_path):
             ret[fasta_id] = fasta_seq
     return ret
 
-def logSum(v):
-    ma = max(v)
-    return log(sum(map(lambda x: exp(x-ma),v))) + ma
-
 def aligner(seq1,seq2):
     matrix = matlist.blosum62
     gap_open = -11
@@ -128,49 +133,48 @@ def write_file(a_list, name):
     for element in a_list:
         textfile.write(element + "\n")
     textfile.close()
-    return
 
 ##########Calculate wild type binding affinity###########
-# def mutation_netmhc(prefix, netmhc_path, input_folder, output_folder, hla):
-#     run_netmhc = netmhc_path+" -a "+hla+" -f "+input_folder+"/"+prefix+"_snv_indel_wt.fasta -l '8,9,10,11' -BA > "+output_folder+"/tmp_netmhc/"+hla+"_wt_tmp_hla_netmhc.txt"
+# def mutation_netmhc(prefix, netmhc_path, input_folder, output_directory, hla):
+#     run_netmhc = netmhc_path+" -a "+hla+" -f "+input_folder+"/"+prefix+"_snv_indel_wt.fasta -l '8,9,10,11' -BA > "+output_directory+"/tmp_netmhc/"+hla+"_wt_tmp_hla_netmhc.txt"
 #     print(run_netmhc)
 #     subprocess.call(run_netmhc, shell=True, executable="/bin/bash")
 
-# def mutation_netmhc_parallel(prefix, netmhc_path, input_folder, output_folder, hla_str):
-#     os.system("mkdir "+output_folder+"/tmp_netmhc")
+# def mutation_netmhc_parallel(prefix, netmhc_path, input_folder, output_directory, hla_str):
+#     os.system("mkdir "+output_directory+"/tmp_netmhc")
 #     hla_list = list(hla_str.strip().split(","))
 #     netmhc_hla_process=[]
 #     for hla in hla_list:
-#         run_netmhc = multiprocessing.Process(target=mutation_netmhc,args=(prefix, netmhc_path, input_folder, output_folder, hla))#"./netmhc_parallel.sh "+netmhc_path+" "+output_folder+" "+hla
+#         run_netmhc = multiprocessing.Process(target=mutation_netmhc,args=(prefix, netmhc_path, input_folder, output_directory, hla))#"./netmhc_parallel.sh "+netmhc_path+" "+output_directory+" "+hla
 #         netmhc_hla_process.append(run_netmhc)
 #     for p in netmhc_hla_process:
 #         p.daemon = True
 #         p.start()
 #     for p in netmhc_hla_process:
 #         p.join()
-#     os.system("cat "+output_folder+"/tmp_netmhc/* > "+output_folder+"/"+prefix+"_snv_indel_wt_netmhc.csv")
+#     os.system("cat "+output_directory+"/tmp_netmhc/* > "+output_directory+"/"+prefix+"_snv_indel_wt_netmhc.csv")
 
-def get_wt_bindaff(wt_seq,hla,output_folder,netmhc_path):
-    os.system("mkdir "+output_folder+"/tmp")
-    with open(output_folder+"/tmp/wt.pep", "w") as pepfile:
-        pepfile.write("%s"% wt_seq)
+def get_wt_bindaff(wt_seq,hla,output_directory,netmhc_cmd):
+    os.system("mkdir "+output_directory+"/tmp")
+    with open(output_directory+"/tmp/wt.pep", "w") as pepfile:
+        pepfile.write(wt_seq)
     pepfile.close()
-    args = netmhc_path+" -p "+output_folder+"/tmp/wt.pep -a "+ hla+" -l "+str(len(wt_seq))+" -BA >> "+output_folder+"/tmp/wt.csv"
+    args = netmhc_cmd+" -p "+output_directory+"/tmp/wt.pep -a "+ hla+" -l "+str(len(wt_seq))+" -BA >> "+output_directory+"/tmp/wt.csv"
     subprocess.call(args, shell=True)  
     wt_bindaff = 1
-    with open(output_folder+"/tmp/wt.csv") as f:
+    with open(output_directory+"/tmp/wt.csv") as f:
         data = f.read()
     nw_data = data.split('-----------------------------------------------------------------------------------\n')
     for i in range(len(nw_data)):
         if i%4 == 2:
             wt_bindaff = nw_data[i].strip().split()[15]
             break
-    os.system("rm -rf "+output_folder+"/tmp")
+    os.system("rm -rf "+output_directory+"/tmp")
     return wt_bindaff
 
-def runblast(query_seq, target_fasta, output_folder):
-    os.system(F"mkdir -p {output_folder}/tmp")
-    query_fasta = F"{output_folder}/tmp/foreignness_query.{query_seq}.fasta"
+def runblast(query_seq, target_fasta, output_directory):
+    os.system(F'mkdir -p {output_directory}/tmp')
+    query_fasta = F'{output_directory}/tmp/foreignness_query.{query_seq}.fasta'
     with open(query_fasta, 'w') as query_fasta_file:
         query_fasta_file.write(F'>{query_seq}\n{query_seq}\n')
     # from https://github.com/andrewrech/antigen.garnish/blob/main/R/antigen.garnish_predict.R
@@ -191,11 +195,24 @@ def runblast(query_seq, target_fasta, output_folder):
     return ret
 
 def indicator(x): return np.where(x, 1, 0)
-def compute_immunogenic_probs(data, 
-        t0Abundance = 33,    t0Agretopicity = 0.1,   t0Foreignness = 1e-16,
-        t1Abundance = 11,    t1BindAff      = 34,    t1BindStab    = 1.4,
-        t2Abundance = 11/11, t2BindAff      = 34*11, t2BindStab    = round(1.4/11,3),
-        snvindel_location_param = 1.5, non_snvindel_location_param = 0.5, prior_strength = 1):
+def compute_immunogenic_probs(data, paramset):
+    
+    t2BindAff      = paramset.binding_affinity_hard_thres
+    t1BindAff      = paramset.binding_affinity_soft_thres
+    
+    t2BindStab     = paramset.binding_stability_hard_thres
+    t1BindStab     = paramset.binding_stability_soft_thres
+    
+    t2Abundance    = paramset.tumor_abundance_hard_thres
+    t1Abundance    = paramset.tumor_abundance_soft_thres
+    
+    t0Abundance    = paramset.tumor_abundance_recognition_thres
+    t0Agretopicity = paramset.agretopicity_thres
+    t0Foreignness  = paramset.foreignness_thres
+     
+    snvindel_location_param     = paramset.snvindel_location_param
+    non_snvindel_location_param = paramset.non_snvindel_location_param
+    prior_weight                = paramset.immuno_strength_null_hypothesis_prior_weight
     
     are_snvs_or_indels_bool = (data.Identity.isin(['SNV', 'INS', 'DEL', 'INDEL']))
     are_snvs_or_indels = indicator(are_snvs_or_indels_bool)
@@ -216,15 +233,15 @@ def compute_immunogenic_probs(data,
         indicator(data.Quantification < t2Abundance))
     
     t0_are_foreign = (t0foreign_nfilters == 0)
+    #t1_are_bound = indicator((data.BindAff <= t1BindAff) & (data.BindStab >= t1BindStab))
     t1_are_presented = (t1presented_nfilters == 0)
-    
-    presented_not_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters <  0)
+    presented_not_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters >  0)
     presented_and_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters == 0)
     presented_not_recog_burden = sum(data.RNA_normAD * presented_not_recog)
     presented_and_recog_burden = sum(data.RNA_normAD * presented_and_recog)
     prior_avg_burden = (presented_and_recog_burden + presented_not_recog_burden + 0.5) / (sum(presented_not_recog) + sum(presented_and_recog) + 1)
-    presented_and_recog_avg_burden = (prior_avg_burden * prior_strength + presented_and_recog_burden) / (prior_strength + sum(presented_and_recog))
-    presented_not_recog_avg_burden = (prior_avg_burden * prior_strength + presented_not_recog_burden) / (prior_strength + sum(presented_not_recog))
+    presented_and_recog_avg_burden = (prior_avg_burden * prior_weight + presented_and_recog_burden) / (prior_weight + sum(presented_and_recog))
+    presented_not_recog_avg_burden = (prior_avg_burden * prior_weight + presented_not_recog_burden) / (prior_weight + sum(presented_not_recog))
     # The variable immuno_strength should be positive/negative for patients with low/high immune strength
     immuno_strength = log(presented_not_recog_avg_burden / presented_and_recog_avg_burden) * 2 
     
@@ -233,12 +250,11 @@ def compute_immunogenic_probs(data,
             + np.minimum(1 - t0recognized_nfilters + immuno_strength, 1)
             - t1presented_nfilters 
             - (t2presented_nfilters * 3) 
-            - (are_snvs_or_indels * snvindel_location_param) + (1 - are_snvs_or_indels) * non_snvindel_location_param)
+            + (are_snvs_or_indels * snvindel_location_param) + (1 - are_snvs_or_indels) * non_snvindel_location_param)
     p = 1 / (1 + np.exp(-log_odds_ratio))
     return (p, t2presented_nfilters, t1presented_nfilters, t0recognized_nfilters, 
-        sum(presented_not_recog), sum(presented_and_recog), 
-        presented_not_recog_burden, presented_and_recog_burden, 
-        immuno_strength)
+            sum(presented_not_recog), sum(presented_and_recog), 
+            presented_not_recog_burden, presented_and_recog_burden, immuno_strength)
 
 def read_tesla_xls(tesla_xls, patientID):
     # cat GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.gtf.mini.sortu  | awk '{print $NF}' | sort | uniq | wc
@@ -262,11 +278,11 @@ def read_tesla_xls(tesla_xls, patientID):
     ret = df.dropna(subset=['BindAff', 'BindStab', 'Quantification', 'Agretopicity', 'Foreignness'])
     return ret
     
-def datarank(data, outcsv):
+def datarank(data, outcsv, paramset):
     
     probs, t2presented_filters, t1presented_filters, t0recognized_filters, \
-            n_presented, n_recognized, presented_and_not_recog_burden, presented_and_recognized_burden, immuno_strength \
-            = compute_immunogenic_probs(data)
+            n_presented_not_recognized, n_presented_and_recognized, presented_not_recognized_burden, presented_and_recognized_burden, immuno_strength \
+            = compute_immunogenic_probs(data, paramset)
     data['Probability'] = probs
     data['PresentationPreFilters'] = t2presented_filters
     data['PresentationFilters'] = t1presented_filters
@@ -277,155 +293,127 @@ def datarank(data, outcsv):
     data=data.astype({"Rank":int})
     data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
     with open(outcsv + ".extrainfo", "w") as extrafile:
-        extrafile.write(F'n_presented={n_presented}\n')
-        extrafile.write(F'n_recognized={n_recognized}\n')
-        extrafile.write(F'presented_not_recognized_burden={presented_and_not_recog_burden}\n')
-        extrafile.write(F'presented_and_recognized_burden={presented_and_recognized_burden}\n')
+        extrafile.write(F'expected_bound_and_immunogenic_pMHC_num={n_presented_and_recognized}\n')
+        extrafile.write(F'expected_bound_not_immunogenic_pMHC_num={n_presented_not_recognized}\n')
+        extrafile.write(F'expected_bound_and_immunogenic_pMHC_rna_normADsum={presented_and_recognized_burden}\n')
+        extrafile.write(F'expected_bound_and_immunogenic_pMHC_rna_normADsum={presented_not_recognized_burden}\n')
         extrafile.write(F'immuno_strength={immuno_strength}\n')
-    return data, (n_presented, n_recognized, presented_and_not_recog_burden, presented_and_recognized_burden, immuno_strength)
+        extrafile.write(F'expected_immunogenic_peptide_num={sum(probs)}\n')
+    return data, (n_presented_not_recognized, n_presented_and_recognized, presented_not_recognized_burden, presented_and_recognized_burden, immuno_strength)
     
 def main():
-    opts,args=getopt.getopt(sys.argv[1:],"hi:I:o:n:f:a:t:p:T:",
-        ["input_folder=","iedb_fasta=","output_folder=","netmhc_path=","foreignness_score=","agretopicity=","alteration_type=", "prefix=", 
-         "dna_vcf=", "rna_vcf=", "rna_depth=", "function=", "tumor_RNA_tmp_threshold=", "tesla_xls=", "tesla_patientID="])
-    input_folder=""
-    iedb_fasta=""
-    output_folder=""
-    netmhc_path=""
-    bindaff = 33.0
-    foreignness_score= 1e-16
-    agretopicity=0.1
-    rna_seq_variant_quality = 30.0
-    alteration_type="snv,indel,fusion,splicing"
-    prefix=""
-    dna_vcf = ''
-    rna_vcf = ''
-    rna_depth = ''
-    function = ''
-    tumor_RNA_TPM_threshold = 1.0
-    tesla_xls = ''
-    tesla_patientID = -1
-    USAGE=F'''
-This script computes the probability that each neoantigen candidate is validated to be a true neoantigen. 
-usage: python bindaff_related_prioritization.py -i <input_folder> -o <output_folder> -f <foreignness_score> -a <agretopicity> -t <alteration_type> -p <prefix>
-required argument:
-    -i | --input_folder : input folder including result file from bindstab output
-    -I | --iedb_fasta : path to iedb fasta reference file
-    -o | --output_folder : output folder to store result
-    -n | --netmhc_path : path to run netmhcpan
-    -b | --binding_affinity : binding affinity threshold for neoantigen candidates
-    -f | --foreignness_score : foreignness threshold for neoantigen candidates
-    -a | --agretopicity : agretopicity threshold for neoantigen candidates
-    -q | --rna_seq_variant_quality : RNA-seq variant quality of the neoantigen candidate
-    -t | --alteration_type : neoantigen from alteration type to rank (default is "snv,indel,fusion,splicing")
-    -p | --prefix : prefix of output file
-optional arguments:
-    -T | --tumor_RNA_tmp_threshold : tumor RNA TPM threshold below which the neoepitope candidate is filtered out (default is 1).
-    --dna_vcf : VCF file (which can be block-gzipped) generated by calling small variants from DNA-seq data (optional)
-    --rna_vcf : VCF file (which can be block-gzipped) generated by calling small variants from RNA-seq data (optional)
-    --rna_depth : TSV flagstat file obtained by running (samtools flagstat -O tsv ...) on the RNA-seq BAM file (optional)
-    --function : The keyword rerank means using existing stats (affinity, stability, etc.) to re-rank the neoantigen candidates.
-    --tesla_xls : Table S4 and S7 at https://doi.org/10.1016/j.cell.2020.09.015
-    --tesla_patientID: the ID in the PATIENT_ID column to select the rows in tesla_xls
-note: 
-    If (output_folder, tesla_xls, tesla_patientID) are set, 
-        then (input_folder, iedb_fasta, netmhc_path, alteration_type) are all irrelevant and therefore unused.
-    If the keyword rerank is in function,
-        then (iedb_fasta, netmhc_path, alteration_type) are all irrelevant and therefore unused.
-    '''.strip()
-    for opt,value in opts:
-        if opt =="h":
-            print (USAGE)
-            sys.exit(2)
-        elif opt in ("-i","--input_folder"):
-            input_folder=value
-        elif opt in ("-I","--iedb_fasta"):
-            iedb_fasta=value
-        elif opt in ("-o","--output_folder"):
-            output_folder =value 
-        elif opt in ("-n","--netmhc_path"):
-            netmhc_path =value 
-        elif opt in ("-b","--binding_affinity"):
-            bindaff =float(value)
-        elif opt in ("-f","--foreignness_score"):
-            foreignness_score =float(value) 
-        elif opt in ("-a","--agretopicity"):
-            agretopicity =float(value)
-        elif opt in ("-q","--rna_seq_variant_quality"):
-            rna_seq_variant_quality =float(value)
-        elif opt in ("-t","--alteration_type"):
-            alteration_type =value 
-        elif opt in ("-p","--prefix"):
-            prefix =value
-        elif opt in ("-T", "--tumor_RNA_TPM_threshold"):
-            tumor_RNA_TPM_threshold = float(value)
-        elif opt in ("--dna_vcf"):
-            dna_vcf = value
-        elif opt in ("--rna_vcf"):
-            rna_vcf = value
-        elif opt in ("--rna_depth"):
-            rna_depth = value
-        elif opt in ("--function"):
-            function = value
-        elif opt in ("--tesla_xls"):
-            tesla_xls = value
-        elif opt in ("--tesla_patientID"):
-            tesla_patientID = int(value)
+    description = 'This script computes the probability that each neoantigen candidate is validated to be immunogenic (i.e., true positive). '
+    epilog = '''
+Hard thresholds should be much less strict than soft thresholds. 
+If (output_directory, tesla_xls, tesla_patientID) are set, 
+    then (input_folder, iedb_fasta, netmhc_cmd, alteration_type) are all irrelevant and therefore unused.
+If the keyword rerank is in function,
+    then (iedb_fasta, netmhc_cmd, alteration_type) are all irrelevant and therefore unused. '''.strip()
     
-    if tesla_xls != '':
-        data = read_tesla_xls(tesla_xls, tesla_patientID)
-        data2, _ = datarank(data, output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.from_tesla_excel.tsv")
-        exit(0)
-    if function == 'rerank':
-        data = pd.read_csv(output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.tsv",sep='\t')
-        data2, _ = datarank(data, output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.rerank.tsv")
-        exit(0)
+    parser = argparse.ArgumentParser(description = description, epilog = epilog, formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     
-    if (input_folder =="" or iedb_fasta=="" or output_folder=="" or netmhc_path==""):
-        print (USAGE)
-        sys.exit(2)
+    parser.add_argument('-i', '--input-directory', help = 'input directory containing result file from binding-stability prediction', required = True)
+    parser.add_argument('-I', '--iedb-fasta', help = 'path to IEDB reference fasta file containing pathogen-derived immunogenic peptides', required = True)
+    parser.add_argument('-o', '--output-directory', help = 'output directory to store result', required = True)
+    parser.add_argument('-p', '--prefix', help = 'prefix of the oupput files in the output directory', required = True)
+    parser.add_argument('-n', '--netmhcpan-cmd', help = 'command to run the netmhcpan program', required = True)
+    
+    parser.add_argument('-t', '--alteration-type', default = 'snv,indel,fusion,splicing',
+            help = 'type of alterations detected, can be a combination of (snv, indel, sv, and/or fusion separated by comma)')
+    parser.add_argument('--binding-affinity-hard-thres', default = 34.0*11, type=float,
+            help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
+    parser.add_argument('--binding-affinity-soft-thres', default = 34.0, type=float,
+            help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
+    parser.add_argument('--binding-stability-hard-thres', default = round(1.4/11,3), type=float,
+            help = 'hard threshold of peptide-MHC binding stability to predict peptide-MHC presentation to cell surface')
+    parser.add_argument('--binding-stability-soft-thres', default = 1.4, type=float,
+            help = 'soft threshold of peptide-MHC binding stability to predict peptide-MHC presentation to cell surface')
+    parser.add_argument('--tumor-abundance-hard-thres', default = 33.0/3/11, type=float,
+            help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC recognition by T-cells')
+    parser.add_argument('--tumor-abundance-soft-thres', default = 33.0/3, type=float,
+            help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC recognition by T-cells')
+    parser.add_argument('--agretopicity-thres', default = 0.1, type=float,
+            help = 'threshold of agretopicity to predict peptide-MHC recognition by T-cells')
+    parser.add_argument('--foreignness-thres', default = 1e-16, type=float,
+            help = 'threshold of foreignness to predict peptide-MHC recognition by T-cells')
+    parser.add_argument('--tumor-abundance-recognition-thres', default = 33.0, type=float,
+            help = 'threshold of tumor abundance to predict peptide-MHC recognition by T-cells')
+    
+    parser.add_argument('--snvindel-location-param', default = -1.5, type=float,
+            help = 'location parameter of the logistic regression used to estimate the probability that a peptide-MHC is immunogenic '
+            'if the peptide originate from SNVs and InDels. '
+            'This parameter does not change the ranking of peptide-MHC immunogenities for peptides originating from SNVs and InDels. ')
+    parser.add_argument('--non-snvindel-location-param', default = -2.5, type=float,
+            help = 'location parameter of the logistic regression used to estimate the probability that a peptide-MHC is immunogenic '
+            'if the peptide does not originate from SNVs and InDels. '
+            'This parameter does not change the ranking of peptide-MHC immunogenities for peptides not originating from SNVs and InDels. ')
+    
+    parser.add_argument('--immuno-strength-null-hypothesis-prior-weight', default = 1.0, type=float,
+            help = 'the weight of the prior belief that recognized and non-recognized abundance-agnostic peptides '
+            '(without filter by abundance) are equally abundant. '
+            'This parameter does not change the ranking of peptide-MHC immunogenities for peptides within the two classes: not recognized and recognized '
+            '(a small value for this parameter (for example, 1) can make unrecognized peptides '
+            'partially and fully recognized if (immunoStrength>0) and (immunoStrength>0.5), respectively. ')
 
+    parser.add_argument('--dna-vcf', default = '',
+            help = 'VCF file (which can be block-gzipped) generated by calling small variants from DNA-seq data')
+    parser.add_argument('--rna-vcf', default = '',
+            help = 'VCF file (which can be block-gzipped) generated by calling small variants from RNA-seq data')
+    parser.add_argument('--rna-depth', default = '',
+            help = 'A file containing summary information about RNA fragment depth')
+
+    parser.add_argument('--function', default = '',
+            help = 'The keyword rerank means using existing stats (affinity, stability, etc.) to re-rank the neoantigen candidates')
+    parser.add_argument('--tesla-xls', default = '',
+            help = 'Table S4 and S7 at https://doi.org/10.1016/j.cell.2020.09.015')
+    parser.add_argument('--tesla-patientID', default = '',
+            help = 'the ID in the PATIENT_ID column to select the rows in --tesla-xls')
+    
+    args = parser.parse_args()
+    paramset = args
+    print(paramset)
+    
+    if not isna(args.tesla_xls):
+        data = read_tesla_xls(args.tesla_xls, args.tesla_patientID)
+        data2, _ = datarank(data, F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.from_tesla_excel.tsv', paramset)
+        exit(0)
+    if args.function == 'rerank':
+        data = pd.read_csv(F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.tsv', sep='\t')
+        data2, _ = datarank(data, F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.rerank.tsv', paramset)
+        exit(0) 
+    
+    input_directory = args.input_directory
+    output_directory = args.output_directory
+    prefix = args.prefix
+    
     wt_pep_to_bindaff = {}
-    tmp_wt_bindaff_file =csv.reader(open(input_folder+"/tmp_identity/"+prefix+"_bindaff_filtered.tsv"), delimiter="\t")
-    for line in tmp_wt_bindaff_file:
-        if line[7] != "":
-            wt_pep_to_bindaff[line[2]] = line[7]
+    with open(F'{input_directory}/tmp_identity/{prefix}_bindaff_filtered.tsv') as csvfile:
+        tmp_wt_bindaff_file = csv.reader(csvfile, delimiter="\t")
+        for line in tmp_wt_bindaff_file:
+            if line[7] != "":
+                wt_pep_to_bindaff[line[2]] = line[7]
     
-    snv_indel_file = open(output_folder+"/../info/"+prefix+"_snv_indel.annotation.tsv")
-    if os.path.exists(output_folder+"/../info/"+prefix+"_fusion.tsv"):
-        fusion_file = open(output_folder+"/../info/"+prefix+"_fusion.tsv")
-    else:
-        fusion_file = []
-    if os.path.exists(output_folder+"/../info/"+prefix+"_splicing.csv"):
-        splicing_file = open(output_folder+"/../info/"+prefix+"_splicing.csv")
-    else:
-        splicing_file = []
-   
-    if dna_vcf:
-        dnaseq_small_variants_file = pysam.VariantFile(dna_vcf, 'r')
-    else:
-        dnaseq_small_variants_file = []
-    if rna_vcf:
-        rnaseq_small_variants_file = pysam.VariantFile(rna_vcf, 'r')
-    else:
-        rnaseq_small_variants_file = []
+    snv_indel_filename = F'{input_directory}/../info/{prefix}_snv_indel.annotation.tsv'
+    fusion_filename = F'{input_directory}/../info/{prefix}_fusion.tsv'
+    splicing_filename = F'{input_directory}/../info/{prefix}_splicing.csv'
+    
+    snv_indel_file = open(snv_indel_filename)
+    fusion_file = (open(fusion_filename) if os.path.exists(fusion_filename) else [])
+    splicing_file = (open(splicing_filename) if os.path.exists(splicing_filename) else [])
+     
+    dnaseq_small_variants_file = (pysam.VariantFile(args.dna_vcf, 'r') if args.dna_vcf else [])
+    rnaseq_small_variants_file = (pysam.VariantFile(args.rna_vcf, 'r') if args.rna_vcf else [])
 
-    snv_indel = []
-    fusion = []
-    splicing = []
-
-    for line in snv_indel_file:
-        snv_indel.append(str(line))
-    for line in fusion_file:
-        fusion.append(str(line))
-    for line in splicing_file:
-        splicing.append(str(line))
-
+    snv_indel = [line for line in snv_indel_file]
+    fusion = [line for line in fusion_file]
+    splicing = [line for line in splicing_file]
+    
     if snv_indel_file: snv_indel_file.close()
     if fusion_file: fusion_file.close()
     if splicing_file: splicing_file.close() 
 
-    reader = csv.reader(open(input_folder+"/"+prefix+"_candidate_pmhc.csv"), delimiter=",")
+    candidate_file = open(F'{args.input_directory}/{prefix}_candidate_pmhc.csv')
+    reader = csv.reader(candidate_file, delimiter=',')
     fields=next(reader)
     fields.append("Foreignness")
     fields.append("Agretopicity")
@@ -436,13 +424,13 @@ note:
     fields.append("RNA_refDP")
     fields.append("RNA_altDP")
     fields.append("SourceAlterationDetail")
-    fields.append('is_frameshift')
+    fields.append('IsFrameshift')
     data_raw = []
     data_exist = [] # save existing hla, mutant_type peptide
     agre_exist = []
     for line1 in reader:
         line = copy.deepcopy(line1)
-        blast_iedb_seqs = runblast(line[1], iedb_fasta, output_folder)
+        blast_iedb_seqs = runblast(line[1], args.iedb_fasta, output_directory)
         R = getR(line[1], blast_iedb_seqs)
         line.append(R)
         mt_bindaff = float(line[3])
@@ -450,7 +438,7 @@ note:
         if (("SNV" in identity) or ('INS' in identity) or ('DEL' in identity) or ("INDEL" in identity)) and line[2] in wt_pep_to_bindaff:
             wt_bindaff = wt_pep_to_bindaff[line[2]]
         else:
-            wt_bindaff = get_wt_bindaff(line[2],line[0].replace('*',''),output_folder,netmhc_path)
+            wt_bindaff = get_wt_bindaff(line[2],line[0].replace('*',''), output_directory, args.netmhcpan_cmd)
         
         A = mt_bindaff/float(wt_bindaff) 
         if ([line[0],line[1]] in data_exist):
@@ -540,13 +528,11 @@ note:
         data_raw.append(line)
         
     picked_rows = []
-    alt_type = alteration_type.replace(" ", "").strip().split(",")
+    alt_type = args.alteration_type.replace(' ', '').strip().split(',')
     for line in data_raw:
-        type = line[5].strip().split("_")[0]
-        if (type=="SP"):
-            type="SPLICING"
-        if type.lower() in alt_type:
-            picked_rows.append(line)
+        atype = line[5].strip().split('_')[0]
+        if (atype == 'SP'): atype='SPLICING'
+        if atype.lower() in alt_type: picked_rows.append(line)
     # data can be emtpy (https://stackoverflow.com/questions/44513738/pandas-create-empty-dataframe-with-only-column-names)
     data=pd.DataFrame(picked_rows, columns = fields)
     data.BindAff = data.BindAff.astype(float)
@@ -554,14 +540,16 @@ note:
     data.Foreignness = data.Foreignness.astype(float)
     data.Agretopicity = data.Agretopicity.astype(float)
     data.Quantification = data.Quantification.astype(float)
-    data['RNA_normAD'] = data.RNA_altDP.astype(float) / get_avg_depth_from_rna_depth_filename(rna_depth) 
+    data['RNA_normAD'] = data.RNA_altDP.astype(float) / get_avg_depth_from_rna_depth_filename(args.rna_depth)
     
-    are_highly_abundant = ((data.BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
-    keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
+    # are_highly_abundant is not used because we have too little positive data
+    # are_highly_abundant = ((data.BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
+    # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
+    keptdata = data[(data.Agretopicity > -1)]
     
     keptdata.insert(len(keptdata.columns)-1, 'SourceAlterationDetail', keptdata.pop('SourceAlterationDetail'))
     keptdata.drop(['BindLevel'], axis=1)
-    data2, _ = datarank(keptdata, output_folder+"/"+prefix+"_neoantigen_rank_neoheadhunter.tsv")
+    data2, _ = datarank(keptdata, F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.tsv', paramset)
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
