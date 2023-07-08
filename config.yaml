@@ -23,15 +23,15 @@ tumor_vaf: 0.1
 normal_vaf: 0.05
 tumor_normal_var_qual : 63 # # Equivalent to tlod=6.3 in Mutect2
 
-binding_affinity_hard_thres: 340
+binding_affinity_hard_thres: 374 # 34*11
 binding_affinity_soft_thres: 34
-binding_stability_hard_thres: 0.14
+binding_stability_hard_thres: 0.127 # 1.4/11
 binding_stability_soft_thres: 1.4
-tumor_abundance_hard_thres: 1
-tumor_abundance_soft_thres: 0.1
+tumor_abundance_hard_thres: 1.0 # 11.0 / 11
+tumor_abundance_soft_thres: 11.0 # 1.0 * 11
 agretopicity_thres: 0.1
 foreignness_thres: 1e-16
 
 alteration_type: 'snv,indel,fusion,splicing'
-num_cores: 12
+num_cores: 20
 
