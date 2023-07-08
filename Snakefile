@@ -1,4 +1,5 @@
-import csv,logging,multiprocessing,os,subprocess
+import csv,logging,multiprocessing,os,subprocess,datetime
+script_start_datetime = datetime.datetime.now()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 ######### Setup #########
@@ -51,6 +52,10 @@ ASNEO_GTF = config.get('asneo_gtf', F'{workflow.basedir}/database/hg19.refGene.g
 REF = config.get('REF', F'{CTAT}/ref_genome.fa')
 ERGO_PATH = config.get('ERGO_PATH', F'{ERGO_EXE_DIR}/Predict.py')
 
+tmpdirID = '.'.join([script_start_datetime.strftime('%Y-%m-%d_%H-%M-%S'), str(os.getpid()), PREFIX])
+fifo_path_prefix = os.path.sep.join([config['fifo_dir'], tmpdirID])
+logging.debug(F'fifo_path_prefix={fifo_path_prefix}')
+
 script_basedir = F'{workflow.basedir}' # os.path.dirname(os.path.abspath(sys.argv[0]))
 logging.debug(F'script_basedir = {script_basedir}')
 
@@ -93,7 +98,7 @@ hla_fq_r2 = F'{RES}/hla_typing/{PREFIX}.rna_hla_r2.fastq.gz'
 hla_fq_se = F'{RES}/hla_typing/{PREFIX}.rna_hla_se.fastq.gz'
 hla_bam   = F'{RES}/hla_typing/{PREFIX}.rna_hla_typing.bam'
 hla_out   = F'{RES}/hla_typing/{PREFIX}_hlatype.tsv'
-logging.info(F'HLA_REF = {HLA_REF}')
+logging.debug(F'HLA_REF = {HLA_REF}')
 
 rule hla_typing_prep:
     output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
@@ -144,9 +149,9 @@ rule rna_fusion_detection:
     threads: star_nthreads
     run:
         if RNA_TUMOR_ISPE:
-            shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --right_fq {RNA_TUMOR_FQ2}')
+            shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --right_fq {RNA_TUMOR_FQ2} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         else:
-            shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1}')
+            shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         
 fusion_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_fusion.fasta'
 rule rna_fusion_neopeptide_generation:
@@ -205,7 +210,7 @@ rule rna_splicing_alignment:
         ' –-outFilterMultimapScoreRange 1 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --alignIntronMax 500000 –alignMatesGapMax 1000000 '
         ' --sjdbScore 2 --alignSJDBoverhangMin 1 --genomeLoad NoSharedMemory --outFilterMatchNminOverLread 0.33 --outFilterScoreMinOverLread 0.33 '
         ''' --sjdbOverhang 150 --outSAMstrandField intronMotif –sjdbGTFfile {ASNEO_GTF} --outFileNamePrefix {asneo_out}/ --readFilesCommand 'gunzip -c' ''' 
-        ' --outSAMtype BAM Unsorted '
+        ' --outSAMtype BAM Unsorted --outTmpDir {fifo_path_prefix}.star.tmpdir '
         ' && samtools fixmate -@ {samtools_nthreads} -m {asneo_out}/Aligned.out.bam - '
         ' | samtools sort -@ {samtools_nthreads} -o - -'
         ' | samtools markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
@@ -443,7 +448,7 @@ rule prioritization_with_all_tcr:
 mixcr_output_dir = F'{prioritization_dir}/{PREFIX}_mixcr_output'
 mixcr_output_pref = F'{mixcr_output_dir}/{PREFIX}'
 tcr_specificity_software = 'ERGO'
-logging.info(F'MIXCR_PATH = {MIXCR_PATH}')
+logging.debug(F'MIXCR_PATH = {MIXCR_PATH}')
 rule prioritization_with_each_tcr:
     input: mt_bindstab_filtered_tsv
     output: tcr_specificity_result

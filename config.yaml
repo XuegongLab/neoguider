@@ -33,5 +33,7 @@ agretopicity_thres: 0.1
 foreignness_thres: 1e-16
 
 alteration_type: 'snv,indel,fusion,splicing'
+
 num_cores: 20
+fifo_dir: '/tmp'
 
