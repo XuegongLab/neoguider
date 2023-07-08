@@ -1,0 +1,37 @@
+
+### Section 1: required input and output: one set-up per sample
+
+dna_tumor_fq1: '-'
+dna_tumor_fq2: '-'
+dna_normal_fq1: '-'
+dna_normal_fq2: '-'
+rna_tumor_fq1: '-'
+rna_tumor_fq2: '-'
+output_directory: '-'
+prefix: '-'
+
+### Section 2: paramters having no default values: one set-up per installation and for all samples
+# variables that begins with ssh:// requires the NeohunterRemotePassword environment variable to be set and exported
+
+netmhcpan_cmd: '/mnt/d/code/neohunter/netMHCpan-4.1/netMHCpan'
+netmhcstabpan_cmd: 'ssh://zxf@166.111.130.101:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
+
+### Section 3: parameters having some default values
+
+tumor_depth: 5
+tumor_vaf: 0.1
+normal_vaf: 0.05
+tumor_normal_var_qual : 63 # # Equivalent to tlod=6.3 in Mutect2
+
+binding_affinity_hard_thres: 340
+binding_affinity_soft_thres: 34
+binding_stability_hard_thres: 0.14
+binding_stability_soft_thres: 1.4
+tumor_abundance_hard_thres: 1
+tumor_abundance_soft_thres: 0.1
+agretopicity_thres: 0.1
+foreignness_thres: 1e-16
+
+alteration_type: 'snv,indel,fusion,splicing'
+num_cores: 12
+
