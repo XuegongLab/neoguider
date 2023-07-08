@@ -83,6 +83,9 @@ kallisto index -i  GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome
 wget -c https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
 gunzip -fk hg19.fa.gz
 
+wget -c http://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
+gunzip -fk hg19.refGene.gtf.gz
+
 #bwa index hg19.fa
 #samtools faidx hg19.fa && samtools dict hg19.fa > hg19.dict
 
@@ -105,6 +108,4 @@ gunzip -fk hg19.fa.gz
 #tar xzvf funcotator_dataSources.v1.6.20190124s.tar.gz
 
 # download refseq annotation for hg19
-#wget -c http://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
-#gunzip -fk hg19.refGene.gtf.gz
 
