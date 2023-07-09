@@ -70,6 +70,7 @@ vep_nthreads = 4 # https://useast.ensembl.org/info/docs/tools/vep/script/vep_oth
 
 ### usually you should not modify the code below (please think twice before doing so) ###
 IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = True
+OPTITYPE_CONFIG = F"{workflow.basedir}/software/optitype.config.ini"
 
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
@@ -129,16 +130,16 @@ rule hla_typing:
     resources: mem_mb = 30000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
     threads: 1
     run:
-        shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out')
+        shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out && cp {OPTITYPE_CONFIG} {RES}/hla_typing/config.ini')
         if RNA_TUMOR_ISPE:
             if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
-                shell('podman run -t quay.io/biocontainers/optitype:1.3.2--py27_3 -v {hla_typing_dir}:/data/ /usr/local/bin/OptiTypePipeline.py'
-                      ' -i /data/{hla_fq_r1_fname} /data/{hla_fq_r2_fname} --rna -o /data/optitype_out/ > /data/optitype_out.container.stdout')
+                shell('podman run -v {hla_typing_dir}:/data/ -t quay.io/biocontainers/optitype:1.3.2--py27_3 /usr/local/bin/OptiTypePipeline.py'
+                      ' -c /data/config.ini -i /data/{hla_fq_r1_fname} /data/{hla_fq_r2_fname} --rna -o /data/optitype_out/ > {hla_out}.OptiType-container.stdout')
             else: shell('OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
         else:
             if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
-                shell('podman run -t quay.io/biocontainers/optitype:1.3.2--py27_3 -v {hla_typing_dir}:/data/ /usr/local/bin/OptiTypePipeline.py'
-                      ' -i /data/{hla_fq_se_fname} --rna -o /data/optitype_out/ > /data/optitype_out.container.stdout')
+                shell('podman run -v {hla_typing_dir}:/data/ -t quay.io/biocontainers/optitype:1.3.2--py27_3 /usr/local/bin/OptiTypePipeline.py'
+                      ' -c /data/config.ini -i /data/{hla_fq_se_fname}                         --rna -o /data/optitype_out/ > {hla_out}.OptiType-container.stdout')
             else: shell('OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
         shell('cp {RES}/hla_typing/optitype_out/*/*_result.tsv {output.out}')
     
