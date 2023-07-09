@@ -61,13 +61,15 @@ logging.debug(F'script_basedir = {script_basedir}')
 
 ### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
 samtools_nthreads = 4
-bcftools_nthreads = 4
-bwa_nthreads = 8
-star_nthreads = 8
-uvc_nthreads = 8
-vep_nthreads = 8
+bcftools_nthreads = 2
+bwa_nthreads = 7
+star_nthreads = 7
+uvc_nthreads = 7
+uvc_nthreads_on_cmdline = 10 # over-allocate threads because each thread does not use 100% CPU and uses very little RAM
+vep_nthreads = 4 # https://useast.ensembl.org/info/docs/tools/vep/script/vep_other.html : We recommend using 4 forks
 
 ### usually you should not modify the code below (please think twice before doing so) ###
+IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = True
 
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
@@ -77,6 +79,7 @@ DNA_TUMOR_ISPE  = (DNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', 
 DNA_NORMAL_ISPE = (DNA_NORMAL_FQ2 not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
 RNA_TUMOR_ISPE  = (RNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
 
+hla_typing_dir = F'{RES}/hla_typing'
 info_dir = F'{RES}/info'
 neopeptide_dir = F'{RES}/neopeptides'
 alignment_dir = F'{RES}/alignments'
@@ -93,11 +96,21 @@ tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_spe
 rule all:
     input: neoheadhunter_prioritization_tsv, tcr_specificity_result
 
-hla_fq_r1 = F'{RES}/hla_typing/{PREFIX}.rna_hla_r1.fastq.gz'
-hla_fq_r2 = F'{RES}/hla_typing/{PREFIX}.rna_hla_r2.fastq.gz'
-hla_fq_se = F'{RES}/hla_typing/{PREFIX}.rna_hla_se.fastq.gz'
-hla_bam   = F'{RES}/hla_typing/{PREFIX}.rna_hla_typing.bam'
-hla_out   = F'{RES}/hla_typing/{PREFIX}_hlatype.tsv'
+# Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
+#   https://github.com/FRED-2/OptiType/issues/125
+# Therefore, we used the podman container as a workaround for the memory leak.
+# If the memory leak is fixed or if you have enough RAM, 
+#   then you can ignore this workaround.
+hla_fq_r1_fname = F'{PREFIX}.rna_hla_r1.fastq.gz'
+hla_fq_r2_fname = F'{PREFIX}.rna_hla_r2.fastq.gz'
+hla_fq_se_fname = F'{PREFIX}.rna_hla_se.fastq.gz'
+
+hla_fq_r1 = F'{hla_typing_dir}/{hla_fq_r1_fname}'
+hla_fq_r2 = F'{hla_typing_dir}/{hla_fq_r2_fname}'
+hla_fq_se = F'{hla_typing_dir}/{hla_fq_se_fname}'
+
+hla_bam   = F'{hla_typing_dir}/{PREFIX}.rna_hla_typing.bam'
+hla_out   = F'{hla_typing_dir}/{PREFIX}_hlatype.tsv'
 logging.debug(F'HLA_REF = {HLA_REF}')
 
 rule hla_typing_prep:
@@ -113,14 +126,20 @@ rule hla_typing_prep:
 rule hla_typing:
     input: hla_fq_r1, hla_fq_r2, hla_fq_se
     output: out = hla_out
-    resources: mem_mb = 20000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
+    resources: mem_mb = 30000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
     threads: 1
     run:
         shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out')
         if RNA_TUMOR_ISPE:
-            shell('OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
+            if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
+                shell('podman run -t quay.io/biocontainers/optitype:1.3.2--py27_3 -v {hla_typing_dir}:/data/ /usr/local/bin/OptiTypePipeline.py'
+                      ' -i /data/{hla_fq_r1_fname} /data/{hla_fq_r2_fname} --rna -o /data/optitype_out/ > /data/optitype_out.container.stdout')
+            else: shell('OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
         else:
-            shell('OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
+            if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
+                shell('podman run -t quay.io/biocontainers/optitype:1.3.2--py27_3 -v {hla_typing_dir}:/data/ /usr/local/bin/OptiTypePipeline.py'
+                      ' -i /data/{hla_fq_se_fname} --rna -o /data/optitype_out/ > /data/optitype_out.container.stdout')
+            else: shell('OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
         shell('cp {RES}/hla_typing/optitype_out/*/*_result.tsv {output.out}')
     
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
@@ -175,16 +194,11 @@ rna_t_spl_bai = F'{alignment_dir}/{PREFIX}_RNA_t_spl.bam.bai'
 dna_tumor_bai = F'{alignment_dir}/{PREFIX}_DNA_tumor.bam.bai'
 dna_normal_bai = F'{alignment_dir}/{PREFIX}_DNA_normal.bam.bai'
 
-HIGH_DP=1000*1000
-rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
-rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
 rule rna_preprocess:
     input: starfusion_bam
     output:
         outbam = rna_tumor_bam,
         outbai = rna_tumor_bai,
-        outdepth = rna_tumor_depth,
-        outsummary = rna_tumor_depth_summary,
     threads: samtools_nthreads
     shell:
         'rm {output.outbam}.tmp.*.bam || true '
@@ -192,7 +206,15 @@ rule rna_preprocess:
         ' | samtools sort -@ {samtools_nthreads} -o - - '
         ' | samtools markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_tumor_bam}'
-        ' && samtools view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
+
+HIGH_DP=1000*1000
+rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
+rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
+rule rna_postprocess:
+    input: rna_tumor_bam, rna_tumor_bai
+    output: rna_tumor_depth, rna_tumor_depth_summary
+    shell:
+        ' samtools view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
         ' | bcftools mpileup --threads {bcftools_nthreads} -a DP,AD -d {HIGH_DP} -f {REF} -q 0 -Q 0 -T {CTAT}/ref_annot.gtf.mini.sortu.bed - -o {rna_tumor_depth} '
         ' && bcftools index --threads {bcftools_nthreads} -ft {rna_tumor_depth} '
         ''' && cat {CTAT}/ref_annot.gtf.mini.sortu.bed | awk '{{ i += 1; s += $3-$2 }} END {{ print "exome_total_bases\t" s; }}' > {rna_tumor_depth_summary} '''
@@ -261,7 +283,7 @@ rule snvindel_detection_with_DNA_tumor:
     resources: mem_mb = 9000
     threads: uvc_nthreads
     shell:
-        'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads} '
+        'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 63) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
@@ -275,10 +297,10 @@ rule snvindel_detection_with_RNA_tumor:
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',
-    resources: mem_mb = 9000
+    resources: mem_mb = 12000
     threads: uvc_nthreads
     shell:
-        'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads} '
+        'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 63) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
@@ -289,7 +311,7 @@ dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effe
 rule snvindel_effect_prediction:
     input: dna_vcf
     output: dna_variant_effect
-    resources: mem_mb = 8000
+    resources: mem_mb = 16000
     threads: vep_nthreads
     shell: '''vep --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
         --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_gnomad \
