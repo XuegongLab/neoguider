@@ -127,7 +127,7 @@ rule hla_typing_prep:
 rule hla_typing:
     input: hla_fq_r1, hla_fq_r2, hla_fq_se
     output: out = hla_out
-    resources: mem_mb = 30000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
+    resources: mem_mb = 24000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
     threads: 1
     run:
         shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out && cp {OPTITYPE_CONFIG} {RES}/hla_typing/config.ini')
