@@ -62,10 +62,11 @@ logging.debug(F'script_basedir = {script_basedir}')
 ### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
 samtools_nthreads = 4
 bcftools_nthreads = 2
-bwa_nthreads = 7
-star_nthreads = 7
-uvc_nthreads = 7
-uvc_nthreads_on_cmdline = 10 # over-allocate threads because each thread does not use 100% CPU and uses very little RAM
+bwa_nthreads = 12
+star_nthreads = 12
+uvc_nthreads = 8
+uvc_nthreads_on_cmdline = 11 # over-allocate threads because each thread does not use 100% CPU and uses very little RAM
+uvc_mem_mb = uvc_nthreads_on_cmdline * 1000
 vep_nthreads = 4 # https://useast.ensembl.org/info/docs/tools/vep/script/vep_other.html : We recommend using 4 forks
 
 ### usually you should not modify the code below (please think twice before doing so) ###
@@ -281,7 +282,7 @@ rule snvindel_detection_with_DNA_tumor:
         vcf1 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',        
-    resources: mem_mb = 9000
+    resources: mem_mb = uvc_mem_mb
     threads: uvc_nthreads
     shell:
         'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
@@ -298,7 +299,7 @@ rule snvindel_detection_with_RNA_tumor:
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',
-    resources: mem_mb = 12000
+    resources: mem_mb = uvc_mem_mb
     threads: uvc_nthreads
     shell:
         'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
