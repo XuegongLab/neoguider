@@ -60,14 +60,25 @@ script_basedir = F'{workflow.basedir}' # os.path.dirname(os.path.abspath(sys.arg
 logging.debug(F'script_basedir = {script_basedir}')
 
 ### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
-samtools_nthreads = 4
-bcftools_nthreads = 2
-bwa_nthreads = 12
-star_nthreads = 12
-uvc_nthreads = 8
-uvc_nthreads_on_cmdline = 11 # over-allocate threads because each thread does not use 100% CPU and uses very little RAM
-uvc_mem_mb = uvc_nthreads_on_cmdline * 1000
+
+samtools_nthreads = 3
+bcftools_nthreads = 3
+bwa_nthreads = max((workflow.cores // 4, 1))
+star_nthreads = max((workflow.cores // 4, 1))
+uvc_nthreads = max((workflow.cores // 3, 1))
+uvc_nthreads_on_cmdline = max((workflow.cores // 2, 1)) # over-allocate threads because each thread does not use 100% CPU and uses very little RAM
 vep_nthreads = 4 # https://useast.ensembl.org/info/docs/tools/vep/script/vep_other.html : We recommend using 4 forks
+
+# We used the bwa and STAR RAM usage from https://link.springer.com/article/10.1007/s00521-021-06188-z/figures/3
+kallisto_mem_mb = 4000 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
+optitype_mem_mb = 40*1000 # bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z
+samtools_sort_mem_mb = 768 * (samtools_nthreads + 1)
+bwa_mem_mb = 9000
+star_mem_mb = 32*1000
+uvc_mem_mb = uvc_nthreads_on_cmdline * 1536
+vep_mem_mb = vep_nthreads * 4000
+
+bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
 IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = True
@@ -117,7 +128,7 @@ logging.debug(F'HLA_REF = {HLA_REF}')
 
 rule hla_typing_prep:
     output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
-    resources: mem_mb = 7500
+    resources: mem_mb = bwa_mem_mb
     threads: bwa_nthreads
     # Note: razers3 is too memory intensive, so bwa mem is used instead of the command
     # (razers3 --percent-identity 90 --max-hits 1 --distance-range 0 --output {hla_bam} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2})
@@ -128,7 +139,7 @@ rule hla_typing_prep:
 rule hla_typing:
     input: hla_fq_r1, hla_fq_r2, hla_fq_se
     output: out = hla_out
-    resources: mem_mb = 24000 # should be 40000 if reads not mapped to HLA are kept (bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z)
+    resources: mem_mb = optitype_mem_mb
     threads: 1
     run:
         shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out && cp {OPTITYPE_CONFIG} {RES}/hla_typing/config.ini')
@@ -148,7 +159,7 @@ kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
 rule rna_quantification:
     output: out = outf_rna_quantification
-    resources: mem_mb = 4000 # as benchmarked at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
+    resources: mem_mb = kallisto_mem_mb
     run:
         if RNA_TUMOR_ISPE:
             shell('kallisto quant -i {CTAT}/ref_annot.cdna.fa.kallisto-idx -b 100 -o {kallisto_out} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2}')
@@ -166,7 +177,7 @@ rule rna_fusion_detection:
         outbam = starfusion_bam,
         outres = starfusion_res,
         outsjo = starfusion_sjo,
-    resources: mem_mb = 28000 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
+    resources: mem_mb = star_mem_mb
     threads: star_nthreads
     run:
         if RNA_TUMOR_ISPE:
@@ -201,7 +212,7 @@ rule rna_preprocess:
     output:
         outbam = rna_tumor_bam,
         outbai = rna_tumor_bai,
-    threads: samtools_nthreads
+    threads: 1 # samtools_nthreads
     shell:
         'rm {output.outbam}.tmp.*.bam || true '
         ' && samtools fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
@@ -227,7 +238,7 @@ asneo_sjo = F'{asneo_out}/SJ.out.tab'
 splicing_neopeptide_faa=F'{neopeptide_dir}/{PREFIX}_splicing.fasta'
 rule rna_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
-    resources: mem_mb = 36000 # as benchmarked at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
+    resources: mem_mb = star_mem_mb
     threads: star_nthreads
     shell: # same as in PMC7425491 except for --sjdbOverhang 100
         'STAR --genomeDir {REF}.star.idx --readFilesIn {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --runThreadN {star_nthreads} '
@@ -243,7 +254,7 @@ rule rna_splicing_alignment:
 rule rna_splicing_neopeptide_generation:
     input: rna_quant=outf_rna_quantification, sj=asneo_sjo # starfusion_sjo may also work (we didn't test this)
     output: splicing_neopeptide_faa
-    resources: mem_mb = 20000
+    resources: mem_mb = 20000 # performance measured by Xiaofei Zhao
     threads: 1
     shell:
         'mkdir -p {info_dir} '
@@ -253,7 +264,7 @@ rule rna_splicing_neopeptide_generation:
 
 rule dna_alignment_tumor:
     output: dna_tumor_bam, dna_tumor_bai
-    resources: mem_mb = 12000
+    resources: mem_mb = bwa_samtools_mem_mb
     threads: bwa_nthreads
     shell:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
@@ -265,7 +276,7 @@ rule dna_alignment_tumor:
     
 rule dna_alignment_normal:
     output: dna_normal_bam, dna_normal_bai
-    resources: mem_mb = 12000
+    resources: mem_mb = bwa_samtools_mem_mb
     threads: bwa_nthreads
     shell:
         'rm {dna_normal_bam}.tmp.*.bam || true'
@@ -313,7 +324,7 @@ dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effe
 rule snvindel_effect_prediction:
     input: dna_vcf
     output: dna_variant_effect
-    resources: mem_mb = 16000
+    resources: mem_mb = vep_mem_mb
     threads: vep_nthreads
     shell: '''vep --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
         --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_gnomad \
