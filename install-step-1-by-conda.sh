@@ -27,7 +27,7 @@ $conda install -y -n $neoheadhunter python=3.10 \
     'biopython<=1.79' pybiomart pyfaidx pysam
 
 conda run -n $neoheadhunter pip install sj2psi # for ASNEO.py
-podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 # work-around for https://github.com/FRED-2/OptiType/issues/125
+conda run -n $neoheadhunter podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 # work-around for https://github.com/FRED-2/OptiType/issues/125
 
 # The optitype environment should be able to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
 # However, it seems that conda and mamba cannot install the obsolete python versions that the previous versions of optitype depend on

@@ -1,92 +1,45 @@
 # NeoHeadHunter
 
+NeoHeadHunter (NHH, nhh) is a neoantigen prioritization pipeline. NHH uses state-of-the-art bioinformatics sofware packages and neoantigen-prioritization algorithms. NHH is able to accurately rank neoantigen candidates. Additionally, NHH is able to estimate the probability that each neoantigen candidate is immunogenic (i.e., true positive). 
 
+## How to install
 
-## Getting started
+First, follow the instruction at https://bioconda.github.io/ to install bioconda if you haven't done so.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
+Then, run the following commands: 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/cndfeifei/neoheadhunter.git
-git branch -M main
-git push -uf origin main
+# If the working directory is not neoheadhunter, then change it to neoheadhunter
+conda create -n nhh -r requirements.txt # install packages through conda, you can change the environment name nhh (neo-head-hunter) as you wish
+conda run -n nhh podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 # get the optitype container without memory leak
+conda run -n hhh sh install-step-2.sh # download databases and build database indexes
 ```
 
-## Integrate with your tools
+Next, you have to manually set up netMHCpan, netMHCstabpan and MixCR (due to their licensing requirements). 
+Please refer to https://services.healthtech.dtu.dk/services/NetMHC-4.0/ and https://services.healthtech.dtu.dk/services/NetMHCstabpan-1.0/ . For how to manually download, install and activate netMHCpan and netMHCstabpan. After doing so, please set the full paths of netMHCpan and netMHCstabpan in the config.ini file accordingly. Please obtain a license for MixCR from https://licensing.milaboratories.com/ and then run the command ```software/mixcr activate-license``` to activate MixCR. 
 
-- [ ] [Set up project integrations](https://gitlab.com/cndfeifei/neoheadhunter/-/settings/integrations)
+Last but no the least, please be aware that UVC, netMHCpan, netMHCstabpan and MixCR are free for academic use but require commercial licensing for for-profit use. 
 
-## Collaborate with your team
+## How to run
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Example shell command to run NeoHeadHunter: 
+```
+# If the working directory is not neoheadhunter, then change it to neoheadhunter
+conda run -n hhh snakemake --configfile config.yaml --config \
+		res=/mnt/d/TESLA/snake-out/patient01.outdir prefix=patient01 \
+		dna_tumor_fq1=/mnt/d/TESLA/TESLA_1_1.fastq.gz \
+		dna_tumor_fq2=/mnt/d/TESLA/TESLA_1_2.fastq.gz \
+		dna_normal_fq1=/mnt/d/TESLA/TESLA_2_1.fastq.gz \
+		dna_normal_fq2=/mnt/d/TESLA/TESLA_2_2.fastq.gz \
+		rna_tumor_fq1=/mnt/d/TESLA/TESLA_3_1.fastq.gz \
+		rna_tumor_fq2=/mnt/d/TESLA/TESLA_3_2.fastq.gz \
+		--resources mem_mb=960000 --cores 24
+```
+After a successful run, you should be able check neoantigen prioritization results at: /mnt/d/TESLA/snake-out/patient01.outdir/prioritization/patient01_neoantigen_rank_neoheadhunter.tsv
 
-## Test and Deploy
+For advanced usage of the Snakefile, please refer to https://snakemake.readthedocs.io/en/stable/ 
 
-Use the built-in continuous integration in GitLab.
+## Trouble-shooting
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+If you have encountered an error with conda, please show us the full error log generated by conda. If you have encountered an error with snakemake, please show us the full stdout and stderr generated by snakemake. Most of the third-party tools that this pipeline uses were not developed by us, so we are not guaranteed to find the root causes of the errors that are specific to these tools. 
 
-***
 
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
