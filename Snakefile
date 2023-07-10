@@ -78,7 +78,7 @@ bwa_mem_mb = 9000
 star_mem_mb = 32*1000
 uvc_mem_mb = uvc_nthreads_on_cmdline * 1536
 vep_mem_mb = vep_nthreads * 4000
-mixcr_mem_mb = 30*1000
+mixcr_mem_mb = 32*1000
 bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
@@ -485,7 +485,7 @@ mixcr_output_dir = F'{prioritization_dir}/{PREFIX}_mixcr_output'
 mixcr_output_pref = F'{mixcr_output_dir}/{PREFIX}'
 mixcr_output_done_flag = F'{mixcr_output_dir}.DONE'
 mixcr_cmdline_params = ' analyze shotgun -s hs --starting-material rna --only-productive --receptor-type tcr '
-mixcr_mem_gb = (mixcr_mem_mb // 1000 + 1)
+mixcr_mem_gb = max((mixcr_mem_mb // 1000 - 4, 1))
 logging.debug(F'MIXCR_PATH = {MIXCR_PATH}')
 rule mixcr_run:
     output: mixcr_output_done_flag
