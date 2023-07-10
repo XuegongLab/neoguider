@@ -68,6 +68,7 @@ star_nthreads = max((workflow.cores // 4, 1))
 uvc_nthreads = max((workflow.cores // 3, 1))
 uvc_nthreads_on_cmdline = max((workflow.cores // 2, 1)) # over-allocate threads because each thread does not use 100% CPU and uses very little RAM
 vep_nthreads = 4 # https://useast.ensembl.org/info/docs/tools/vep/script/vep_other.html : We recommend using 4 forks
+mixcr_nthreads = max((workflow.cores // 2, 1))
 
 # We used the bwa and STAR RAM usage from https://link.springer.com/article/10.1007/s00521-021-06188-z/figures/3
 kallisto_mem_mb = 4000 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
@@ -77,7 +78,7 @@ bwa_mem_mb = 9000
 star_mem_mb = 32*1000
 uvc_mem_mb = uvc_nthreads_on_cmdline * 1536
 vep_mem_mb = vep_nthreads * 4000
-
+mixcr_mem_mb = 30*1000
 bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
@@ -482,19 +483,29 @@ rule prioritization_with_all_tcr:
 
 mixcr_output_dir = F'{prioritization_dir}/{PREFIX}_mixcr_output'
 mixcr_output_pref = F'{mixcr_output_dir}/{PREFIX}'
-tcr_specificity_software = 'ERGO'
+mixcr_output_done_flag = F'{mixcr_output_dir}.DONE'
+mixcr_cmdline_params = ' analyze shotgun -s hs --starting-material rna --only-productive --receptor-type tcr '
+mixcr_mem_gb = (mixcr_mem_mb // 1000 + 1)
 logging.debug(F'MIXCR_PATH = {MIXCR_PATH}')
-rule prioritization_with_each_tcr:
-    input: mt_bindstab_filtered_tsv
-    output: tcr_specificity_result
+rule mixcr_run:
+    output: mixcr_output_done_flag
+    resources: mem_mb = mixcr_mem_mb
+    threads: mixcr_nthreads
     shell: '''
         mkdir -p {mixcr_output_dir}
-        java -jar {MIXCR_PATH} analyze shotgun -s hs --starting-material rna --only-productive --receptor-type tcr {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} {mixcr_output_pref}
+        java -Xmx{mixcr_mem_gb}g -jar {MIXCR_PATH} {mixcr_cmdline_params} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} {mixcr_output_pref}
+        touch {mixcr_output_done_flag}
+    '''
+tcr_specificity_software = 'ERGO'
+rule prioritization_with_each_tcr:
+    input: mt_bindstab_filtered_tsv, mixcr_output_done_flag
+    output: tcr_specificity_result
+    shell: '''
         python {script_basedir}/rank_software_input.py -m {mixcr_output_pref} -n {mt_bindstab_filtered_tsv} -o {prioritization_dir} -t {tcr_specificity_software} -p {PREFIX}
         cd {ERGO_EXE_DIR}
         python {ERGO_PATH} mcpas {prioritization_dir}/{PREFIX}_cdr_ergo.csv {prioritization_dir}/{PREFIX}_tcr_specificity_score.csv
         cd {script_basedir}
         python {script_basedir}/parse_rank_software.py -i {prioritization_dir}/{PREFIX}_tcr_specificity_score.csv -n {mt_bindstab_filtered_tsv} -o {prioritization_dir}/ -t {tcr_specificity_software} -p {PREFIX}
         python {script_basedir}/add_detail_info.py -i {prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity.tsv -o {prioritization_dir}/ -p {PREFIX}
-        '''
+    '''
 
