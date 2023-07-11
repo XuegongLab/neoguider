@@ -122,8 +122,7 @@ for line in reader:
         tpm = (float(gene_exp_tpm[gene_exp_list.index(exp_left)]) + float(gene_exp_tpm[gene_exp_list.index(exp_right)]))/2
         if (tpm < float(tpm_threshold)):
             continue
-        mt_head='>FUSION_'+ str(line_num)+"_"+str(round(tpm,1)*10)
-        mt_head_list.append(mt_head)
+        #mt_head='>FUS_'+ str(line_num)+"_"+str(round(tpm,1)*10)        
         cds=""
         if l1<=30 :
             if (consequence == "FRAMESHIFT"):
@@ -133,8 +132,6 @@ for line in reader:
                 cds = line[23][0:cds_end].strip().split('_')[0]
             else:
                 continue
-            mt_pep_seq = translate(cds.upper())
-            mt_pep_seq_list.append(mt_pep_seq)
         else:
             cds_start = (l1//3 - 10+1)*3
             if (consequence == "FRAMESHIFT"):
@@ -144,8 +141,10 @@ for line in reader:
                 cds = line[23][cds_start:cds_end].strip().split('_')[0]
             else:
                 continue
-            mt_pep_seq = translate(cds.upper())
-            mt_pep_seq_list.append(mt_pep_seq)
+        mt_pep_seq = translate(cds.upper())
+        mt_pep_seq_list.append(mt_pep_seq)
+        mt_head = F'>FUS_{line_num} MT={mt_pep_seq} TPM={tpm}'
+        mt_head_list.append(mt_head)
         output_line_num.append(line_num)
 
 mut_pep_len=[]

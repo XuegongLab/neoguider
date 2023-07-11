@@ -507,7 +507,7 @@ If the keyword rerank is in function,
                     line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
             else:
                 continue
-        elif (identity.strip().split('_')[0]=="FUSION"):
+        elif (identity.strip().split('_')[0]=="FUS"):
             line_num = int(identity.strip().split('_')[1])
             fusion_line = fusion[line_num-1]
             ele = fusion_line.strip().split('\t')

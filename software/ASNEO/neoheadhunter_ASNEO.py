@@ -292,7 +292,8 @@ def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, save=None):
             sequence = str(sequence.seq).strip()
             for i in range(len(sequence) - peplen + 1):
                 peps.add(sequence[i:i + peplen])
-                peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+str(int(round(tpm,1)*10)))
+                #peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+str(int(round(tpm,1)*10)))
+                peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+str(tpm))
             line_num+=1
     if save:
         with open(save, 'w') as f:
@@ -360,8 +361,10 @@ def ProcessIsoform(genome, length, tpm_threshold, expression_file):
         remain_pep = remain_pep | pep_out
         with open(path['pep_%s'%peplen], 'w') as f:
             for pep in pep_out:
-                f.write(">SP_"+pep.split('_')[1]+"_"+pep.split('_')[2]+'\n')
-                f.write(pep.split('_')[0] + '\n')
+                #f.write(">SP_"+pep.split('_')[1]+"_"+pep.split('_')[2]+'\n')
+                pep_seq, pep_id, pep_tpm = pep.split('_')
+                f.write(F'>SP_{pep_id} MT={pep_seq} TPM={pep_tpm}\n')
+                f.write(pep_seq + '\n')
     logging.info("All short pep number is: %s", len(remain_pep))
     with open(path['pep_txt'], 'w') as f:
         f.write('\n'.join(remain_pep) + '\n')
