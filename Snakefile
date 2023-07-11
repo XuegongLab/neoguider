@@ -101,7 +101,12 @@ snvindel_dir = F'{RES}/snvindels'
 pmhc_dir = F'{RES}/pmhcs'
 prioritization_dir = F'{RES}/prioritization'
 
-snvindel_info_file = F'{info_dir}/{PREFIX}_snv_indel.annotation.tsv'
+DNA_PREFIX = F'{PREFIX}_DNA'
+RNA_PREFIX = F'{PREFIX}_RNA'
+dna_snvindel_info_file = F'{info_dir}/{DNA_PREFIX}_snv_indel.annotation.tsv'
+rna_snvindel_info_file = F'{info_dir}/{RNA_PREFIX}_snv_indel.annotation.tsv'
+
+
 fusion_info_file = F'{info_dir}/{PREFIX}_fusion.tsv'
 splicing_info_file = F'{info_dir}/{PREFIX}_splicing.tsv'
 
@@ -300,12 +305,12 @@ rule snvindel_detection_with_DNA_tumor:
         'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
-            ' -i "(QUAL >= 63) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
+            ' -i "(QUAL >= {tumor_normal_var_qual}) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
         ' && bash uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins'
         ' && bcftools view {output.vcf3} -Ov -o {dna_vcf}'
 
 rna_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.vcf'
-rule snvindel_detection_with_RNA_tumor:
+rule snvindel_detection_with_RNA_tumor: # RNA filtering is more stringent
     input: tbam=rna_tumor_bam, tbai=rna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai
     output: rna_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
@@ -317,12 +322,14 @@ rule snvindel_detection_with_RNA_tumor:
         'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
-            ' -i "(QUAL >= 63) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
+            ' -i "(QUAL >= 83) && (tAD[1] >= 7) && (tAD[1] >= (tAD[0] + tAD[1]) * 0.8) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
         ' && bash uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins'
         ' && bcftools view {output.vcf3} -Ov -o {rna_vcf}'
 
+# start-of-DNA-vep-mainline
+
 dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effect.tsv'
-rule snvindel_effect_prediction:
+rule snvindel_effect_prediction_DNA_tumor:
     input: dna_vcf
     output: dna_variant_effect
     resources: mem_mb = vep_mem_mb
@@ -332,16 +339,47 @@ rule snvindel_effect_prediction:
         --regulatory --force_overwrite --assembly GRCh37 --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
         --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {dna_vcf} --output_file {dna_variant_effect}'''
-    
-snvindel_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_snv_indel.fasta'
-snvindel_wt_peptide_faa = F'{neopeptide_dir}/{PREFIX}_snv_indel_wt.fasta'
-rule snvindel_neopeptide_generation:
+
+dna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
+dna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
+rule snvindel_neopeptide_generation_DNA_tumor:
     input: dna_variant_effect,
-    output: snvindel_neopeptide_faa, snvindel_wt_peptide_faa, snvindel_info_file
+    output: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, dna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
-        -r {REF} -s VEP -e {outf_rna_quantification} -t {vep_nthreads} -P {PREFIX}
-        cp {neopeptide_dir}/{PREFIX}_tmp_fasta/{PREFIX}_snv_indel_wt.fasta {snvindel_wt_peptide_faa}
-        cp {dna_variant_effect} {snvindel_info_file}'''
+        -r {REF} -s VEP -e {outf_rna_quantification} -t {vep_nthreads} -P {DNA_PREFIX} --molecule_type=D
+        cp {neopeptide_dir}/{DNA_PREFIX}_tmp_fasta/{DNA_PREFIX}_snv_indel_wt.fasta {dna_snvindel_wt_peptide_faa}
+        cp {dna_variant_effect} {dna_snvindel_info_file}'''
+
+# end-of-DNA-vep-mainline
+# start-of-RNA-vep-sideline-for-rescue
+
+rna_variant_effect = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.variant_effect.tsv'
+rule snvindel_effect_prediction_RNA_tumor:
+    input: rna_vcf
+    output: rna_variant_effect
+    resources: mem_mb = vep_mem_mb
+    threads: vep_nthreads
+    shell: '''
+        bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz
+        bcftools view {rna_vcf} -Oz -o {rna_vcf}.gz && bcftools index -ft {rna_vcf}.gz
+        bcftools isec {dna_vcf}.gz {rna_vcf}.gz -Oz -p {rna_vcf}.isecdir/
+        vep --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
+        --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_gnomad \
+        --regulatory --force_overwrite --assembly GRCh37 --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
+        --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
+        --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf}.isecdir/0001.vcf.gz --output_file {rna_variant_effect}'''
+
+rna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
+rna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
+rule snvindel_neopeptide_generation_RNA_tumor:
+    input: rna_variant_effect,
+    output: rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, rna_snvindel_info_file
+    shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
+        -r {REF} -s VEP -e {outf_rna_quantification} -t {vep_nthreads} -P {RNA_PREFIX} --molecule_type=R
+        cp {neopeptide_dir}/{RNA_PREFIX}_tmp_fasta/{RNA_PREFIX}_snv_indel_wt.fasta {rna_snvindel_wt_peptide_faa}
+        cp {rna_variant_effect} {rna_snvindel_info_file}'''
+
+# end-of-RNA-vep-sideline-for-rescue
    
 def retrieve_hla_alleles():
     ret = []
@@ -358,7 +396,7 @@ def run_netMHCpan(args):
 
 def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs, ncores = 6):
     call_with_infolog(F'rm {outtsv}.tmpdir/* || true && mkdir -p {outtsv}.tmpdir/')
-    call_with_infolog(F'split -l 20 {infaa} {outtsv}.tmpdir/SPLITTED.')
+    call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
     cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l 8,9,10,11 -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
             for hla_str in hla_strs for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
     with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
@@ -377,16 +415,21 @@ snvindel_pmhc_wt_tsv = F'{pmhc_dir}/{PREFIX}_snv_indel_bindaff_wt.tsv'
 
 all_vars_neopeptide_faa = F'{pmhc_dir}/{PREFIX}_alteration_derived_pep.fasta'
 
+both_snvindel_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_snv_indel.fasta'
+both_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{PREFIX}_snv_indel_wt.fasta'
+
 rule pmhc_binding_affinity_prediction:
-    input: snvindel_neopeptide_faa, snvindel_wt_peptide_faa, fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
+    input: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, 
+           rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, 
+           fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
     output: snvindel_pmhc_mt_txt, snvindel_pmhc_wt_txt, fusion_pmhc_mt_txt, splicing_pmhc_mt_txt
     run:
-        peptide_to_pmhc_binding_affinity(snvindel_neopeptide_faa, snvindel_pmhc_mt_txt, retrieve_hla_alleles(), workflow.cores)
-        peptide_to_pmhc_binding_affinity(snvindel_wt_peptide_faa, snvindel_pmhc_wt_txt, retrieve_hla_alleles(), workflow.cores)
+        shell(F'cat {dna_snvindel_neopeptide_faa} {rna_snvindel_neopeptide_faa} > {both_snvindel_neopeptide_faa}')
+        shell(F'cat {dna_snvindel_wt_peptide_faa} {rna_snvindel_wt_peptide_faa} > {both_snvindel_wt_peptide_faa}')
+        peptide_to_pmhc_binding_affinity(both_snvindel_neopeptide_faa, snvindel_pmhc_mt_txt, retrieve_hla_alleles(), workflow.cores)
+        peptide_to_pmhc_binding_affinity(both_snvindel_wt_peptide_faa, snvindel_pmhc_wt_txt, retrieve_hla_alleles(), workflow.cores)
         peptide_to_pmhc_binding_affinity(  fusion_neopeptide_faa,   fusion_pmhc_mt_txt, retrieve_hla_alleles(), workflow.cores)
-        logging.info('Almost finished running pmhc_binding_affinity_prediction')
         peptide_to_pmhc_binding_affinity(splicing_neopeptide_faa, splicing_pmhc_mt_txt, retrieve_hla_alleles(), workflow.cores)
-        logging.info('Finished running pmhc_binding_affinity_prediction')
 
 wt_bindaff_filtered_tsv = F'{pmhc_dir}/tmp_identity/{PREFIX}_bindaff_filtered.tsv'
 mt_bindaff_filtered_tsv = F'{pmhc_dir}/{PREFIX}_bindaff_filtered.tsv'
@@ -400,7 +443,7 @@ rule pmhc_binding_affinity_filter:
     shell: F'''
         cat {snvindel_pmhc_mt_txt} {fusion_pmhc_mt_txt} {splicing_pmhc_mt_txt} > {all_vars_pmhc_mt_tsv} || true
         cp {snvindel_pmhc_wt_txt} {snvindel_pmhc_wt_tsv}
-        cat {snvindel_neopeptide_faa} {fusion_neopeptide_faa} {splicing_neopeptide_faa} > {all_vars_neopeptide_faa}
+        cat {dna_snvindel_neopeptide_faa} {fusion_neopeptide_faa} {splicing_neopeptide_faa} > {all_vars_neopeptide_faa}
         python {script_basedir}/parse_netMHC.py -i {pmhc_dir} -g {all_vars_neopeptide_faa} -b {binding_affinity_hard_thres} -l N/A -p {PREFIX} -o {pmhc_dir}'''
 
 try:
@@ -471,7 +514,7 @@ prioritization_function_params = ''
 logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
 rule prioritization_with_all_tcr:
     input: iedb_path, wt_bindaff_filtered_tsv, mt_bindaff_filtered_tsv, mt_bindstab_filtered_tsv, rna_vcf, rna_tumor_depth_summary, 
-        snvindel_info_file, fusion_info_file
+        dna_snvindel_info_file, fusion_info_file
     output: neoheadhunter_prioritization_tsv
     run: 
         call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')

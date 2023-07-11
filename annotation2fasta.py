@@ -59,7 +59,7 @@ def translate(seq):
 
 
 #####prepare fasta format input file for netMHC######
-opts,args=getopt.getopt(sys.argv[1:],"hi:o:p:r:s:e:t:P:",["input_snv_file=","out_dir=","human_peptide=","reference=","software=","expression_file=","tpm_threshold=","prefix="])
+opts,args=getopt.getopt(sys.argv[1:],"hi:o:p:r:s:e:t:P:",["input_snv_file=","out_dir=","human_peptide=","reference=","software=","expression_file=","tpm_threshold=","prefix=", "molecule_type="])
 input_snv_file =""
 out_dir=""
 human_peptide=""
@@ -68,6 +68,7 @@ software="VEP"
 expression_file=""
 tpm_threshold=1
 prefix=""
+molecule_type = 'U' # unknown
 USAGE='''
     This script convert annotation result to fasta format file for netMHC
     usage: python annoation2fasta.py -i <input_snv_file> -o <out_dir> -p <human_peptide> 
@@ -102,6 +103,8 @@ for opt,value in opts:
         tpm_threshold =value 
     elif opt in ("-P","--prefix"):
         prefix =value 
+    elif opt in ('--molecule_type'):
+        molecule_type = value
 
 if (input_snv_file =="" or out_dir =="" or human_peptide=="" or reference=="" or expression_file=="" or tpm_threshold==""):
     print (USAGE)
@@ -182,7 +185,8 @@ if software == "VEP" :
                 chrom_pos.append(chr_p)
                 consequence.append(consequence_str)
                 output_line_num.append(line_num)
-                tpm_num.append(int(round(tpm,1)*10))
+                #tpm_num.append(int(round(tpm,1)*10))
+                tpm_num.append(tpm)
 
 elif software == "SnpEff":
     line_num=0
@@ -233,7 +237,8 @@ elif software == "SnpEff":
                             chrom_pos.append(chr_p)
                             consequence.append(consequence_str)
                             output_line_num.append(line_num)
-                            tpm_num.append(int(round(tpm,1)*10))
+                            #tpm_num.append(int(round(tpm,1)*10))
+                            tpm_num.append(tpm)
 elif software == "Funcotator":
     line_num=0
     funcotator_feature = []
@@ -280,7 +285,8 @@ elif software == "Funcotator":
                         # alt_nucleotide.append(alt_n)
                         chrom_pos.append(chr_p)
                         consequence.append(consequence_str)
-                        tpm_num.append(int(round(tpm,1)*10))
+                        #tpm_num.append(int(round(tpm,1)*10))
+                        tpm_num.append(tpm)
                         output_line_num.append(line_num)
                     if len(j.strip().split('|')[21])==0:
                         continue
@@ -305,7 +311,8 @@ elif software == "Funcotator":
                         gene_symbol.append(g_s)
                         chrom_pos.append(chr_p)
                         output_line_num.append(line_num)
-                        tpm_num.append(int(round(tpm,1)*10))
+                        #tpm_num.append(int(round(tpm,1)*10))
+                        tpm_num.append(tpm)
                         funcotator_feature.append(k.strip().split('_')[1].split('.')[0])
 
 transcript_seq=[]
@@ -337,8 +344,8 @@ for i in range(len(trans_name)):
             pro_change_pos=int(protein_position[i])
         ref_amino_acid_seq=transcript_seq[i]
         if (consequence[i] == "missense_variant") or (consequence[i] == "MISSENSE"):
-            wt_head='>SNV_'+ str(output_line_num[i])
-            mt_head='>SNV_'+ str(output_line_num[i])+"_"+str(tpm_num[i])
+            wt_head=F'>SNV_{molecule_type}'+ str(output_line_num[i]) + F"_A"
+            mt_head=F'>SNV_{molecule_type}'+ str(output_line_num[i]) + F"_B TPM="+str(tpm_num[i]) + F' WT={wt_pep} MT={mt_pep}'
             if pro_change_pos<=10:
                 wt_pep=ref_amino_acid_seq[0:21]
                 mt_pep=ref_amino_acid_seq[0:pro_change_pos-1]+alt_amino_acid[i]+ref_amino_acid_seq[pro_change_pos:pro_change_pos+21]
@@ -348,6 +355,9 @@ for i in range(len(trans_name)):
             else:
                 wt_pep=ref_amino_acid_seq[pro_change_pos-11:pro_change_pos+10]
                 mt_pep=ref_amino_acid_seq[pro_change_pos-11:pro_change_pos-1]+alt_amino_acid[i]+ref_amino_acid_seq[pro_change_pos:pro_change_pos+10]
+            head_comment = F'WT={wt_pep} MT={mt_pep} TPM={tpm_num[i]}'
+            wt_head = F'>SNV_{molecule_type}{output_line_num[i]}_A {head_comment}'
+            mt_head = F'>SNV_{molecule_type}{output_line_num[i]}_B {head_comment}'
         elif (consequence[i] == "frameshift_variant") or (consequence[i] == "FRAME_SHIFT_INS") or (consequence[i] == "FRAME_SHIFT_DEL") or \
              ("inframe_insertion" in consequence[i]) or (consequence[i] == "IN_FRAME_INS") or ("inframe_deletion" in consequence[i]) or \
              (consequence[i] == "IN_FRAME_DEL"):
@@ -361,9 +371,10 @@ for i in range(len(trans_name)):
             if (consequence[i] in ["FRAME_SHIFT_DEL", "IN_FRAME_DEL", "inframe_deletion"]):
                 head_id = 'DEL'
             if (consequence[i] in ["frameshift_variant"]):
-                head_id = 'NA'
-            wt_head = F'>{head_id}_'+ str(output_line_num[i])
-            mt_head = F'>{head_id}_'+ str(output_line_num[i])+"_"+str(tpm_num[i])
+                head_id = 'FSV'
+            #wt_head = F'>{head_id}_{molecule_type}'+ str(output_line_num[i]) + F"_A"
+            #mt_head = F'>{head_id}_'+ str(output_line_num[i])+"_"+str(tpm_num[i])
+            #mt_head = F'>{head_id}_{molecule_type}'+ str(output_line_num[i]) + F"_B TPM="+str(tpm_num[i])
             chr = chrom_pos[i].split(":")[0]
             start_pos=int(chrom_pos[i].split(":")[1].split("-")[0])
             end_pos=start_pos
@@ -437,6 +448,10 @@ for i in range(len(trans_name)):
             else:
                 print("[WARNING] Wrong Consequence!")
                 break
+            head_comment = F'WT={wt_pep} MT={mt_pep} TPM={tpm_num[i]}'
+            wt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_A {head_comment}'
+            mt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_B {head_comment}'
+
         mt_header.append(mt_head)
         wt_header.append(wt_head)
         mut_peptide.append(mt_pep)
@@ -466,6 +481,10 @@ f_w=open(out_dir+"/"+prefix+"_snv_indel.fasta",'w')
 for i in range(len(data_dd_reindex.mutation_header)):
     f_w.write('%s%s%s%s'%(data_dd_reindex.mutation_header[i],'\n',data_dd_reindex.mutation_peptide[i],'\n'))
 f_w.close()
+#f_w=open(out_dir+"/"+prefix+"_snv_indel.fasta.without_comment",'w')
+#for i in range(len(data_dd_reindex.mutation_header)):
+#    f_w.write('%s%s%s%s'%(data_dd_reindex.mutation_header[i].split()[0],'\n',data_dd_reindex.mutation_peptide[i],'\n'))
+#f_w.close()
 
 tmp_fasta_folder = os.path.join(out_dir,prefix+"_tmp_fasta")
 if not os.path.exists(tmp_fasta_folder):

@@ -60,13 +60,21 @@ Full_type_mutation=[]
 Full_identity=[]
 with open(input_fasta) as f:
     data=f.read()
-for line in data.strip().split('\n'):
-    if "_" not in line:
-        continue
+mutID2tpm = {}
+for rawline in data.strip().split('\n'):
+    line = rawline.strip().split()[0]
+    if not line.startswith('>'): continue
     full_type_mutation=line.split('_')[0].split('>')[1]
     full_identity=line.split('>')[1]
     Full_type_mutation.append(full_type_mutation)
     Full_identity.append(full_identity)
+    
+    mutID = '_'.join(line[1:].split('_')[0:2])
+    for i, subline in enumerate(rawline.split()):
+        if i > 0 and len(subline.split('=')) == 2:
+            key, val = subline.split('=')
+            if key == 'TPM': mutID2tpm[mutID] = float(val)
+#print(mutID2tpm)
 dup_type_mutation=[]
 dup_full_identity=[]
 hla_num=len(hla_str.split(','))
@@ -153,8 +161,9 @@ with open(input_dir+"/"+prefix+"_snv_indel_bindaff_wt.tsv") as f:
         if wt_pep == mt_pep:
             continue
         assert len(str(mt_record[10]).strip().split('_')) > 2, F'The {i}-th mutation peptide {mt_record} is invalid (error-2)!'
-        tpm = float(str(mt_record[10]).strip().split('_')[2])/10
+        #tpm = float(str(mt_record[10]).strip().split('_')[2])/10
         iden = iden.split("_")[0]+"_"+iden.split("_")[1]
+        tpm = mutID2tpm[iden]
         line = [HLA_tp,mt_pep,wt_pep,float(mt_binding_aff),mt_binding_level_des,iden,tpm]
         line_tmp = [HLA_tp,mt_pep,wt_pep,float(mt_binding_aff),mt_binding_level_des,iden,tpm,wt_binding_aff]
         data_form.append(line)

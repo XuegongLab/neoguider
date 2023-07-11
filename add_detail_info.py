@@ -31,7 +31,7 @@ def main():
         print (USAGE)
         sys.exit(2)
 
-    snv_indel_file = open(output_folder+"../info/"+prefix+"_snv_indel.annotation.tsv")
+    snv_indel_file = open(output_folder+"../info/"+prefix+"_DNA_snv_indel.annotation.tsv")
     if os.path.exists(output_folder+"../info/"+prefix+"_fusion.tsv"):
         fusion_file = open(output_folder+"../info/"+prefix+"_fusion.tsv")
     else:
@@ -58,7 +58,9 @@ def main():
         identity = line[4]
         line_info_string = ""
         if (identity.strip().split('_')[0] in ["SNV", "INS", "DEL", "INDEL"]):
-            line_num = int(identity.strip().split('_')[1])
+            fastaID = identity.strip().split('_')[1]
+            if fastaID[0] != 'D' : continue
+            line_num = int(fastaID[1:])
             snv_indel_line = snv_indel[line_num-1]
             ele = snv_indel_line.strip().split('\t')
             if len(ele) == 14: # annotation software is vep

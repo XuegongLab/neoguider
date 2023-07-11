@@ -231,6 +231,10 @@ def compute_immunogenic_probs(data, paramset):
         indicator(data.BindAff > t2BindAff) +
         indicator(data.BindStab < t2BindStab) +
         indicator(data.Quantification < t2Abundance))
+    t2dna_nfilters = (
+        indicator(data.DNA_altDP < 5) + 
+        indicator(data.DNA_altDP< (data.DNA_refDP + data.DNA_altDP) * 0.1)
+    ) * are_snvs_or_indels
     
     t0_are_foreign = (t0foreign_nfilters == 0)
     #t1_are_bound = indicator((data.BindAff <= t1BindAff) & (data.BindStab >= t1BindStab))
@@ -249,7 +253,7 @@ def compute_immunogenic_probs(data, paramset):
     log_odds_ratio = (t1BindAff / (t1BindAff + data.BindAff)
             + np.minimum(1 - t0recognized_nfilters + immuno_strength, 1)
             - t1presented_nfilters 
-            - (t2presented_nfilters * 3) 
+            - (t2presented_nfilters * 3) - (t2dna_nfilters * 3)
             + (are_snvs_or_indels * snvindel_location_param) + (1 - are_snvs_or_indels) * non_snvindel_location_param)
     p = 1 / (1 + np.exp(-log_odds_ratio))
     return (p, t2presented_nfilters, t1presented_nfilters, t0recognized_nfilters, 
@@ -258,7 +262,7 @@ def compute_immunogenic_probs(data, paramset):
 
 def read_tesla_xls(tesla_xls, patientID):
     # cat GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.gtf.mini.sortu  | awk '{print $NF}' | sort | uniq | wc
-    #  57055   57055 1688510 # 57055 genes, so averageTMP = 1e6 / 57055
+    #  57055   57055 1688510 # 57055 genes, so averageTPM = 1e6 / 57055
     df1 = pd.read_excel(tesla_xls)
     df1.PATIENT_ID = df1.PATIENT_ID.astype(int)
     df = df1.loc[df1.PATIENT_ID == patientID,]
@@ -393,22 +397,27 @@ If the keyword rerank is in function,
             if line[7] != "":
                 wt_pep_to_bindaff[line[2]] = line[7]
     
-    snv_indel_filename = F'{input_directory}/../info/{prefix}_snv_indel.annotation.tsv'
+    dna_snv_indel_filename = F'{input_directory}/../info/{prefix}_DNA_snv_indel.annotation.tsv'
+    rna_snv_indel_filename = F'{input_directory}/../info/{prefix}_RNA_snv_indel.annotation.tsv'
     fusion_filename = F'{input_directory}/../info/{prefix}_fusion.tsv'
     splicing_filename = F'{input_directory}/../info/{prefix}_splicing.csv'
     
-    snv_indel_file = open(snv_indel_filename)
+    dna_snv_indel_file = open(dna_snv_indel_filename)
+    rna_snv_indel_file = open(rna_snv_indel_filename)
+
     fusion_file = (open(fusion_filename) if os.path.exists(fusion_filename) else [])
     splicing_file = (open(splicing_filename) if os.path.exists(splicing_filename) else [])
      
     dnaseq_small_variants_file = (pysam.VariantFile(args.dna_vcf, 'r') if args.dna_vcf else [])
     rnaseq_small_variants_file = (pysam.VariantFile(args.rna_vcf, 'r') if args.rna_vcf else [])
 
-    snv_indel = [line for line in snv_indel_file]
+    dna_snvindel = [line for line in dna_snv_indel_file]
+    rna_snvindel = [line for line in rna_snv_indel_file]
     fusion = [line for line in fusion_file]
     splicing = [line for line in splicing_file]
     
-    if snv_indel_file: snv_indel_file.close()
+    if dna_snv_indel_file: dna_snv_indel_file.close()
+    if rna_snv_indel_file: rna_snv_indel_file.close()
     if fusion_file: fusion_file.close()
     if splicing_file: splicing_file.close() 
 
@@ -464,8 +473,10 @@ If the keyword rerank is in function,
         line_info_string = ""
         is_frameshift = False
         if (identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL'] or identity.strip().split('_')[0].startswith("INDEL")):
-            line_num = int(identity.strip().split('_')[1])
-            snv_indel_line = snv_indel[line_num-1]
+            fastaID = identity.strip().split('_')[1]
+            selected_snvindel = (rna_snvindel if (fastaID[0] == 'R') else dna_snvindel)
+            line_num = int(fastaID[1:])
+            snv_indel_line = selected_snvindel[line_num-1]
             ele = snv_indel_line.strip().split('\t')
             if len(ele) == 14: # annotation software is vep
                 annotation_info = ["Uploaded_variation","Location","Allele","Gene","Feature","Feature_type",
