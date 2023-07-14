@@ -176,16 +176,16 @@ def compute_immunogenic_probs(data, paramset):
     
     t0foreign_nfilters = indicator(np.logical_and((t0Foreignness > data.Foreignness), (t0Agretopicity < data.Agretopicity)))
     t0recognized_nfilters = (
-        indicator(data.MT_BindAff > t1BindAff) +
+        indicator(data.ET_BindAff > t1BindAff) +
         indicator(data.BindStab < t1BindStab) +
         indicator(data.Quantification < t0Abundance) + 
         t0foreign_nfilters)
     t1presented_nfilters = (
-        indicator(data.MT_BindAff > t1BindAff) +
+        indicator(data.ET_BindAff > t1BindAff) +
         indicator(data.BindStab < t1BindStab) +
         indicator(data.Quantification < t1Abundance)) 
     t2presented_nfilters = (
-        indicator(data.MT_BindAff > t2BindAff) +
+        indicator(data.ET_BindAff > t2BindAff) +
         indicator(data.BindStab < t2BindStab) +
         indicator(data.Quantification < t2Abundance))
     t2dna_nfilters = (
@@ -224,11 +224,11 @@ def read_tesla_xls(tesla_xls, patientID):
     df1.PATIENT_ID = df1.PATIENT_ID.astype(int)
     df = df1.loc[df1.PATIENT_ID == patientID,]
     if 'NETMHC_BINDING_AFFINITY' in df.columns:
-        df['MT_BindAff'] = df.NETMHC_BINDING_AFFINITY.astype(float)
+        df['ET_BindAff'] = df.NETMHC_BINDING_AFFINITY.astype(float)
     elif 'NETMHC_PAN_BINDING_AFFINITY' in df.columns:
-        df['MT_BindAff'] = df.NETMHC_PAN_BINDING_AFFINITY.astype(float)
+        df['ET_BindAff'] = df.NETMHC_PAN_BINDING_AFFINITY.astype(float)
     else:
-        sys.stderr.write(F'BindAff is not present in {tesla_xls}')
+        sys.stderr.write(F'Peptide-MHC binding-affinity is not present in {tesla_xls}')
         exit(1)
     df['BindStab'] = df.BINDING_STABILITY.astype(float)
     df['Quantification'] = df.TUMOR_ABUNDANCE.astype(float)
@@ -236,10 +236,10 @@ def read_tesla_xls(tesla_xls, patientID):
     df['Foreignness'] = df.FOREIGNNESS.astype(float)
     df['RNA_normAD'] = df.Quantification * 0.02 # 0.02 is empirical
     df['Identity'] = 'SNV' # most neo-epitope candidates are from SNVs
-    ret = df.dropna(subset=['BindAff', 'BindStab', 'Quantification', 'Agretopicity', 'Foreignness'])
+    ret = df.dropna(subset=['ET_BindAff', 'BindStab', 'Quantification', 'Agretopicity', 'Foreignness'])
     return ret
     
-def datarank(data, outcsv, paramset):
+def datarank(data, outcsv, paramset, drop_cols = []):
     
     probs, t2presented_filters, t1presented_filters, t0recognized_filters, \
             n_presented_not_recognized, n_presented_and_recognized, presented_not_recognized_burden, presented_and_recognized_burden, immuno_strength \
@@ -252,6 +252,7 @@ def datarank(data, outcsv, paramset):
 
     data=data.sort_values("Rank")
     data=data.astype({"Rank":int})
+    data=data.drop(drop_cols, axis=1)
     data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
     with open(outcsv + ".extrainfo", "w") as extrafile:
         extrafile.write(F'expected_bound_and_immunogenic_pMHC_num={n_presented_and_recognized}\n')
@@ -488,9 +489,12 @@ If the keyword rerank is in function,
     # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
     keptdata = data
     keptdata.insert(len(keptdata.columns)-1, 'SourceAlterationDetail', keptdata.pop('SourceAlterationDetail'))
-    keptdata.drop(['BindLevel'], axis=1)
+    keptdata.drop(['BindAff', 'BindLevel'], axis=1)
     #keptdata.to_csv(F'{args.output_file}.debug')
-    data2, _ = datarank(keptdata, F'{args.output_file}', paramset)
+    keptdata1 = keptdata[keptdata['ET_Peptide'] == keptdata['MT_Peptide']]
+    data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_Peptide', 'ET_BindAff', 'BIT_DIST'])
+    data, _ = datarank(keptdata, args.output_file + '.expansion', paramset)
+
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
