@@ -6,6 +6,21 @@ import pandas as pd
 def str2str_show_empty(s, empty_str = 'N/A'): return (s if s else empty_str)
 def str2str_hide_empty(s, empty_str = 'N/A'): return (s if (s != empty_str) else '')
 
+def alnscore_penalty(sequence, neighbour):
+    assert len(sequence) == len(neighbour)
+    ret = 0
+    for i in range(len(sequence)):
+        if sequence[i] != neighbour[i]:
+            scoremax = MatrixInfo.blosum62[(sequence[i], sequence[i])]
+            ab = (sequence[i], neighbour[i])
+            ba = (neighbour[i], sequence[i])
+            if ab in MatrixInfo.blosum62:
+                score = MatrixInfo.blosum62[ab]
+            else:
+                score = MatrixInfo.blosum62[ba]
+            ret += scoremax - score
+    return ret
+    
 def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
     """ This function assumes that there is a one-to-one correspondence between peptide and RNA transcript in fasta_filename. """
     etpep_to_mtpep_list_dic = collections.defaultdict(list)
@@ -146,25 +161,32 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         etpep_mhc_to_aff[(etpep, mhc)] = aff
     wtpep_aff_dflist = []
     mtpep_aff_dflist = []
+    bit_dist_dflist = []
     for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
         min_wt_aff = 2**30
         min_mt_aff = 2**30
+        min_bit_dist = 2**30
         for mtpep in etpep_to_mtpep_list_dic[etpep]:
             mt_aff = float(etpep_mhc_to_aff.get((mtpep, mhc), 2**30))
             min_mt_aff = min((min_mt_aff, mt_aff))
+            bit_dist = alnscore_penalty(et_pep, mt_pep) * 0.5
+            min_bit_dist = min((min_bit_dist, bit_dist))
             for wtpep in mtpep_to_wtpep_list_dic[mtpep]:
                 wt_aff = float(etpep_mhc_to_aff.get((wtpep, mhc), 2**30))
                 min_wt_aff = min((min_wt_aff, wt_aff))
         if min_wt_aff == 2**30: min_wt_aff = math.nan
         if min_mt_aff == 2**30: min_mt_aff = math.nan
+        if min_bit_dist == 2**30: min_bit_dist = math.nan
         wtpep_aff_dflist.append(min_wt_aff)
         mtpep_aff_dflist.append(min_mt_aff)
+        bit_dist_dflist.append(min_bit_dist)
     df['ET_pep'] = df['Peptide']
     df['MT_pep'] = mtpep_pipesep_dflist
     df['WT_pep'] = wtpep_pipesep_dflist
     df['ET_BindAff'] = df['Aff(nM)'].astype(float)
     df['MT_BindAff'] = mtpep_aff_dflist
     df['WT_BindAff'] = wtpep_aff_dflist
+    df['BIT_DIST'] = bit_dist_dflist
     df['Quantification'] = etpep_tpm_dflist
     df['PepTrace'] = mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist
     df['HLA_type'] = df['MHC']
