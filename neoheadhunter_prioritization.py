@@ -122,59 +122,16 @@ def iedb_fasta_to_dict(iedb_path):
     return ret
 
 def aligner(seq1,seq2):
+        
     matrix = matlist.blosum62
     gap_open = -11
     gap_extend = -1
     aln = pairwise2.align.localds(seq1.upper(), seq2.strip().split('+')[0].upper(), matrix, gap_open, gap_extend)
     return aln
-    
-def write_file(a_list, name):
-    textfile = open(name, "w")
-    for element in a_list:
-        textfile.write(element + "\n")
-    textfile.close()
 
-##########Calculate wild type binding affinity###########
-# def mutation_netmhc(prefix, netmhc_path, input_folder, output_directory, hla):
-#     run_netmhc = netmhc_path+" -a "+hla+" -f "+input_folder+"/"+prefix+"_snv_indel_wt.fasta -l '8,9,10,11' -BA > "+output_directory+"/tmp_netmhc/"+hla+"_wt_tmp_hla_netmhc.txt"
-#     print(run_netmhc)
-#     subprocess.call(run_netmhc, shell=True, executable="/bin/bash")
-
-# def mutation_netmhc_parallel(prefix, netmhc_path, input_folder, output_directory, hla_str):
-#     os.system("mkdir "+output_directory+"/tmp_netmhc")
-#     hla_list = list(hla_str.strip().split(","))
-#     netmhc_hla_process=[]
-#     for hla in hla_list:
-#         run_netmhc = multiprocessing.Process(target=mutation_netmhc,args=(prefix, netmhc_path, input_folder, output_directory, hla))#"./netmhc_parallel.sh "+netmhc_path+" "+output_directory+" "+hla
-#         netmhc_hla_process.append(run_netmhc)
-#     for p in netmhc_hla_process:
-#         p.daemon = True
-#         p.start()
-#     for p in netmhc_hla_process:
-#         p.join()
-#     os.system("cat "+output_directory+"/tmp_netmhc/* > "+output_directory+"/"+prefix+"_snv_indel_wt_netmhc.csv")
-
-def get_wt_bindaff(wt_seq,hla,output_directory,netmhc_cmd):
-    os.system("mkdir "+output_directory+"/tmp")
-    with open(output_directory+"/tmp/wt.pep", "w") as pepfile:
-        pepfile.write(wt_seq)
-    pepfile.close()
-    args = netmhc_cmd+" -p "+output_directory+"/tmp/wt.pep -a "+ hla+" -l "+str(len(wt_seq))+" -BA >> "+output_directory+"/tmp/wt.csv"
-    subprocess.call(args, shell=True)  
-    wt_bindaff = 1
-    with open(output_directory+"/tmp/wt.csv") as f:
-        data = f.read()
-    nw_data = data.split('-----------------------------------------------------------------------------------\n')
-    for i in range(len(nw_data)):
-        if i%4 == 2:
-            wt_bindaff = nw_data[i].strip().split()[15]
-            break
-    os.system("rm -rf "+output_directory+"/tmp")
-    return wt_bindaff
-
-def runblast(query_seq, target_fasta, output_directory):
-    os.system(F'mkdir -p {output_directory}/tmp')
-    query_fasta = F'{output_directory}/tmp/foreignness_query.{query_seq}.fasta'
+def runblast(query_seq, target_fasta, output_file):
+    os.system(F'mkdir -p {output_file}.tmp')
+    query_fasta = F'{output_file}.tmp/foreignness_query.{query_seq}.fasta'
     with open(query_fasta, 'w') as query_fasta_file:
         query_fasta_file.write(F'>{query_seq}\n{query_seq}\n')
     # from https://github.com/andrewrech/antigen.garnish/blob/main/R/antigen.garnish_predict.R
@@ -214,21 +171,21 @@ def compute_immunogenic_probs(data, paramset):
     non_snvindel_location_param = paramset.non_snvindel_location_param
     prior_weight                = paramset.immuno_strength_null_hypothesis_prior_weight
     
-    are_snvs_or_indels_bool = (data.Identity.isin(['SNV', 'INS', 'DEL', 'INDEL']))
+    are_snvs_or_indels_bool = (data.Identity.str.startswith(('SNV_', 'INS_', 'DEL_', 'INDEL_')))
     are_snvs_or_indels = indicator(are_snvs_or_indels_bool)
     
     t0foreign_nfilters = indicator(np.logical_and((t0Foreignness > data.Foreignness), (t0Agretopicity < data.Agretopicity)))
     t0recognized_nfilters = (
-        indicator(data.BindAff > t1BindAff) +
+        indicator(data.MT_BindAff > t1BindAff) +
         indicator(data.BindStab < t1BindStab) +
         indicator(data.Quantification < t0Abundance) + 
         t0foreign_nfilters)
     t1presented_nfilters = (
-        indicator(data.BindAff > t1BindAff) +
+        indicator(data.MT_BindAff > t1BindAff) +
         indicator(data.BindStab < t1BindStab) +
         indicator(data.Quantification < t1Abundance)) 
     t2presented_nfilters = (
-        indicator(data.BindAff > t2BindAff) +
+        indicator(data.MT_BindAff > t2BindAff) +
         indicator(data.BindStab < t2BindStab) +
         indicator(data.Quantification < t2Abundance))
     t2dna_nfilters = (
@@ -237,7 +194,7 @@ def compute_immunogenic_probs(data, paramset):
     ) * are_snvs_or_indels
     
     t0_are_foreign = (t0foreign_nfilters == 0)
-    #t1_are_bound = indicator((data.BindAff <= t1BindAff) & (data.BindStab >= t1BindStab))
+    #t1_are_bound = indicator((data.MT_BindAff <= t1BindAff) & (data.BindStab >= t1BindStab))
     t1_are_presented = (t1presented_nfilters == 0)
     presented_not_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters >  0)
     presented_and_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters == 0)
@@ -250,7 +207,7 @@ def compute_immunogenic_probs(data, paramset):
     immuno_strength = log(presented_not_recog_avg_burden / presented_and_recog_avg_burden) * 2 
     
     # Please be aware that t2presented_nfilters should be zero if the data were hard-filtered with t2 thresholds first. 
-    log_odds_ratio = (t1BindAff / (t1BindAff + data.BindAff)
+    log_odds_ratio = (t1BindAff / (t1BindAff + data.MT_BindAff)
             + np.minimum(1 - t0recognized_nfilters + immuno_strength, 1)
             - t1presented_nfilters 
             - (t2presented_nfilters * 3) - (t2dna_nfilters * 3)
@@ -267,9 +224,9 @@ def read_tesla_xls(tesla_xls, patientID):
     df1.PATIENT_ID = df1.PATIENT_ID.astype(int)
     df = df1.loc[df1.PATIENT_ID == patientID,]
     if 'NETMHC_BINDING_AFFINITY' in df.columns:
-        df['BindAff'] = df.NETMHC_BINDING_AFFINITY.astype(float)
+        df['MT_BindAff'] = df.NETMHC_BINDING_AFFINITY.astype(float)
     elif 'NETMHC_PAN_BINDING_AFFINITY' in df.columns:
-        df['BindAff'] = df.NETMHC_PAN_BINDING_AFFINITY.astype(float)
+        df['MT_BindAff'] = df.NETMHC_PAN_BINDING_AFFINITY.astype(float)
     else:
         sys.stderr.write(F'BindAff is not present in {tesla_xls}')
         exit(1)
@@ -316,11 +273,16 @@ If the keyword rerank is in function,
     
     parser = argparse.ArgumentParser(description = description, epilog = epilog, formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     
-    parser.add_argument('-i', '--input-directory', help = 'input directory containing result file from binding-stability prediction', required = True)
+    parser.add_argument('-i', '--input-file', help = 'Input file generated by bindstab_filter.py (binding-stability filter)', required = True)
     parser.add_argument('-I', '--iedb-fasta', help = 'path to IEDB reference fasta file containing pathogen-derived immunogenic peptides', required = True)
-    parser.add_argument('-o', '--output-directory', help = 'output directory to store result', required = True)
-    parser.add_argument('-p', '--prefix', help = 'prefix of the oupput files in the output directory', required = True)
-    parser.add_argument('-n', '--netmhcpan-cmd', help = 'command to run the netmhcpan program', required = True)
+    parser.add_argument('-o', '--output-file', help = 'output file to store results of neoantigen prioritization', required = True)
+    
+    # parser.add_argument('-p', '--prefix', help = 'prefix of the oupput files in the output directory', required = True)
+    # parser.add_argument('-n', '--netmhcpan-cmd', help = 'command to run the netmhcpan program', required = True)
+    parser.add_argument('-D', '--dna-detail', help = 'Optional input file providing SourceAlterationDetail for SNV and InDel variants from DNA-seq', default = '')
+    parser.add_argument('-R', '--rna-detail', help = 'Optional input file providing SourceAlterationDetail for SNV and InDel variants from RNA-seq', default = '')
+    parser.add_argument('-F', '--fusion-detail', help = 'Optional input file providing SourceAlterationDetail for fusion variants from RNA-seq', default = '')
+    parser.add_argument('-S', '--splicing-detail', help = 'Optional input file providing SourceAlterationDetail for splicing variants from RNA-seq', default = '')
     
     parser.add_argument('-t', '--alteration-type', default = 'snv,indel,fusion,splicing',
             help = 'type of alterations detected, can be a combination of (snv, indel, sv, and/or fusion separated by comma)')
@@ -379,34 +341,23 @@ If the keyword rerank is in function,
     
     if not isna(args.tesla_xls):
         data = read_tesla_xls(args.tesla_xls, args.tesla_patientID)
-        data2, _ = datarank(data, F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.from_tesla_excel.tsv', paramset)
+        data2, _ = datarank(data, args.output_file, paramset)
         exit(0)
     if args.function == 'rerank':
-        data = pd.read_csv(F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.tsv', sep='\t')
-        data2, _ = datarank(data, F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.rerank.tsv', paramset)
-        exit(0) 
+        data = pd.read_csv(args.output_file, sep='\t')
+        data2, _ = datarank(data, args.output_file + '.reranked', paramset)
+        exit(0)
     
-    input_directory = args.input_directory
-    output_directory = args.output_directory
-    prefix = args.prefix
+    # input_directory = args.input_directory
+    # output_directory = args.output_directory
+    # refix = args.prefix
     
-    wt_pep_to_bindaff = {}
-    with open(F'{input_directory}/tmp_identity/{prefix}_bindaff_filtered.tsv') as csvfile:
-        tmp_wt_bindaff_file = csv.reader(csvfile, delimiter="\t")
-        for line in tmp_wt_bindaff_file:
-            if line[7] != "":
-                wt_pep_to_bindaff[line[2]] = line[7]
+    def openif(fname): return (open(fname) if fname else [])
     
-    dna_snv_indel_filename = F'{input_directory}/../info/{prefix}_DNA_snv_indel.annotation.tsv'
-    rna_snv_indel_filename = F'{input_directory}/../info/{prefix}_RNA_snv_indel.annotation.tsv'
-    fusion_filename = F'{input_directory}/../info/{prefix}_fusion.tsv'
-    splicing_filename = F'{input_directory}/../info/{prefix}_splicing.csv'
-    
-    dna_snv_indel_file = open(dna_snv_indel_filename)
-    rna_snv_indel_file = open(rna_snv_indel_filename)
-
-    fusion_file = (open(fusion_filename) if os.path.exists(fusion_filename) else [])
-    splicing_file = (open(splicing_filename) if os.path.exists(splicing_filename) else [])
+    dna_snv_indel_file = openif(args.dna_detail)
+    rna_snv_indel_file = openif(args.rna_detail)
+    fusion_file = openif(args.fusion_detail)
+    splicing_file = openif(args.splicing_detail)
      
     dnaseq_small_variants_file = (pysam.VariantFile(args.dna_vcf, 'r') if args.dna_vcf else [])
     rnaseq_small_variants_file = (pysam.VariantFile(args.rna_vcf, 'r') if args.rna_vcf else [])
@@ -421,11 +372,10 @@ If the keyword rerank is in function,
     if fusion_file: fusion_file.close()
     if splicing_file: splicing_file.close() 
 
-    candidate_file = open(F'{args.input_directory}/{prefix}_candidate_pmhc.csv')
-    reader = csv.reader(candidate_file, delimiter=',')
+    candidate_file = open(args.input_file) # open(F'{args.input_directory}/{prefix}_candidate_pmhc.csv')
+    reader = csv.reader(candidate_file, delimiter='\t')
     fields=next(reader)
     fields.append("Foreignness")
-    fields.append("Agretopicity")
     fields.append("DNA_QUAL")
     fields.append("DNA_refDP")
     fields.append("DNA_altDP")
@@ -437,33 +387,12 @@ If the keyword rerank is in function,
     data_raw = []
     data_exist = [] # save existing hla, mutant_type peptide
     agre_exist = []
+    identity_idx = fields.index('Identity')
     for line1 in reader:
         line = copy.deepcopy(line1)
-        blast_iedb_seqs = runblast(line[1], args.iedb_fasta, output_directory)
+        blast_iedb_seqs = runblast(line[1], args.iedb_fasta, args.output_file)
         R = getR(line[1], blast_iedb_seqs)
         line.append(R)
-        mt_bindaff = float(line[3])
-        identity = line[5]
-        if (("SNV" in identity) or ('INS' in identity) or ('DEL' in identity) or ("INDEL" in identity)) and line[2] in wt_pep_to_bindaff:
-            wt_bindaff = wt_pep_to_bindaff[line[2]]
-        else:
-            wt_bindaff = get_wt_bindaff(line[2],line[0].replace('*',''), output_directory, args.netmhcpan_cmd)
-        
-        A = mt_bindaff/float(wt_bindaff) 
-        if ([line[0],line[1]] in data_exist):
-            indices = [i for i, x in enumerate(data_exist) if x == [line[0],line[1]] ]
-            for index in indices:
-                if (A > agre_exist[index]): # should get the biggest agre (agretopicity)
-                    agre_exist[index] = -2 #A
-                    data_raw[index][8] = -2 #A
-                    logging.info(F'Invalidated previous {line[0]} {line[1]}')
-                else:
-                    A = -2
-        else:
-            data_exist.append([line[0],line[1]])
-            agre_exist.append(A)
-        line.append(A)
-        
         dna_varqual = 0
         dna_ref_depth = 0
         dna_alt_depth = 0
@@ -472,6 +401,7 @@ If the keyword rerank is in function,
         rna_alt_depth = 0
         line_info_string = ""
         is_frameshift = False
+        identity = line[identity_idx]
         if (identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL'] or identity.strip().split('_')[0].startswith("INDEL")):
             fastaID = identity.strip().split('_')[1]
             selected_snvindel = (rna_snvindel if (fastaID[0] == 'R') else dna_snvindel)
@@ -527,26 +457,26 @@ If the keyword rerank is in function,
                 line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
         else:
             continue
-        line[5] = identity.strip().split('_')[0]
-        line.append(dna_varqual) 
+        #line[5] = identity.strip().split('_')[0]
+        line.append(dna_varqual)
         line.append(dna_ref_depth)
         line.append(dna_alt_depth)
         line.append(rna_varqual)
         line.append(rna_ref_depth)
         line.append(rna_alt_depth)
-        line.append(line_info_string)
+        line.append(line_info_string if line_info_string else 'N/A')
         line.append(is_frameshift)
         data_raw.append(line)
         
     picked_rows = []
     alt_type = args.alteration_type.replace(' ', '').strip().split(',')
     for line in data_raw:
-        atype = line[5].strip().split('_')[0]
+        atype = line[identity_idx].strip().split('_')[0]
         if (atype == 'SP'): atype='SPLICING'
         if atype.lower() in alt_type: picked_rows.append(line)
     # data can be emtpy (https://stackoverflow.com/questions/44513738/pandas-create-empty-dataframe-with-only-column-names)
     data=pd.DataFrame(picked_rows, columns = fields)
-    data.BindAff = data.BindAff.astype(float)
+    data.MT_BindAff = data.MT_BindAff.astype(float)
     data.BindStab = data.BindStab.astype(float)
     data.Foreignness = data.Foreignness.astype(float)
     data.Agretopicity = data.Agretopicity.astype(float)
@@ -554,13 +484,13 @@ If the keyword rerank is in function,
     data['RNA_normAD'] = data.RNA_altDP.astype(float) / get_avg_depth_from_rna_depth_filename(args.rna_depth)
     
     # are_highly_abundant is not used because we have too little positive data
-    # are_highly_abundant = ((data.BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
+    # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
     # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
-    keptdata = data[(data.Agretopicity > -1)]
-    
+    keptdata = data
     keptdata.insert(len(keptdata.columns)-1, 'SourceAlterationDetail', keptdata.pop('SourceAlterationDetail'))
     keptdata.drop(['BindLevel'], axis=1)
-    data2, _ = datarank(keptdata, F'{output_directory}/{prefix}_neoantigen_rank_neoheadhunter.tsv', paramset)
+    #keptdata.to_csv(F'{args.output_file}.debug')
+    data2, _ = datarank(keptdata, F'{args.output_file}', paramset)
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()

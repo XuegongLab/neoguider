@@ -53,9 +53,10 @@ def main():
     
     reader = csv.reader(open(input_file), delimiter="\t")
     fields=next(reader)
+    identity_index = fields.index('Identity')
     data_raw = []
     for line in reader:
-        identity = line[4]
+        identity = line[identity_index]
         line_info_string = ""
         if (identity.strip().split('_')[0] in ["SNV", "INS", "DEL", "INDEL"]):
             fastaID = identity.strip().split('_')[1]
@@ -94,7 +95,7 @@ def main():
                 line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
         else:
             continue
-        line[4] = identity.strip().split('_')[0]
+        # line[4] = identity.strip().split('_')[0]
         line.insert(-1, line_info_string)
         data_raw.append(line)
 

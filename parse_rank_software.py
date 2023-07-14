@@ -45,11 +45,17 @@ if (input_rank_result =="" or neoantigen_input =="" or output_folder =="" or ran
 	sys.exit(2)	
 
 neoantigen_list=[]
-reader_neo = csv.reader(open(neoantigen_input), delimiter=",")
+reader_neo = csv.reader(open(neoantigen_input), delimiter="\t")
 fields = next(reader_neo)
+
+hla_index = fields.index('HLA_type')
+neoantigen_index = fields.index('ET_pep')
+wt_peptide_index = fields.index('WT_pep')
+identity_index = fields.index('Identity')
+
 for line in reader_neo:
-    identity=line[5]
-    line[5]=identity.split("_")[0]+"_"+identity.split("_")[1]
+    identity=line[identity_index]
+    line[identity_index]=identity.split("_")[0]+"_"+identity.split("_")[1]
     line.append(0)
     neoantigen_list.append(line)
 

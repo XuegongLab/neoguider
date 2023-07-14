@@ -13,9 +13,6 @@ except ImportError:
     
 logging.basicConfig(format=' bindstab_filter.py %(asctime)s - %(message)s', level=logging.INFO)
 
-cycle = ['|', '/', '-', '\\']
-methods = ['cterm', '20s']
-
 def split_file(reader, lines=400):
     from itertools import islice, chain
     tmp = next(reader)
@@ -68,7 +65,6 @@ def main(args_input = sys.argv[1:]):
     logging.info('--binding_stability={}'.format(binding_stability))
     reader = csv.reader(open(input_file), delimiter="\t")
     fields = next(reader)
-    #print("Waiting for results from NetMHCStabPan... |", end='')
     sys.stdout.write("Waiting for results from NetMHCStabPan... |")
     binstab_raw_csv = output_folder+"/"+prefix+"_bindstab_raw.csv"
     os.system("rm {}".format(binstab_raw_csv))
@@ -116,48 +112,34 @@ def main(args_input = sys.argv[1:]):
             logging.info(local_exe)
             subprocess.call(local_exe, shell=True)
             
-    #args1 = netMHCstabpan_path+" -ia -p "+output_folder+"/stage.pep -a "+ hla+" > "+output_folder+"/"+prefix+"_bindstab_raw.csv"
-    # subprocess.call(args1, shell=True)
-    
     os.remove(stage_pep)
     sys.stdout.write('\b\b')
     print("OK")
 
     bind_stab = []
-    # stab_reader = csv.reader(open(output_folder+"/bindstab.csv"), delimiter=",")
     with open(output_folder+"/"+prefix+"_bindstab_raw.csv") as f:
         data = f.read()
     nw_data = data.split('-----------------------------------------------------------------------------------------------------\n')
-    WT_header = []
     WT_neo = []
     for i in range(len(nw_data)):
-        if i%4 == 3:
-            wt_pro_name = nw_data[i].strip('\n').split('.')[0]
-            WT_header.append(wt_pro_name)
-        elif i%4 == 2:
+        if i%4 == 2:
             wt_neo_data = nw_data[i].strip().split('\n')
-            # for row in wt_neo_data:
             WT_neo.append(wt_neo_data)
     for i in range(len(WT_neo)):
         for j in range(len(WT_neo[i])):
-            # if (WT_neo[i][j].strip().split()[2] == "KAWENFPNV"):
-            #     print(WT_neo[i][j].strip().split()[5])
             bind_stab.append(WT_neo[i][j].strip().split()[5])
     fields.append("BindStab")
     with open(output_folder+"/"+prefix+"_candidate_pmhc.csv","w") as f:
-        write = csv.writer(f)
+        write = csv.writer(f, delimiter='\t')
         write.writerow(fields)
-        i=0
         reader = csv.reader(open(input_file), delimiter="\t")
         next(reader,None)
-        for line in reader:
+        for i, line in enumerate(reader):
             if (float(bind_stab[i])>=float(binding_stability)):
                 line.append(bind_stab[i])
                 write.writerow(line)
             else:
                 logging.info('The peptide {} has binding_stability={} and is filtered out. '.format(line, bind_stab[i]))
-            i+=1
-    
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__': main()
+

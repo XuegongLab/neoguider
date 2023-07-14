@@ -56,13 +56,18 @@ neoantigen_list = []
 hla_list = []
 
 
-reader_neo = csv.reader(open(neoantigen_input), delimiter=",")
-next(reader_neo, None)
+reader_neo = csv.reader(open(neoantigen_input), delimiter="\t")
+fields = next(reader_neo) # next(reader_neo, None)
+
+hla_index = fields.index('HLA_type')
+neoantigen_index = fields.index('ET_pep')
+wt_peptide_index = fields.index('WT_pep')
+
 for line in reader_neo:
-    if (line[1]==line[2]):
+    if (line[neoantigen_index]==line[wt_peptide_index]):
         continue
-    neoantigen = line[1]
-    hla = line[0]
+    neoantigen = line[neoantigen_index]
+    hla = line[hla_index]
     neoantigen_list.append(neoantigen)
     hla_list.append(hla)
 
