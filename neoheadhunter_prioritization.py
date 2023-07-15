@@ -498,7 +498,6 @@ If the keyword rerank is in function,
     # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
     # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
     keptdata = data    
-    keptdata.drop(['BindLevel'], axis=1)
     #keptdata.to_csv(F'{args.output_file}.debug')
     keptdata1 = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
     data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'])
