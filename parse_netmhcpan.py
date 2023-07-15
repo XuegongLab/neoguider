@@ -3,6 +3,13 @@
 import argparse,collections,csv,getopt,json,logging,math,os,sys
 import pandas as pd 
 
+from Bio.SubsMat import MatrixInfo
+
+NUM_INFO_INDEXES = 4
+INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX = tuple(range(NUM_INFO_INDEXES))
+
+def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
+
 def str2str_show_empty(s, empty_str = 'N/A'): return (s if s else empty_str)
 def str2str_hide_empty(s, empty_str = 'N/A'): return (s if (s != empty_str) else '')
 
@@ -31,7 +38,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
     etpep_to_fpep_list = collections.defaultdict(list)
 
     fpep_to_fid_list = collections.defaultdict(list)
-    fid_to_tpm = {}
+    fid_to_seqs = {}
     
     with open(fasta_filename) as file:
         for line in file:
@@ -67,8 +74,9 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                             mtpep_to_fpep_list[mt_pep].append(mt_fpep)
                             etpep_to_fpep_list[et_pep].append(et_fpep)
                 fpep_to_fid_list[et_fpep].append(fid)
-                assert fid not in fid_to_tpm
-                fid_to_tpm[fid] = float(tpm)
+                assert fid not in fid_to_seqs
+                # INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX (NUM_INFO_INDEXES)
+                fid_to_seqs[fid] = (wt_fpep, mt_fpep, et_fpep, tpm) # {'WT': wt_fpep, 'MT': mt_fpep, 'ET': et_fpep, 'TPM': tpm}
     logging.debug(etpep_to_mtpep_list_dic)
     logging.debug(mtpep_to_wtpep_list_dic)
     def dedup_vals(key2vals): return {k : sorted(set(vs)) for (k, vs) in key2vals.items()} # removed duplicated values
@@ -81,18 +89,18 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
 
     return ((etpep_to_mtpep_list_dic, mtpep_to_wtpep_list_dic), # mutation tracing
             (etpep_to_fpep_list, mtpep_to_fpep_list, wtpep_to_fpep_list), # superstring tracing
-            (fpep_to_fid_list, fid_to_tpm)) # ID-TPM tracing
+            (fpep_to_fid_list, fid_to_seqs)) # ID-TPM tracing
 
 # We need (et_subseq -> mt_subseq) (mt_subseq -> wt_subseq) (subseq -> listof_seqs) (seq -> listof_fastaID) (fastaID -> TPM)
 # OUT_CSV_HEADER = ['HLA_type', 'MT_pep', 'WT_pep', 'BindAff', 'WT_BindAff', 'BindLevel', 'Identity', 'Quantification']
-OUT_HEADER = ['HLA_type', 'ET_pep', 'MT_pep', 'WT_pep', 'BindAff', 'ET_BindAff', 'MT_BindAff', 'WT_BindAff', 'BindLevel', 'Identity', 'Quantification', 'PepTrace']
+OUT_HEADER = ['HLA_type', 'ET_pep', 'MT_pep', 'WT_pep', 'ET_BindAff', 'MT_BindAff', 'WT_BindAff', 'BindLevel', 'Identity', 'Quantification', 'PepTrace', 'BIT_DIST']
 
-def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2tpm_2tup): 
+def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup): 
     # https://stackoverflow.com/questions/35514214/create-nested-dictionary-on-the-fly-in-python
     def fix(f): return lambda *args, **kwargs: f(fix(f), *args, **kwargs)
     etpep_to_mtpep_list_dic, mtpep_to_wtpep_list_dic = et2mt_mt2wt_2tup_pep2pep
     etpep_to_fpep_list, mtpep_to_fpep_list, wtpep_to_fpep_list = et_mt_wt_3tup_pep2fpep
-    fpep_to_fid_list, fid_to_tpm = fpep2fid_fid2tpm_2tup
+    fpep_to_fid_list, fid2finfo = fpep2fid_fid2finfo_3tup
     #pep_to_fpep_list, fpep_to_fid_list, fid_to_tpm = pep_fpep_fid_tpm_dic_3tup 
     inheader = None
     rows = []
@@ -130,13 +138,14 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
     # def fid_to_dna_rna_equiv_fid(fid): return fid.replace('SNV_R','SNV_D').replace('INS_R', 'INS_D').replace('DEL_R', 'DEL_D').replace('FSV_R', 'FSV_D')
     for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
         aff = float(aff)
-        fids = set(fid for fpep in etpep_to_fpep_list[etpep] for fid in fpep_to_fid_list[fpep])
+        fids = set(fid for mtpep in etpep_to_mtpep_list_dic[etpep] for fpep in mtpep_to_fpep_list[mtpep] for fid in fpep_to_fid_list[fpep])
+        #fids= set(fid for                                             fpep in etpep_to_fpep_list[etpep] for fid in fpep_to_fid_list[fpep])
         not_dna_fids = set(fid for fid in fids if not fid_is_moltype(fid, 'D'))
         not_rna_fids = set(fid for fid in fids if not fid_is_moltype(fid, 'R'))
         # dna_rna_equiv_fids = set(fid_to_dna_rna_equiv_fid(fid) for fpep in etpep_to_fpep_list[etpep] for fid in fpep_to_fid_list[fpep])
         #etpep_tpm = sum(fid_to_tpm[fid] for fid in dna_rna_equiv_fids)
-        not_dna_etpep_tpm = sum(fid_to_tpm[fid] for fid in not_dna_fids)
-        not_rna_etpep_tpm = sum(fid_to_tpm[fid] for fid in not_rna_fids)
+        not_dna_etpep_tpm = sum(fid2finfo[fid][INFO_TPM_IDX] for fid in not_dna_fids) # (if fid2finfo[fid][INFO_MT_IDX] == fid2finfo[fid][INFO_ET_IDX])
+        not_rna_etpep_tpm = sum(fid2finfo[fid][INFO_TPM_IDX] for fid in not_rna_fids) # (if fid2finfo[fid][INFO_MT_IDX] == fid2finfo[fid][INFO_ET_IDX])
         etpep_tpm = max((not_dna_etpep_tpm, not_rna_etpep_tpm))
         mtpep_list = []
         wtpep_list = []
@@ -153,8 +162,8 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
             for fpep in (etpep_to_fpep_list.get(pep, []) + mtpep_to_fpep_list.get(pep, []) + wtpep_to_fpep_list.get(pep, [])):
                 for fid in fpep_to_fid_list[fpep]:
                     pep2fidlist[pep].append(fid)
-        mtpep_pipesep_dflist.append(str2str_show_empty('|'.join(mtpep_list)))
-        wtpep_pipesep_dflist.append(str2str_show_empty('|'.join(wtpep_list)))
+        mtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(mtpep_list))))))
+        wtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(wtpep_list))))))
         etpep_tpm_dflist.append(etpep_tpm)
         mtpep_wtpep_fpep_fid_tpm_ddic_json = json.dumps((mtpep2wtpeplist,pep2fidlist), separators=(',', ':'), sort_keys=True).replace('"', "'")
         mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist.append(mtpep_wtpep_fpep_fid_tpm_ddic_json)
@@ -169,7 +178,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         for mtpep in etpep_to_mtpep_list_dic[etpep]:
             mt_aff = float(etpep_mhc_to_aff.get((mtpep, mhc), 2**30))
             min_mt_aff = min((min_mt_aff, mt_aff))
-            bit_dist = alnscore_penalty(et_pep, mt_pep) * 0.5
+            bit_dist = alnscore_penalty(mtpep, etpep) * 0.5
             min_bit_dist = min((min_bit_dist, bit_dist))
             for wtpep in mtpep_to_wtpep_list_dic[mtpep]:
                 wt_aff = float(etpep_mhc_to_aff.get((wtpep, mhc), 2**30))
@@ -205,12 +214,13 @@ def main():
             F'(higher nanoMolar value means lower binding affinity)', required = True, type = float)
     args = parser.parse_args()
     
-    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2tpm_2tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file) 
-    df1 = netmhcpan_result_to_df(args.netmhcpan_file, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2tpm_2tup)
-    df2 = df1[(df1['MT_BindAff'] <= args.binding_affinity_thres) & (df1['MT_pep'] != df1['WT_pep']) & (df1['ET_pep'] != df1['WT_pep'])]
-    df3 = df2.drop_duplicates(subset=['HLA_type','MT_pep'])
-    df3['Agretopicity'] = df3['MT_BindAff'] / df3['WT_BindAff']
+    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file) 
+    df1 = netmhcpan_result_to_df(args.netmhcpan_file, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup)
+    df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) & (df1['MT_pep'] != df1['WT_pep']) & (df1['ET_pep'] != df1['WT_pep'])]
+    df3 = df2.drop_duplicates(subset=['HLA_type','ET_pep'])
+    df3['Agretopicity'] = df3['ET_BindAff'] / df3['WT_BindAff']
+    col2last(df3, 'PepTrace')
     df3.to_csv(args.out_tsv_file, header = 1, sep = '\t', index = 0) # used tsv instead of csv to prevent conflict with min-json encoding
-
+    
 if __name__ == '__main__': main()
 
