@@ -67,7 +67,7 @@ def main(args_input = sys.argv[1:]):
     fields = next(reader)
     sys.stdout.write("Waiting for results from NetMHCStabPan... |")
     binstab_raw_csv = output_folder+"/"+prefix+"_bindstab_raw.csv"
-    os.system("rm {}".format(binstab_raw_csv))
+    if netMHCstabpan_path != 'None': os.system("rm {}".format(binstab_raw_csv))
     
     if netMHCstabpan_path.startswith("ssh://"):
         netMHCstabpan_parsed_url = urlparse(netMHCstabpan_path)
@@ -85,8 +85,8 @@ def main(args_input = sys.argv[1:]):
         else:
             user, address = (netMHCstabpan_parsed_url.username, useraddress[0])
     
-    for line in reader:
-        print(line)
+    for i, line in enumerate(reader):
+        if (i & (i-1)) == 0: logging.info(line)
         hla = line[0]
         hla = hla.replace("*", "")
         
@@ -95,7 +95,8 @@ def main(args_input = sys.argv[1:]):
         stage_pep = output_folder+"/stage.pep"
         write_file(staging_file, stage_pep)
         
-        if netMHCstabpan_path.startswith("ssh://"):
+        if netMHCstabpan_path == 'None': pass
+        elif netMHCstabpan_path.startswith("ssh://"):
             remote_mkdir = " sshpass -p \"$NeohunterRemotePassword\" ssh -p {} {}@{} mkdir -p /tmp/{}/".format(port, user, address, output_folder)
             remote_scp = " sshpass -p \"$NeohunterRemotePassword\" scp -P {} {} {}@{}:/tmp/{}/".format(port, stage_pep, user, address, output_folder)
             remote_argslist = [netMHCstabpan_parsed_url.path, "-ia", "-p", "/tmp/" + stage_pep, "-a", hla]
@@ -109,7 +110,7 @@ def main(args_input = sys.argv[1:]):
         else:
             local_argslist = [netMHCstabpan_path, "-ia", "-p", stage_pep, "-a", hla] #, " > ", output_folder+"/"+prefix+"_bindstab_raw.csv"
             local_exe = "{} >> {}".format(" ".join(local_argslist), binstab_raw_csv)
-            logging.info(local_exe)
+            if (i & (i-1)) == 0: logging.info(local_exe)
             subprocess.call(local_exe, shell=True)
             
     os.remove(stage_pep)
@@ -127,6 +128,7 @@ def main(args_input = sys.argv[1:]):
             WT_neo.append(wt_neo_data)
     for i in range(len(WT_neo)):
         for j in range(len(WT_neo[i])):
+            # assert len(WT_neo[i][j].strip().split()) >= 5, F'{WT_neo[i][j]} (btw ( {WT_neo[i][max((j-1,0))]} ) and ( {WT_neo[i][min((j+1,len(WT_neo[i])-1))]} )) at {(i,j)} is not a valid line!'
             bind_stab.append(WT_neo[i][j].strip().split()[5])
     fields.append("BindStab")
     with open(output_folder+"/"+prefix+"_candidate_pmhc.csv","w") as f:
