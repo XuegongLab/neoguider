@@ -11,7 +11,7 @@ import pysam
 def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
 def dropcols(df, colnames):
     xs = [x for x in colnames if x in df.columns]
-    df.drop(xs)
+    df.drop(xs, axis = 1)
 
 class Paramset:
     def __init__():
