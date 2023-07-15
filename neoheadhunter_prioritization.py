@@ -8,6 +8,11 @@ from math import log, exp
 
 import pysam
 
+def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
+def dropcols(df, colnames):
+    xs = [x for x in colnames if x in df.columns]
+    df.drop(xs)
+
 class Paramset:
     def __init__():
         self.t0Abundance = 33
@@ -253,6 +258,9 @@ def datarank(data, outcsv, paramset, drop_cols = []):
     data=data.sort_values("Rank")
     data=data.astype({"Rank":int})
     data=data.drop(drop_cols, axis=1)
+    col2last(data, 'SourceAlterationDetail')
+    col2last(data, 'PepTrace')
+    dropcols(data, ['BindLevel', 'BindAff'])
     data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
     with open(outcsv + ".extrainfo", "w") as extrafile:
         extrafile.write(F'expected_bound_and_immunogenic_pMHC_num={n_presented_and_recognized}\n')
@@ -477,7 +485,9 @@ If the keyword rerank is in function,
         if atype.lower() in alt_type: picked_rows.append(line)
     # data can be emtpy (https://stackoverflow.com/questions/44513738/pandas-create-empty-dataframe-with-only-column-names)
     data=pd.DataFrame(picked_rows, columns = fields)
+    data.ET_BindAff = data.ET_BindAff.astype(float)
     data.MT_BindAff = data.MT_BindAff.astype(float)
+    data.WT_BindAff = data.WT_BindAff.astype(float)
     data.BindStab = data.BindStab.astype(float)
     data.Foreignness = data.Foreignness.astype(float)
     data.Agretopicity = data.Agretopicity.astype(float)
@@ -487,14 +497,13 @@ If the keyword rerank is in function,
     # are_highly_abundant is not used because we have too little positive data
     # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
     # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
-    keptdata = data
-    keptdata.insert(len(keptdata.columns)-1, 'SourceAlterationDetail', keptdata.pop('SourceAlterationDetail'))
-    keptdata.drop(['BindAff', 'BindLevel'], axis=1)
+    keptdata = data    
+    keptdata.drop(['BindLevel'], axis=1)
     #keptdata.to_csv(F'{args.output_file}.debug')
-    keptdata1 = keptdata[keptdata['ET_Peptide'] == keptdata['MT_Peptide']]
-    data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_Peptide', 'ET_BindAff', 'BIT_DIST'])
+    keptdata1 = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
+    data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'])
     data, _ = datarank(keptdata, args.output_file + '.expansion', paramset)
-
+    
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
