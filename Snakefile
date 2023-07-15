@@ -417,10 +417,11 @@ rule pmhc_binding_affinity_prediction:
            fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
     output: all_vars_peptide_faa, all_vars_netmhcpan_txt
     run: 
+        shell('python {script_basedir}/neoexpansion.py --nbits 1.0 < {dna_snvindel_neopeptide_faa} > {dna_snvindel_neopeptide_faa}.expansion')
         shell('cat'
-            ' {dna_snvindel_neopeptide_faa} {dna_snvindel_wt_peptide_faa} '
+            ' {dna_snvindel_neopeptide_faa}.expansion {dna_snvindel_wt_peptide_faa} '
             ' {rna_snvindel_neopeptide_faa} {rna_snvindel_wt_peptide_faa} '
-            ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} | python {script_basedir}/neoexpansion.py --nbits 1 > {all_vars_peptide_faa}')
+            ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} > {all_vars_peptide_faa}')
         peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles(), workflow.cores)
 
 all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
@@ -461,12 +462,14 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
     else:
         outputfile1 = F'{outdir}/{PREFIX}_bindstab_raw.csv'
         outputfile2 = F'{outdir}/{PREFIX}_candidate_pmhc.csv'
+        remote_rmdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
         remote_mkdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:/tmp/{outdir}/'
         remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_hard_thres} -p {PREFIX}'
         remote_exe = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'
         remote_receive1 = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1} {outdir}'
         remote_receive2 = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile2} {outdir}'
+        call_with_infolog(remote_rmdir)
         call_with_infolog(remote_mkdir)
         call_with_infolog(remote_send)
         call_with_infolog(remote_exe)
