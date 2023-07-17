@@ -137,7 +137,7 @@ hla_bam   = F'{hla_typing_dir}/{PREFIX}.rna_hla_typing.bam'
 hla_out   = F'{hla_typing_dir}/{PREFIX}_hlatype.tsv'
 logging.debug(F'HLA_REF = {HLA_REF}')
 
-rule hla_typing_prep:
+rule HLA_typing_preparation:
     output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
     resources: mem_mb = bwa_mem_mb
     threads: bwa_nthreads
@@ -147,7 +147,7 @@ rule hla_typing_prep:
         bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | samtools view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
         samtools fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
 
-rule hla_typing:
+rule HLA_typing:
     input: hla_fq_r1, hla_fq_r2, hla_fq_se
     output: out = hla_out
     resources: mem_mb = optitype_mem_mb
@@ -168,7 +168,7 @@ rule hla_typing:
     
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
-rule rna_quantification:
+rule RNA_quantification:
     output: out = outf_rna_quantification
     resources: mem_mb = kallisto_mem_mb
     run:
@@ -183,7 +183,7 @@ starfusion_bam = F'{starfusion_out}/Aligned.out.bam'
 starfusion_res = F'{starfusion_out}/star-fusion.fusion_predictions.abridged.coding_effect.tsv'
 starfusion_sjo = F'{starfusion_out}/SJ.out.tab'
 starfusion_params = F' --genome_lib_dir {CTAT} --examine_coding_effect --output_dir {starfusion_out} --min_FFPM 0.1 '
-rule rna_fusion_detection:
+rule RNA_fusion_detection:
     output:
         outbam = starfusion_bam,
         outres = starfusion_res,
@@ -197,7 +197,7 @@ rule rna_fusion_detection:
             shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         
 fusion_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_fusion.fasta'
-rule rna_fusion_neopeptide_generation:
+rule RNA_fusion_peptide_generation:
     input:
         starfusion_res, outf_rna_quantification
     output:
@@ -218,7 +218,7 @@ rna_t_spl_bai = F'{alignment_dir}/{PREFIX}_RNA_t_spl.bam.bai'
 dna_tumor_bai = F'{alignment_dir}/{PREFIX}_DNA_tumor.bam.bai'
 dna_normal_bai = F'{alignment_dir}/{PREFIX}_DNA_normal.bam.bai'
 
-rule rna_preprocess:
+rule RNA_preprocess:
     input: starfusion_bam
     output:
         outbam = rna_tumor_bam,
@@ -234,7 +234,7 @@ rule rna_preprocess:
 HIGH_DP=1000*1000
 rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
 rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
-rule rna_postprocess:
+rule RNA_postprocess:
     input: rna_tumor_bam, rna_tumor_bai
     output: rna_tumor_depth, rna_tumor_depth_summary
     shell:
@@ -247,7 +247,7 @@ rule rna_postprocess:
 asneo_out = F'{RES}/splicing/{PREFIX}_rna_tumor_splicing_asneo_out'
 asneo_sjo = F'{asneo_out}/SJ.out.tab'
 splicing_neopeptide_faa=F'{neopeptide_dir}/{PREFIX}_splicing.fasta'
-rule rna_splicing_alignment:
+rule RNA_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
     resources: mem_mb = star_mem_mb
     threads: star_nthreads
@@ -262,7 +262,7 @@ rule rna_splicing_alignment:
         ' | samtools markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_t_spl_bam}'
 
-rule rna_splicing_neopeptide_generation:
+rule RNA_splicing_peptide_generation:
     input: rna_quant=outf_rna_quantification, sj=asneo_sjo # starfusion_sjo may also work (we didn't test this)
     output: splicing_neopeptide_faa 
     resources: mem_mb = 20000 # performance measured by Xiaofei Zhao
@@ -273,7 +273,7 @@ rule rna_splicing_neopeptide_generation:
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {neopeptide_dir}/{PREFIX}_splicing.fasta'
 
-rule dna_alignment_tumor:
+rule DNA_tumor_alignment:
     output: dna_tumor_bam, dna_tumor_bai
     resources: mem_mb = bwa_samtools_mem_mb
     threads: bwa_nthreads
@@ -285,7 +285,7 @@ rule dna_alignment_tumor:
         ' | samtools markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
         ' && samtools index -@ {samtools_nthreads} {dna_tumor_bam}'
     
-rule dna_alignment_normal:
+rule DNA_normal_alignment:
     output: dna_normal_bam, dna_normal_bai
     resources: mem_mb = bwa_samtools_mem_mb
     threads: bwa_nthreads
@@ -299,7 +299,7 @@ rule dna_alignment_normal:
     
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
 dna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/${PREFIX}_DNA_tumor_uvc1.vcf.gz'
-rule snvindel_detection_with_DNA_tumor:
+rule DNA_SmallVariant_detection:
     input: tbam=dna_tumor_bam, tbai=dna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai,
     output: dna_vcf,dna_tonly_raw_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz',
@@ -317,7 +317,7 @@ rule snvindel_detection_with_DNA_tumor:
 
 rna_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.vcf'
 rna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/${PREFIX}_RNA_tumor_uvc1.vcf.gz'
-rule snvindel_detection_with_RNA_tumor: # RNA filtering is more stringent
+rule RNA_SmallVariant_detection: # RNA filtering is more stringent
     input: tbam=rna_tumor_bam, tbai=rna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai
     output: rna_vcf,rna_tonly_raw_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
@@ -336,7 +336,7 @@ rule snvindel_detection_with_RNA_tumor: # RNA filtering is more stringent
 # start-of-DNA-vep-mainline
 
 dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effect.tsv'
-rule snvindel_effect_prediction_DNA_tumor:
+rule DNA_SmallVariant_effect_prediction:
     input: dna_vcf
     output: dna_variant_effect
     resources: mem_mb = vep_mem_mb
@@ -349,7 +349,7 @@ rule snvindel_effect_prediction_DNA_tumor:
 
 dna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
 dna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
-rule snvindel_neopeptide_generation_DNA_tumor:
+rule DNA_SmallVariant_peptide_generation:
     input: dna_variant_effect,
     output: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, dna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
@@ -361,7 +361,7 @@ rule snvindel_neopeptide_generation_DNA_tumor:
 # start-of-RNA-vep-sideline-for-rescue
 
 rna_variant_effect = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.variant_effect.tsv'
-rule snvindel_effect_prediction_RNA_tumor:
+rule RNA_SmallVariant_effect_prediction:
     input: rna_vcf
     output: rna_variant_effect
     resources: mem_mb = vep_mem_mb
@@ -378,7 +378,7 @@ rule snvindel_effect_prediction_RNA_tumor:
         # --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf}.isecdir/0001.vcf.gz --output_file {rna_variant_effect}
 rna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
 rna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
-rule snvindel_neopeptide_generation_RNA_tumor:
+rule RNA_SmallVariant_peptide_generation:
     input: rna_variant_effect,
     output: rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, rna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
@@ -415,7 +415,7 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs, ncores = 6):
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
-rule pmhc_binding_affinity_prediction:
+rule PeptideMHC_binding_affinity_prediction:
     input: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, 
            rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, 
            fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
@@ -429,7 +429,7 @@ rule pmhc_binding_affinity_prediction:
         peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles(), workflow.cores)
 
 all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
-rule pmhc_binding_affinity_filter:
+rule PeptideMHC_binding_affinity_filter:
     input: all_vars_peptide_faa, all_vars_netmhcpan_txt
     output: all_vars_netmhc_filtered_tsv
     shell: 
@@ -482,7 +482,7 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
 
 all_vars_bindstab_raw_tsv = F'{pmhc_dir}/{PREFIX}_bindstab_raw.csv'
 all_vars_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.csv'
-rule pmhc_binding_stability_filter:
+rule PeptideMHC_binding_stability_filter:
     input: all_vars_netmhc_filtered_tsv
     output: all_vars_bindstab_raw_tsv, all_vars_bindstab_filtered_tsv
     run: 
@@ -504,7 +504,7 @@ prioritization_thres_params = ' '.join([x.strip() for x in F'''
 prioritization_function_params = ''
 
 logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
-rule prioritization_with_all_tcr:
+rule Prioritization_with_all_TCRs:
     input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf, rna_tumor_depth_summary, 
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file #, splicing_info_file
     output: neoheadhunter_prioritization_tsv
@@ -526,7 +526,7 @@ mixcr_output_done_flag = F'{mixcr_output_dir}.DONE'
 mixcr_cmdline_params = ' analyze shotgun -s hs --starting-material rna --only-productive --receptor-type tcr '
 mixcr_mem_gb = max((mixcr_mem_mb // 1000 - 4, 1))
 logging.debug(F'MIXCR_PATH = {MIXCR_PATH}')
-rule mixcr_run:
+rule MixCR_run:
     output: mixcr_output_done_flag
     resources: mem_mb = mixcr_mem_mb
     threads: mixcr_nthreads
@@ -536,7 +536,7 @@ rule mixcr_run:
         touch {mixcr_output_done_flag}
     '''
 tcr_specificity_software = 'ERGO'
-rule prioritization_with_each_tcr:
+rule Prioritization_with_each_TCR:
     input: all_vars_bindstab_filtered_tsv, mixcr_output_done_flag
     output: tcr_specificity_result
     shell: '''
