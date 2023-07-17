@@ -446,7 +446,7 @@ If the keyword rerank is in function,
                     line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
             else:
                 continue
-        elif (identity.strip().split('_')[0]=="FUS"):
+        elif (identity.strip().split('_')[0]=="FUS") and fusion:
             line_num = int(identity.strip().split('_')[1])
             fusion_line = fusion[line_num-1]
             ele = fusion_line.strip().split('\t')
@@ -456,7 +456,7 @@ If the keyword rerank is in function,
                                 "FUSION_MODEL","FUSION_CDS","FUSION_TRANSL","PFAM_LEFT","PFAM_RIGHT"]
             for i in range(0, len(ele),1):
                 line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
-        elif (identity.strip().split('_')[0]=="SP"):
+        elif (identity.strip().split('_')[0]=="SP") and splicing:
             line_num = int(identity.strip().split('_')[1])
             splicing_line = splicing[line_num-1]
             ele = splicing_line.strip().split('\t')
