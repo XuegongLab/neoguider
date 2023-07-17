@@ -345,6 +345,7 @@ def ProcessIsoform(genome, length, tpm_threshold, expression_file):
     logging.info("Cut protein to short peptide")
     remain_pep = set()
     peplens = [int(l.strip()) for l in str(length).strip().split(',')]
+    pep_ordinal = 0
     for peplen in peplens:
         peps = GenKmerPep(protfa=path['prot_fa'], peplen=peplen, tpm_threshold=tpm_threshold, expression_file=expression_file)
         norm_peps = GenKmerPep_ref(protfa=path['refseq_fa'], peplen=peplen, save=path['refpep_%s'%peplen])
@@ -363,8 +364,9 @@ def ProcessIsoform(genome, length, tpm_threshold, expression_file):
             for pep in pep_out:
                 #f.write(">SP_"+pep.split('_')[1]+"_"+pep.split('_')[2]+'\n')
                 pep_seq, pep_id, pep_tpm = pep.split('_')
-                f.write(F'>SP_{pep_id} MT={pep_seq} TPM={pep_tpm}\n')
+                f.write(F'>SP_{pep_id}_{pep_ordinal} MT={pep_seq} TPM={pep_tpm}\n')
                 f.write(pep_seq + '\n')
+                pep_ordinal += 1
     logging.info("All short pep number is: %s", len(remain_pep))
     with open(path['pep_txt'], 'w') as f:
         f.write('\n'.join(remain_pep) + '\n')
