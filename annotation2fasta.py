@@ -1,8 +1,12 @@
 #from tracemalloc import start
 import pandas as pd
+import logging
 import sys,getopt,os
 import re
 from pyfaidx import Fasta
+
+
+
 d = {'Cys': 'C', 'Asp': 'D', 'Ser': 'S', 'Gln': 'Q', 'Lys': 'K',
      'Ile': 'I', 'Pro': 'P', 'Thr': 'T', 'Phe': 'F', 'Asn': 'N', 
      'Gly': 'G', 'His': 'H', 'Leu': 'L', 'Arg': 'R', 'Trp': 'W', 
@@ -477,19 +481,25 @@ data_filter=fasta_dd[(fasta_dd["mut_peptide_length"]>=8) & (fasta_dd["mut_peptid
 data_dd_reindex=data_filter.reset_index()
 del data_dd_reindex['index']
 #######write######
-f_w=open(out_dir+"/"+prefix+"_snv_indel.fasta",'w')
-for i in range(len(data_dd_reindex.mutation_header)):
-    f_w.write('%s%s%s%s'%(data_dd_reindex.mutation_header[i],'\n',data_dd_reindex.mutation_peptide[i],'\n'))
-f_w.close()
 #f_w=open(out_dir+"/"+prefix+"_snv_indel.fasta.without_comment",'w')
 #for i in range(len(data_dd_reindex.mutation_header)):
 #    f_w.write('%s%s%s%s'%(data_dd_reindex.mutation_header[i].split()[0],'\n',data_dd_reindex.mutation_peptide[i],'\n'))
 #f_w.close()
 
+assert len(data_dd_reindex.mutation_peptide) == len(data_dd_reindex.wild_peptide)
+
 tmp_fasta_folder = os.path.join(out_dir,prefix+"_tmp_fasta")
 if not os.path.exists(tmp_fasta_folder):
     os.mkdir(tmp_fasta_folder)
-f_w=open(tmp_fasta_folder+"/"+prefix+"_snv_indel_wt.fasta",'w')
+
+mt_f_w=open(out_dir+"/"+prefix+"_snv_indel.fasta",'w')
+wt_f_w=open(tmp_fasta_folder+"/"+prefix+"_snv_indel_wt.fasta",'w')
 for i in range(len(data_dd_reindex.mutation_header)):
-    f_w.write('%s%s%s%s'%(data_dd_reindex.wild_header[i],'\n',data_dd_reindex.wild_peptide[i],'\n'))
-f_w.close()
+    if ('*' in data_dd_reindex.mutation_peptide[i]) or ('*' in data_dd_reindex.wild_peptide[i]):
+        logging.warning(F'{data_dd_reindex.mutation_header[i]} or {data_dd_reindex.wild_header[i]} have stop codon (*) and are therefore skipped. ')
+    else:
+        mt_f_w.write('%s%s%s%s'%(data_dd_reindex.mutation_header[i],'\n',data_dd_reindex.mutation_peptide[i],'\n'))
+        wt_f_w.write('%s%s%s%s'%(data_dd_reindex.wild_header[i],'\n',data_dd_reindex.wild_peptide[i],'\n'))
+wt_f_w.close()
+mt_f_w.close()
+
