@@ -1,5 +1,7 @@
-import pprint
-import sys
+#!/usr/bin/env python
+
+#import pprint
+import argparse,sys
 from Bio.SubsMat import MatrixInfo
 
 #          '12345678901234567890'
@@ -29,28 +31,36 @@ def alnscore_penalty(sequence, neighbour):
             ret += scoremax - score
     return ret
 
-def pep2simpeps(bioseq):
+def pep2simpeps(bioseq, nbits):
     queue = [ bioseq ]
     seq2penalty = { bioseq : 0 }
     while queue:
         nextseq = queue.pop(0)  
         for neighbour in get_neighbour_seqs(nextseq):
             penalty = alnscore_penalty(bioseq, neighbour)
-            if not neighbour in seq2penalty and penalty <= 2:
+            if not neighbour in seq2penalty and penalty * 0.5 <= nbits * (1.0 + sys.float_info.epsilon):
                 queue.append(neighbour)
-                seq2penalty[neighbour] = penalty
+                seq2penalty[neighbour] = penalty * 0.5
     return seq2penalty
     
 def main():
     #pp = pprint.PrettyPrinter(indent=4)
     #pp.pprint(MatrixInfo.blosum62)
-    #print((MatrixInfo.blosum62))
+    parser = argparse.ArgumentParser(description = 'Experimental work (please do not use this script). ', formatter_class = argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-b', '--nbits', type = float, help = 'hamming distance by the number of bits', default = 1.0)
+    args = parser.parse_args()
     for line in sys.stdin:
-        pep = line.strip()
-        seq2penalty = pep2simpeps(pep)
-        for simpep in sorted(seq2penalty.keys()):
-            print(F'>{simpep}_from_{pep}_score_{seq2penalty[simpep]}')
-            print(simpep)
+        if line.startswith('>'): pepID = line.strip()
+        else: 
+            pep = line.strip()
+            seq2penalty = pep2simpeps(pep, args.nbits)
+            seqs = sorted(seq2penalty.keys())
+            seqs.remove(pep)
+            for i, simpep in enumerate([pep] + seqs):
+                new_pepID = pepID.split()[0] + str(i)
+                pep_comment = ' '.join([tok for (j, tok) in enumerate(pepID.split()) if j > 0])
+                print(F'{new_pepID} {pep_comment} SOURCE={pep} MAX_BIT_DIST={seq2penalty[simpep]}')
+                print(simpep)
     
 if __name__ == '__main__':
     main()
