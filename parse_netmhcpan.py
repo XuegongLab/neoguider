@@ -56,25 +56,32 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                             mt_fpep = val
                         if key == 'TPM': 
                             tpm = float(val)
-                assert len(wt_fpep) == len(mt_fpep)
+                # assert len(wt_fpep) == len(mt_fpep), F'{wt_fpep} == {mt_fpep} failed'
+                if len(wt_fpep) != len(mt_fpep) and wt_fpep != '':
+                    logging.warning(F'{wt_fpep} and {mt_fpep} (wt and mt fasta peptides) have different lengths, so set wt to empty string. ')
+                    wt_fpep = ''
+                if '*' in wt_fpep:
+                    logging.warning(F'{wt_fpep} (wt fasta peptide) has stop codon (*) in it, so set wt to empty string. ')
+                    wt_fpep = ''
             else:
                 et_fpep = line
                 assert len(wt_fpep) == 0 or len(wt_fpep) == len(et_fpep)
+                assert len(et_fpep) == len(mt_fpep), F'len({et_fpep}) == len({mt_fpep}) failed'
                 logging.debug(F'ET={et_fpep} MT={mt_fpep} WT={wt_fpep}')
                 for peplen in [7,8,9,10,11,12]:
-                    for pepbeg in range(len(wt_fpep)):
+                    for pepbeg in range(len(et_fpep)):
                         pepend = pepbeg + peplen
-                        if pepend <= len(wt_fpep):
-                            wt_pep = wt_fpep[pepbeg:pepend]
+                        if pepend <= len(et_fpep):
+                            wt_pep = (wt_fpep[pepbeg:pepend] if (len(wt_fpep) > 0) else '')
                             mt_pep = mt_fpep[pepbeg:pepend]
                             et_pep = et_fpep[pepbeg:pepend]
                             etpep_to_mtpep_list_dic[et_pep].append(mt_pep)
-                            mtpep_to_wtpep_list_dic[et_pep].append(wt_pep)
-                            wtpep_to_fpep_list[wt_pep].append(wt_fpep)
+                            mtpep_to_wtpep_list_dic[mt_pep].append(wt_pep)
+                            if wt_fpep != '': wtpep_to_fpep_list[wt_pep].append(wt_fpep)
                             mtpep_to_fpep_list[mt_pep].append(mt_fpep)
                             etpep_to_fpep_list[et_pep].append(et_fpep)
                 fpep_to_fid_list[et_fpep].append(fid)
-                assert fid not in fid_to_seqs
+                assert fid not in fid_to_seqs, F'{fid} is duplicated in {fasta_filename}. '
                 # INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX (NUM_INFO_INDEXES)
                 fid_to_seqs[fid] = (wt_fpep, mt_fpep, et_fpep, tpm) # {'WT': wt_fpep, 'MT': mt_fpep, 'ET': et_fpep, 'TPM': tpm}
     logging.debug(etpep_to_mtpep_list_dic)
@@ -159,7 +166,9 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
                 mtpep2wtpeplist[mtpep].append(wtpep)
         for pep in sorted(set([etpep] + mtpep_list + wtpep_list)):
             pep2fidlist[pep] = []
-            for fpep in (etpep_to_fpep_list.get(pep, []) + mtpep_to_fpep_list.get(pep, []) + wtpep_to_fpep_list.get(pep, [])):
+            fpep_list = (etpep_to_fpep_list.get(pep, []) + mtpep_to_fpep_list.get(pep, []) + wtpep_to_fpep_list.get(pep, []))
+            # logging.warning(fpep_list)
+            for fpep in fpep_list:
                 for fid in fpep_to_fid_list[fpep]:
                     pep2fidlist[pep].append(fid)
         mtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(mtpep_list))))))
