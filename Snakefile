@@ -43,6 +43,7 @@ num_cores = config['num_cores']
 
 ### Section 4: parameters having some default values of relative paths
 HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
+CDNA_REF = config.get('cdna_ref', F'{script_basedir}/database/Homo_sapiens.GRCh37.cdna.all.fa') # .kallisto-idx
 PEP_REF = config.get('pep_ref', F'{script_basedir}/database/Homo_sapiens.GRCh37.pep.all.fa')
 VEP_CACHE = config.get('vep_cache', F'{script_basedir}/database')
 CTAT = config.get('ctat', F'{script_basedir}/database/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/')
@@ -54,6 +55,7 @@ ASNEO_GTF = config.get('asneo_gtf', F'{script_basedir}/database/hg19.refGene.gtf
 ### Section 5: parameters having some default values depending on other values
 REF = config.get('REF', F'{CTAT}/ref_genome.fa')
 ERGO_PATH = config.get('ERGO_PATH', F'{ERGO_EXE_DIR}/Predict.py')
+CDNA_KALLISTO_IDX = config.get('cdna_kallisto_idx', F'{CDNA_REF}.kallisto-idx')
 
 tmpdirID = '.'.join([script_start_datetime.strftime('%Y-%m-%d_%H-%M-%S'), str(os.getpid()), PREFIX])
 fifo_path_prefix = os.path.sep.join([config['fifo_dir'], tmpdirID])
@@ -171,9 +173,9 @@ rule rna_quantification:
     resources: mem_mb = kallisto_mem_mb
     run:
         if RNA_TUMOR_ISPE:
-            shell('kallisto quant -i {CTAT}/ref_annot.cdna.fa.kallisto-idx -b 100 -o {kallisto_out} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2}')
+            shell('kallisto quant -i {CDNA_KALLISTO_IDX} -b 100 -o {kallisto_out} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2}')
         else:
-            shell('kallisto quant -i {CTAT}/ref_annot.cdna.fa.kallisto-idx -b 100 -o {kallisto_out} --single -l 200 -s 30 {RNA_TUMOR_FQ1}')
+            shell('kallisto quant -i {CDNA_KALLISTO_IDX} -b 100 -o {kallisto_out} --single -l 200 -s 30 {RNA_TUMOR_FQ1}')
         shell('cp {kallisto_out}/abundance.tsv {outf_rna_quantification}')
     
 starfusion_out = F'{RES}/fusion/starfusion_out'
@@ -296,9 +298,10 @@ rule dna_alignment_normal:
         ' && samtools index -@ {samtools_nthreads} {dna_normal_bam}'
     
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
+dna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/${PREFIX}_DNA_tumor_uvc1.vcf.gz'
 rule snvindel_detection_with_DNA_tumor:
     input: tbam=dna_tumor_bam, tbai=dna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai,
-    output: dna_vcf,
+    output: dna_vcf,dna_tonly_raw_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',        
@@ -313,9 +316,10 @@ rule snvindel_detection_with_DNA_tumor:
         ' && bcftools view {output.vcf3} -Ov -o {dna_vcf}'
 
 rna_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.vcf'
+rna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/${PREFIX}_RNA_tumor_uvc1.vcf.gz'
 rule snvindel_detection_with_RNA_tumor: # RNA filtering is more stringent
     input: tbam=rna_tumor_bam, tbai=rna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai
-    output: rna_vcf,
+    output: rna_vcf,rna_tonly_raw_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',
@@ -505,12 +509,12 @@ rule prioritization_with_all_tcr:
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file #, splicing_info_file
     output: neoheadhunter_prioritization_tsv
     run: 
-        call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')
-        call_with_infolog(F'bcftools view {rna_vcf} -Oz -o {rna_vcf}.gz && bcftools index -ft {rna_vcf}.gz')
+        #call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')
+        #call_with_infolog(F'bcftools view {rna_vcf} -Oz -o {rna_vcf}.gz && bcftools index -ft {rna_vcf}.gz')
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
             F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
-            F' --dna-vcf {dna_vcf}.gz --rna-vcf {rna_vcf}.gz --rna-depth {rna_tumor_depth_summary} '
+            F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} --rna-depth {rna_tumor_depth_summary} '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
         call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
 
