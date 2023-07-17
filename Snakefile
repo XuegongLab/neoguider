@@ -168,7 +168,7 @@ rule HLA_typing:
     
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
-rule RNA_quantification:
+rule RNA_transcript_abundance_estimation:
     output: out = outf_rna_quantification
     resources: mem_mb = kallisto_mem_mb
     run:
@@ -298,7 +298,7 @@ rule DNA_normal_alignment:
         ' && samtools index -@ {samtools_nthreads} {dna_normal_bam}'
     
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
-dna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/${PREFIX}_DNA_tumor_uvc1.vcf.gz'
+dna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/{PREFIX}_DNA_tumor_uvc1.vcf.gz'
 rule DNA_SmallVariant_detection:
     input: tbam=dna_tumor_bam, tbai=dna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai,
     output: dna_vcf,dna_tonly_raw_vcf,
@@ -316,7 +316,7 @@ rule DNA_SmallVariant_detection:
         ' && bcftools view {output.vcf3} -Ov -o {dna_vcf}'
 
 rna_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.vcf'
-rna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/${PREFIX}_RNA_tumor_uvc1.vcf.gz'
+rna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/{PREFIX}_RNA_tumor_uvc1.vcf.gz'
 rule RNA_SmallVariant_detection: # RNA filtering is more stringent
     input: tbam=rna_tumor_bam, tbai=rna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai
     output: rna_vcf,rna_tonly_raw_vcf,
