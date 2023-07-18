@@ -410,7 +410,7 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs, ncores = 6):
         for cmd in cmds: shfile.write(cmd + '\n')
     # Each netmhcpan process uses much less than 100% CPU, so we can spawn many more processes
     call_with_infolog(F'cat {outtsv}.tmpdir/tmp.sh | parallel -j {4*ncores}')
-    call_with_infolog(F'cat {outtsv}.tmpdir/SPLITTED.*.netMHCpan-result > {outtsv}')
+    call_with_infolog(F'find {outtsv}.tmpdir/ -iname "SPLITTED.*.netMHCpan-result" | xargs cat > {outtsv}')
     
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
