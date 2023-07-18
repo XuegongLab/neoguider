@@ -39,7 +39,8 @@ agretopicity_thres = config['agretopicity_thres']
 foreignness_thres = config['foreignness_thres']
 alteration_type = config['alteration_type']
 
-num_cores = config['num_cores']
+#num_cores = config['num_cores']
+netmhc_ncores = config['netmhc_ncores']
 
 ### Section 4: parameters having some default values of relative paths
 HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
@@ -401,7 +402,7 @@ def run_netMHCpan(args):
     hla_str, infaa = args
     return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l 8,9,10,11 -BA > {infaa}.netMHCpan-result')
 
-def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs, ncores = 6):
+def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs):
     call_with_infolog(F'rm {outtsv}.tmpdir/* || true && mkdir -p {outtsv}.tmpdir/')
     call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
     cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l 8,9,10,11 -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
@@ -409,7 +410,7 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs, ncores = 6):
     with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
         for cmd in cmds: shfile.write(cmd + '\n')
     # Each netmhcpan process uses much less than 100% CPU, so we can spawn many more processes
-    call_with_infolog(F'cat {outtsv}.tmpdir/tmp.sh | parallel -j {4*ncores}')
+    call_with_infolog(F'cat {outtsv}.tmpdir/tmp.sh | parallel -j {netmhc_ncores}')
     call_with_infolog(F'find {outtsv}.tmpdir/ -iname "SPLITTED.*.netMHCpan-result" | xargs cat > {outtsv}')
     
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
@@ -426,7 +427,7 @@ rule PeptideMHC_binding_affinity_prediction:
             ' {dna_snvindel_neopeptide_faa}.expansion {dna_snvindel_wt_peptide_faa} '
             ' {rna_snvindel_neopeptide_faa} {rna_snvindel_wt_peptide_faa} '
             ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} > {all_vars_peptide_faa}')
-        peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles(), workflow.cores)
+        peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles())
 
 all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
 rule PeptideMHC_binding_affinity_filter:

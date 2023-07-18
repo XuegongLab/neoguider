@@ -34,6 +34,6 @@ foreignness_thres: 1e-16
 
 alteration_type: 'snv,indel,fusion,splicing'
 
-num_cores: 20
+netmhc_ncores: 256
 fifo_dir: '/tmp'
 
