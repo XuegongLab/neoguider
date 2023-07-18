@@ -8,6 +8,8 @@ from math import log, exp
 
 import pysam
 
+def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
+
 def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
 def dropcols(df, colnames):
     xs = [x for x in colnames if x in df.columns]
@@ -131,7 +133,7 @@ def aligner(seq1,seq2):
     matrix = matlist.blosum62
     gap_open = -11
     gap_extend = -1
-    aln = pairwise2.align.localds(seq1.upper(), seq2.strip().split('+')[0].upper(), matrix, gap_open, gap_extend)
+    aln = pairwise2.align.localds(aaseq2canonical(seq1), aaseq2canonical(seq2.strip().split('+')[0]), matrix, gap_open, gap_extend)
     return aln
 
 def runblast(query_seq, target_fasta, output_file):
