@@ -403,7 +403,8 @@ def run_netMHCpan(args):
     return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l 8,9,10,11 -BA > {infaa}.netMHCpan-result')
 
 def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs):
-    call_with_infolog(F'rm {outtsv}.tmpdir/* || true && mkdir -p {outtsv}.tmpdir/')
+    call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true')
+    call_with_infolog(F'mkdir -p {outtsv}.tmpdir/')
     call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
     cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l 8,9,10,11 -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
             for hla_str in hla_strs for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
