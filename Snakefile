@@ -423,11 +423,13 @@ rule PeptideMHC_binding_affinity_prediction:
            fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
     output: all_vars_peptide_faa, all_vars_netmhcpan_txt
     run: 
-        shell('python {script_basedir}/neoexpansion.py --nbits 1.0 < {dna_snvindel_neopeptide_faa} > {dna_snvindel_neopeptide_faa}.expansion')
+        shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py '
+            ' | python {script_basedir}/neoexpansion.py --nbits 1.0 > {dna_snvindel_neopeptide_faa}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_faa}.expansion {dna_snvindel_wt_peptide_faa} '
-            ' {rna_snvindel_neopeptide_faa} {rna_snvindel_wt_peptide_faa} '
-            ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} > {all_vars_peptide_faa}')
+            ' {rna_snvindel_neopeptide_faa}           {rna_snvindel_wt_peptide_faa} '
+            ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} '
+            ' | python {script_basedir}/fasta_filter.py > {all_vars_peptide_faa}')
         peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles())
 
 all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'

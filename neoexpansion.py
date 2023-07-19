@@ -53,9 +53,7 @@ def faa2newfaa(arg):
     hdr, pep, nbits = arg
     pep2 = aaseq2canonical(pep)
     for aa in pep2:
-        if aa not in ALPHABET:
-            logging.warning(F'The FASTA record (header={hdr}, sequence={pep}) contains non-standard amino acids, so skipping this record. ')
-            return []
+        assert aa in ALPHABET, (F'The FASTA record (header={hdr}, sequence={pep}) contains non-standard amino-acid {aa} which is not in {ALPHABET}')
     logging.debug(F'Processing {hdr} {pep}')
     ret = []
     seq2penalty = pep2simpeps(pep, nbits)

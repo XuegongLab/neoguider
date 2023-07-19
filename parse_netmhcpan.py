@@ -8,6 +8,11 @@ from Bio.SubsMat import MatrixInfo
 NUM_INFO_INDEXES = 4
 INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX = tuple(range(NUM_INFO_INDEXES))
 
+#          '12345678901234567890'
+ALPHABET = 'ARNDCQEGHILKMFPSTWYV'
+
+# def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
+
 def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
 
 def str2str_show_empty(s, empty_str = 'N/A'): return (s if s else empty_str)
@@ -51,9 +56,9 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                         #print(tok)
                         key, val = tok.split('=')
                         if key == 'WT':
-                            wt_fpep = val
+                            wt_fpep = val # aaseq2canonical(val)
                         if key == 'MT':
-                            mt_fpep = val
+                            mt_fpep = val # aaseq2canonical(val)
                         if key == 'TPM': 
                             tpm = float(val)
                 # assert len(wt_fpep) == len(mt_fpep), F'{wt_fpep} == {mt_fpep} failed'
@@ -64,7 +69,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                     logging.warning(F'{wt_fpep} (wt fasta peptide) has stop codon (*) in it, so set wt to empty string. ')
                     wt_fpep = ''
             else:
-                et_fpep = line
+                et_fpep = line # aaseq2canonical(line)
                 assert len(wt_fpep) == 0 or len(wt_fpep) == len(et_fpep)
                 assert len(et_fpep) == len(mt_fpep), F'len({et_fpep}) == len({mt_fpep}) failed'
                 logging.debug(F'ET={et_fpep} MT={mt_fpep} WT={wt_fpep}')
@@ -124,6 +129,8 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
                 assert (len(toks) == 16 or len(toks) == 18), F'The content-line {line} is invalid'
                 if len(toks) == 16: row = toks + ['NB'] # no-binding
                 if len(toks) == 18: row = toks[0:16] + [toks[17]]
+                for aa in aaseq2canonical(toks[2]):
+                    assert aa in ALPHABET, F'The amino-acid sequence ({toks[2]}) from ({toks}) does not use the alphabet ({ALPHABET})')
                 rows.append(row)
     print(F'File={infilename} inheader={inheader}')
     df = pd.DataFrame(rows, columns = inheader)
