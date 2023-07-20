@@ -35,5 +35,7 @@ foreignness_thres: 1e-16
 alteration_type: 'snv,indel,fusion,splicing'
 
 netmhc_ncores: 256
+netmhc_nthreads: 12
+ergo2_nthreads: 12
 fifo_dir: '/tmp'
 
