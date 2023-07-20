@@ -129,8 +129,8 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
                 assert (len(toks) == 16 or len(toks) == 18), F'The content-line {line} is invalid'
                 if len(toks) == 16: row = toks + ['NB'] # no-binding
                 if len(toks) == 18: row = toks[0:16] + [toks[17]]
-                for aa in aaseq2canonical(toks[2]):
-                    assert aa in ALPHABET, F'The amino-acid sequence ({toks[2]}) from ({toks}) does not use the alphabet ({ALPHABET})')
+                for aa in toks[2]: # aaseq2canonical(toks[2]):
+                    assert aa in ALPHABET, (F'The amino-acid sequence ({toks[2]}) from ({toks}) does not use the alphabet ({ALPHABET})')
                 rows.append(row)
     print(F'File={infilename} inheader={inheader}')
     df = pd.DataFrame(rows, columns = inheader)
