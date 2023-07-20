@@ -41,6 +41,8 @@ alteration_type = config['alteration_type']
 
 #num_cores = config['num_cores']
 netmhc_ncores = config['netmhc_ncores']
+netmhc_nthreads = config['netmhc_nthreads']
+ergo2_nthreads = config['ergo2_nthreads']
 
 ### Section 4: parameters having some default values of relative paths
 HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
@@ -422,6 +424,7 @@ rule PeptideMHC_binding_affinity_prediction:
            rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, 
            fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
     output: all_vars_peptide_faa, all_vars_netmhcpan_txt
+    threads: netmhc_nthreads # 12
     run: 
         shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py '
             ' | python {script_basedir}/neoexpansion.py --nbits 1.0 > {dna_snvindel_neopeptide_faa}.expansion')
@@ -540,16 +543,23 @@ rule MixCR_run:
         touch {mixcr_output_done_flag}
     '''
 tcr_specificity_software = 'ERGO'
-rule Prioritization_with_each_TCR:
+ergo2_score = F'{prioritization_dir}/{PREFIX}_tcr_specificity_score.csv'
+rule ERGO_run:
     input: all_vars_bindstab_filtered_tsv, mixcr_output_done_flag
-    output: tcr_specificity_result
-    threads: 2
+    output: ergo2_score
+    threads: ergo2_nthreads # 12
     shell: '''
         python {script_basedir}/rank_software_input.py -m {mixcr_output_pref} -n {all_vars_bindstab_filtered_tsv} -o {prioritization_dir} -t {tcr_specificity_software} -p {PREFIX}
         cd {ERGO_EXE_DIR}
-        python {ERGO_PATH} mcpas {prioritization_dir}/{PREFIX}_cdr_ergo.csv {prioritization_dir}/{PREFIX}_tcr_specificity_score.csv
+        python {ERGO_PATH} mcpas {prioritization_dir}/{PREFIX}_cdr_ergo.csv {ergo2_score}
+        '''
+rule Prioritization_with_each_TCR:
+    input: all_vars_bindstab_filtered_tsv, ergo2_score
+    output: tcr_specificity_result
+    threads: 1   
+    shell: '''
         cd {script_basedir}
-        python {script_basedir}/parse_rank_software.py -i {prioritization_dir}/{PREFIX}_tcr_specificity_score.csv -n {all_vars_bindstab_filtered_tsv} -o {prioritization_dir}/ -t {tcr_specificity_software} -p {PREFIX}
+        python {script_basedir}/parse_rank_software.py -i {ergo2_score} -n {all_vars_bindstab_filtered_tsv} -o {prioritization_dir}/ -t {tcr_specificity_software} -p {PREFIX}
         python {script_basedir}/add_detail_info.py -i {prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity.tsv -o {prioritization_dir}/ -p {PREFIX}
     '''
 
