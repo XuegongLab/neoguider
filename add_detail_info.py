@@ -1,6 +1,8 @@
-import os, getopt, sys
+import os, getopt, logging, sys
 import csv
 import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
 
 def main():
     opts,args=getopt.getopt(sys.argv[1:],"hi:o:p:",["input_file=","output_folder=", "prefix="])
@@ -55,7 +57,7 @@ def main():
     fields=next(reader)
     identity_index = fields.index('Identity')
     data_raw = []
-    for line in reader:
+    for line in reader:        
         identity = line[identity_index]
         line_info_string = ""
         if (identity.strip().split('_')[0] in ["SNV", "INS", "DEL", "INDEL"]):
@@ -98,6 +100,7 @@ def main():
         # line[4] = identity.strip().split('_')[0]
         line.insert(-1, line_info_string)
         data_raw.append(line)
+        logging.debug(line)
 
     fields.append("SourceAlterationDetail")
     data=pd.DataFrame(data_raw)

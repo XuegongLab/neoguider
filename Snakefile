@@ -543,6 +543,7 @@ tcr_specificity_software = 'ERGO'
 rule Prioritization_with_each_TCR:
     input: all_vars_bindstab_filtered_tsv, mixcr_output_done_flag
     output: tcr_specificity_result
+    threads: 2
     shell: '''
         python {script_basedir}/rank_software_input.py -m {mixcr_output_pref} -n {all_vars_bindstab_filtered_tsv} -o {prioritization_dir} -t {tcr_specificity_software} -p {PREFIX}
         cd {ERGO_EXE_DIR}
