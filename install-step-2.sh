@@ -38,6 +38,7 @@ if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
     sed -i "s;from pytorch_lightning.logging import TensorBoardLogger;from pytorch_lightning.loggers import TensorBoardLogger # CHANGED_FROM from pytorch_lightning.logging import TensorBoardLogger;g" ERGO-II/Trainer.py
     sed -i "s;self.hparams = hparams;self.save_hyperparameters(hparams) # CHANGED_FROM self.hparams = hparams;g" ERGO-II/Trainer.py
     sed -i 's;@pl.data_loader;#@pl.data_loader # CHANGED_FROM @pl.data_loader;g' ERGO-II/Trainer.py
+    sed -i "s;# df.to_csv('results.csv', index=False);df.to_csv(sys.argv[3], index=False) # df.to_csv('results.csv', index=False);g" ERGO-II/Predict.py
 fi
 
 # IMPORTNT-NOTE: netMHCpan and netMHCstabpan are free for non-commercial use only. For commercial use, please contact DTU Health Tech
