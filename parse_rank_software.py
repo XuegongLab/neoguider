@@ -1,5 +1,5 @@
 
-import csv, sys, os
+import csv, logging, sys, os
 import getopt
 import pandas as pd
 
@@ -55,6 +55,7 @@ identity_index = fields.index('Identity')
 
 for line in reader_neo:
     identity=line[identity_index]
+    logging.debug(F'identity = {identity}')
     line[identity_index]=identity.split("_")[0]+"_"+identity.split("_")[1]
     line.append(0)
     neoantigen_list.append(line)
@@ -64,6 +65,7 @@ if os.path.exists(input_rank_result):
     reader = csv.reader(open(input_rank_result), delimiter=",")
     next(reader, None)
 else:
+    logging.warning(F'The file input_rank_result={input_rank_result} does not exist!')
     reader = []
 max_score = 0
 tcr_max_score = []
@@ -83,13 +85,13 @@ if rank_software_type == "ERGO":
             continue
     for neo in range(0,len(neoantigen_list),1):
         if len(tcr_max_score)!=0:
-            neoantigen_list[neo][8] = tcr_max_score[neo][2]
+            neoantigen_list[neo][-1] = tcr_max_score[neo][2]
         final_rank.append(neoantigen_list[neo])
 else:
     print("[WARNING] No output because of invalid software name. (ERGO)")
 fields.append("TCRSpecificityScore")
-data=pd.DataFrame(final_rank)
-data.columns=fields
+data=pd.DataFrame(final_rank, columns = fields)
+#data.columns=fields
 data["Rank"]=data["TCRSpecificityScore"].rank(method='first',ascending=False)
 data=data.sort_values("Rank")
 data=data.astype({"Rank":int})
