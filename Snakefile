@@ -353,7 +353,7 @@ rule DNA_SmallVariant_effect_prediction:
 dna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
 dna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
 rule DNA_SmallVariant_peptide_generation:
-    input: dna_variant_effect,
+    input: dna_variant_effect, outf_rna_quantification
     output: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, dna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {DNA_PREFIX} --molecule_type=D -t -1
@@ -382,7 +382,7 @@ rule RNA_SmallVariant_effect_prediction:
 rna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
 rna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
 rule RNA_SmallVariant_peptide_generation:
-    input: rna_variant_effect,
+    input: rna_variant_effect, outf_rna_quantification
     output: rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, rna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {RNA_PREFIX} --molecule_type=R -t -1
