@@ -27,7 +27,14 @@ def faa2newfaa(arg):
         ret.append((new_hdr, new_seq))
     return ret
 
-def output(fhdr, fseq, alphabet):
+def output(fhdr, fseq, alphabet, tpm_thres):
+    tpm = 0
+    for i, tok in enumerate(fhdr.split()):
+        if i > 0 and len(tok.split('=')) == 2:
+            k, v = tok.split('=')
+            if k == 'TPM': tpm = float(v)
+    if tpm < tpm_thres: return 1
+    
     fseq = ''.join(fseq)
     for ch in fseq:
         if ch not in alphabet:
@@ -35,6 +42,7 @@ def output(fhdr, fseq, alphabet):
             return ch
     print(fhdr)
     print(fseq)
+    return 0
 
 def main():
     #pp = pprint.PrettyPrinter(indent=4)
@@ -42,16 +50,18 @@ def main():
     parser = argparse.ArgumentParser(description = 'Read FASTA records from stdin, keep records with sequences in --alphabet, and write FASTA records to stdout. ',
             formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-a', '--alphabet', default = ALPHABET, help = 'The alphabet that each kept FASTA sequence must conform to. ')
+    parser.add_argument('-t', '--tpm', default = 1.0, type = float, help = 'Transcript per million (TPM) below which the FASTA sequence is filtered out. ')
+
     args = parser.parse_args()
     fhdr = None
     for line in sys.stdin:
         if line.startswith('>'):
-            if fhdr: output(fhdr, fseq, args.alphabet)
+            if fhdr: output(fhdr, fseq, args.alphabet, args.tpm)
             fhdr = line.strip()
             fseq = []
         else:
             fseq.append(line.strip())
-    output(fhdr, fseq, args.alphabet)
+    if fhdr: output(fhdr, fseq, args.alphabet, args.tpm)
 
 if __name__ == '__main__':
     main()
