@@ -100,7 +100,7 @@ RNA_TUMOR_ISPE  = (RNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', 
 
 hla_typing_dir = F'{RES}/hla_typing'
 info_dir = F'{RES}/info'
-neopeptide_dir = F'{RES}/neopeptides'
+peptide_dir = F'{RES}/peptides'
 alignment_dir = F'{RES}/alignments'
 snvindel_dir = F'{RES}/snvindels'
 pmhc_dir = F'{RES}/pmhcs'
@@ -199,7 +199,7 @@ rule RNA_fusion_detection:
         else:
             shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         
-fusion_neopeptide_faa = F'{neopeptide_dir}/{PREFIX}_fusion.fasta'
+fusion_neopeptide_faa = F'{peptide_dir}/{PREFIX}_fusion.fasta'
 rule RNA_fusion_peptide_generation:
     input:
         starfusion_res, outf_rna_quantification
@@ -208,7 +208,7 @@ rule RNA_fusion_peptide_generation:
     shell:
         'python {script_basedir}/parse_star_fusion.py -i {starfusion_res}'
         ' -e {outf_rna_quantification} -o {starfusion_out} -p {PREFIX} -t 1.0'
-        ' && cp {starfusion_out}/{PREFIX}_fusion.fasta {neopeptide_dir}/{PREFIX}_fusion.fasta'
+        ' && cp {starfusion_out}/{PREFIX}_fusion.fasta {peptide_dir}/{PREFIX}_fusion.fasta'
         ' && cp {starfusion_res} {fusion_info_file}'
         
 rna_tumor_bam = F'{alignment_dir}/{PREFIX}_RNA_tumor.bam'
@@ -249,7 +249,7 @@ rule RNA_postprocess:
    
 asneo_out = F'{RES}/splicing/{PREFIX}_rna_tumor_splicing_asneo_out'
 asneo_sjo = F'{asneo_out}/SJ.out.tab'
-splicing_neopeptide_faa=F'{neopeptide_dir}/{PREFIX}_splicing.fasta'
+splicing_neopeptide_faa=F'{peptide_dir}/{PREFIX}_splicing.fasta'
 rule RNA_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
     resources: mem_mb = star_mem_mb
@@ -274,7 +274,7 @@ rule RNA_splicing_peptide_generation:
         'mkdir -p {info_dir} '
         ' && python {script_basedir}/software/ASNEO/neoheadhunter_ASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t 1.0 '
         ' -e {outf_rna_quantification}'
-        ' && cat {asneo_out}/{PREFIX}_splicing_* > {neopeptide_dir}/{PREFIX}_splicing.fasta'
+        ' && cat {asneo_out}/{PREFIX}_splicing_* > {peptide_dir}/{PREFIX}_splicing.fasta'
 
 rule DNA_tumor_alignment:
     output: dna_tumor_bam, dna_tumor_bai
@@ -350,14 +350,14 @@ rule DNA_SmallVariant_effect_prediction:
         --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {dna_vcf} --output_file {dna_variant_effect}'''
 
-dna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
-dna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
+dna_snvindel_neopeptide_faa = F'{peptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
+dna_snvindel_wt_peptide_faa = F'{peptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
 rule DNA_SmallVariant_peptide_generation:
     input: dna_variant_effect, outf_rna_quantification
     output: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, dna_snvindel_info_file
-    shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
+    shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {peptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {DNA_PREFIX} --molecule_type=D -t -1
-        cp {neopeptide_dir}/{DNA_PREFIX}_tmp_fasta/{DNA_PREFIX}_snv_indel_wt.fasta {dna_snvindel_wt_peptide_faa}
+        cp {peptide_dir}/{DNA_PREFIX}_tmp_fasta/{DNA_PREFIX}_snv_indel_wt.fasta {dna_snvindel_wt_peptide_faa}
         cp {dna_variant_effect} {dna_snvindel_info_file}'''
 
 # end-of-DNA-vep-mainline
@@ -379,14 +379,14 @@ rule RNA_SmallVariant_effect_prediction:
         --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf} --output_file {rna_variant_effect}'''
         # --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf}.isecdir/0001.vcf.gz --output_file {rna_variant_effect}
-rna_snvindel_neopeptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
-rna_snvindel_wt_peptide_faa = F'{neopeptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
+rna_snvindel_neopeptide_faa = F'{peptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
+rna_snvindel_wt_peptide_faa = F'{peptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
 rule RNA_SmallVariant_peptide_generation:
     input: rna_variant_effect, outf_rna_quantification
     output: rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, rna_snvindel_info_file
-    shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {neopeptide_dir} -p {PEP_REF} \
+    shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {peptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {RNA_PREFIX} --molecule_type=R -t -1
-        cp {neopeptide_dir}/{RNA_PREFIX}_tmp_fasta/{RNA_PREFIX}_snv_indel_wt.fasta {rna_snvindel_wt_peptide_faa}
+        cp {peptide_dir}/{RNA_PREFIX}_tmp_fasta/{RNA_PREFIX}_snv_indel_wt.fasta {rna_snvindel_wt_peptide_faa}
         cp {rna_variant_effect} {rna_snvindel_info_file}'''
 
 # end-of-RNA-vep-sideline-for-rescue
