@@ -83,7 +83,7 @@ def main():
             hdr = line.strip()
         else:
             pep = line.strip()
-    hdr_pep_list.append((hdr, pep, args.nbits))
+    if hdr: hdr_pep_list.append((hdr, pep, args.nbits))
     if args.ncores >= 0:
         with multiprocessing.Pool(args.ncores) as p:
             new_hdr_seq_list_list = p.map(faa2newfaa, hdr_pep_list, chunksize = 10)
