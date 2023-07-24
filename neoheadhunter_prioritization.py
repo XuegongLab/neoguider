@@ -1,4 +1,4 @@
-import argparse,copy,csv,getopt,logging,multiprocessing,os,sys,subprocess # ,os
+import argparse,copy,csv,getopt,logging,multiprocessing,os,statistics,sys,subprocess # ,os
 import pandas as pd
 import numpy as np
 from Bio import pairwise2
@@ -173,7 +173,7 @@ def compute_immunogenic_probs(data, paramset):
     t0Abundance    = paramset.tumor_abundance_recognition_thres
     t0Agretopicity = paramset.agretopicity_thres
     t0Foreignness  = paramset.foreignness_thres
-     
+    
     snvindel_location_param     = paramset.snvindel_location_param
     non_snvindel_location_param = paramset.non_snvindel_location_param
     prior_weight                = paramset.immuno_strength_null_hypothesis_prior_weight
@@ -205,13 +205,23 @@ def compute_immunogenic_probs(data, paramset):
     t1_are_presented = (t1presented_nfilters == 0)
     presented_not_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters >  0)
     presented_and_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters == 0)
-    presented_not_recog_burden = sum(data.RNA_normAD * presented_not_recog)
-    presented_and_recog_burden = sum(data.RNA_normAD * presented_and_recog)
-    prior_avg_burden = (presented_and_recog_burden + presented_not_recog_burden + 0.5) / (sum(presented_not_recog) + sum(presented_and_recog) + 1)
-    presented_and_recog_avg_burden = (prior_avg_burden * prior_weight + presented_and_recog_burden) / (prior_weight + sum(presented_and_recog))
-    presented_not_recog_avg_burden = (prior_avg_burden * prior_weight + presented_not_recog_burden) / (prior_weight + sum(presented_not_recog))
+    presented_not_recog_sumtpm = sum(data.RNA_normAD * presented_not_recog)
+    presented_and_recog_sumtpm = sum(data.RNA_normAD * presented_and_recog)
+    presented_not_recog_maxtpm = max(data.RNA_normAD * presented_not_recog)
+    presented_and_recog_maxtpm = max(data.RNA_normAD * presented_and_recog)
+    presented_not_recog_medtpm = statistics.median(ad for (ad, ind) in zip(data.RNA_normAD, presented_not_recog) if ind)
+    presented_and_recog_medtpm = statistics.median(ad for (ad, ind) in zip(data.RNA_normAD, presented_and_recog) if ind)
+    
+    prior_avg_burden = (presented_and_recog_sumtpm + presented_not_recog_sumtpm + 0.5) / (sum(presented_not_recog) + sum(presented_and_recog) + 1)
+    presented_and_recog_average_burden = (prior_avg_burden * prior_weight + presented_and_recog_sumtpm) / (prior_weight + sum(presented_and_recog))
+    presented_not_recog_average_burden = (prior_avg_burden * prior_weight + presented_not_recog_sumtpm) / (prior_weight + sum(presented_not_recog))
+    presented_and_recog_sub_avg_burden = (prior_avg_burden * prior_weight + presented_and_recog_sumtpm - presented_and_recog_maxtpm) / (
+            prior_weight + max((0, sum(presented_and_recog) - 1)))
+    presented_not_recog_sub_avg_burden = (prior_avg_burden * prior_weight + presented_not_recog_sumtpm - presented_not_recog_maxtpm) / (
+            prior_weight + max((0, sum(presented_not_recog) - 1)))
+
     # The variable immuno_strength should be positive/negative for patients with low/high immune strength
-    immuno_strength = log(presented_not_recog_avg_burden / presented_and_recog_avg_burden) * 2 
+    immuno_strength = log(presented_not_recog_average_burden / presented_and_recog_average_burden) * 2 
     
     # Please be aware that t2presented_nfilters should be zero if the data were hard-filtered with t2 thresholds first. 
     log_odds_ratio = (t1BindAff / (t1BindAff + data.MT_BindAff)
@@ -222,7 +232,12 @@ def compute_immunogenic_probs(data, paramset):
     p = 1 / (1 + np.exp(-log_odds_ratio))
     return (p, t2presented_nfilters, t1presented_nfilters, t0recognized_nfilters, 
             sum(presented_not_recog), sum(presented_and_recog), 
-            presented_not_recog_burden, presented_and_recog_burden, immuno_strength)
+            presented_not_recog_sumtpm, presented_and_recog_sumtpm, 
+            presented_not_recog_maxtpm, presented_and_recog_maxtpm,
+            presented_not_recog_medtpm, presented_and_recog_medtpm,
+            presented_not_recog_average_burden, presented_and_recog_average_burden,
+            presented_not_recog_sub_avg_burden, presented_and_recog_sub_avg_burden,
+            immuno_strength)
 
 def read_tesla_xls(tesla_xls, patientID):
     # cat GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.gtf.mini.sortu  | awk '{print $NF}' | sort | uniq | wc
@@ -248,15 +263,24 @@ def read_tesla_xls(tesla_xls, patientID):
     
 def datarank(data, outcsv, paramset, drop_cols = []):
     
-    probs, t2presented_filters, t1presented_filters, t0recognized_filters, \
-            n_presented_not_recognized, n_presented_and_recognized, presented_not_recognized_burden, presented_and_recognized_burden, immuno_strength \
-            = compute_immunogenic_probs(data, paramset)
+    (probs, t2presented_filters, t1presented_filters, t0recognized_filters, 
+            n_presented_not_recognized, n_presented_and_recognized, 
+            presented_not_recog_sumtpm, presented_and_recog_sumtpm,
+            presented_not_recog_maxtpm, presented_and_recog_maxtpm,
+            presented_not_recog_medtpm, presented_and_recog_medtpm,
+            presented_not_recog_average_burden, presented_and_recog_average_burden,
+            presented_not_recog_sub_avg_burden, presented_and_recog_sub_avg_burden, 
+            immuno_strength) = compute_immunogenic_probs(data, paramset)
+    
+    immuno_strength_lo = log(presented_not_recog_sub_avg_burden / presented_and_recog_average_burden) * 2
+    immuno_strength_hi = log(presented_not_recog_average_burden / presented_and_recog_sub_avg_burden) * 2
+
     data['Probability'] = probs
     data['PresentationPreFilters'] = t2presented_filters
     data['PresentationFilters'] = t1presented_filters
     data['RecognitionFilters'] = t0recognized_filters
     data["Rank"]=data["Probability"].rank(method="first", ascending=False)
-
+    
     data=data.sort_values("Rank")
     data=data.astype({"Rank":int})
     data=data.drop(drop_cols, axis=1)
@@ -265,13 +289,28 @@ def datarank(data, outcsv, paramset, drop_cols = []):
     dropcols(data, ['BindLevel', 'BindAff'])
     data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
     with open(outcsv + ".extrainfo", "w") as extrafile:
-        extrafile.write(F'expected_bound_and_immunogenic_pMHC_num={n_presented_and_recognized}\n')
-        extrafile.write(F'expected_bound_not_immunogenic_pMHC_num={n_presented_not_recognized}\n')
-        extrafile.write(F'expected_bound_and_immunogenic_pMHC_rna_normADsum={presented_and_recognized_burden}\n')
-        extrafile.write(F'expected_bound_and_immunogenic_pMHC_rna_normADsum={presented_not_recognized_burden}\n')
-        extrafile.write(F'immuno_strength={immuno_strength}\n')
-        extrafile.write(F'expected_immunogenic_peptide_num={sum(probs)}\n')
-    return data, (n_presented_not_recognized, n_presented_and_recognized, presented_not_recognized_burden, presented_and_recognized_burden, immuno_strength)
+        # Presented: expected to be bound pMHC
+        # Recognized: expected to be immunogenic if bound pMHC
+        # 
+        extrafile.write(F'N_presented_and_recognized={n_presented_and_recognized}\n')
+        extrafile.write(F'N_presented_not_recognized={n_presented_not_recognized}\n')
+        extrafile.write(F'Presented_not_recog_sumtpm={presented_not_recog_sumtpm}\n')
+        extrafile.write(F'Presented_and_recog_sumtpm={presented_and_recog_sumtpm}\n')
+        extrafile.write(F'Presented_not_recog_maxtpm={presented_not_recog_maxtpm}\n')
+        extrafile.write(F'Presented_and_recog_maxtpm={presented_and_recog_maxtpm}\n')
+        extrafile.write(F'Presented_not_recog_medtpm={presented_not_recog_medtpm}\n')
+        extrafile.write(F'Presented_and_recog_medtpm={presented_and_recog_medtpm}\n')
+        extrafile.write(F'Presented_not_recog_average_burden={presented_not_recog_average_burden}\n')
+        extrafile.write(F'Presented_and_recog_average_burden={presented_and_recog_average_burden}\n')
+        extrafile.write(F'Presented_not_recog_sub_avg_burden={presented_not_recog_sub_avg_burden}\n')
+        extrafile.write(F'Presented_and_recog_suv_avg_burden={presented_and_recog_sub_avg_burden}\n')
+        extrafile.write(F'Immuno_strength_lo={immuno_strength_lo}\n')
+        extrafile.write(F'Immuno_strength_hi={immuno_strength_hi}\n')
+        extrafile.write(F'Immuno_strength={immuno_strength}\n')
+        extrafile.write(F'Expected_immunogenic_peptide_num={sum(probs)}\n')
+    def between(x, a, b): return min((max((x,a)),b))
+    immuno_strength_real = between(0, immuno_strength_hi, immuno_strength_lo)
+    return data, (n_presented_not_recognized, n_presented_and_recognized, presented_not_recog_sumtpm, presented_and_recog_sumtpm, immuno_strength)
     
 def main():
     description = 'This script computes the probability that each neoantigen candidate is validated to be immunogenic (i.e., true positive). '
