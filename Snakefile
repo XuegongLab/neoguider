@@ -172,7 +172,7 @@ rule HLA_typing:
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
 rule RNA_transcript_abundance_estimation:
-    output: out = outf_rna_quantification
+    output: outf_rna_quantification
     resources: mem_mb = kallisto_mem_mb
     run:
         if RNA_TUMOR_ISPE:
@@ -426,13 +426,13 @@ rule PeptideMHC_binding_affinity_prediction:
     output: all_vars_peptide_faa, all_vars_netmhcpan_txt
     threads: netmhc_nthreads # 12
     run: 
-        shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py '
+        shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_hard_thres} '
             ' | python {script_basedir}/neoexpansion.py --nbits 1.0 > {dna_snvindel_neopeptide_faa}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_faa}.expansion {dna_snvindel_wt_peptide_faa} '
             ' {rna_snvindel_neopeptide_faa}           {rna_snvindel_wt_peptide_faa} '
             ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} '
-            ' | python {script_basedir}/fasta_filter.py > {all_vars_peptide_faa}')
+            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_hard_thres} > {all_vars_peptide_faa}')
         peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles())
 
 all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
