@@ -178,7 +178,7 @@ def compute_immunogenic_probs(data, paramset):
     non_snvindel_location_param = paramset.non_snvindel_location_param
     prior_weight                = paramset.immuno_strength_null_hypothesis_prior_weight
     
-    are_snvs_or_indels_bool = (data.Identity.str.startswith(('SNV_', 'INS_', 'DEL_', 'INDEL_')))
+    are_snvs_or_indels_bool = (data.Identity.str.startswith(('SNV_', 'INS_', 'DEL_', 'INDEL_', 'FSV_')))
     are_snvs_or_indels = indicator(are_snvs_or_indels_bool)
     
     t0foreign_nfilters = indicator(np.logical_and((t0Foreignness > data.Foreignness), (t0Agretopicity < data.Agretopicity)))
@@ -197,7 +197,7 @@ def compute_immunogenic_probs(data, paramset):
         indicator(data.Quantification < t2Abundance))
     t2dna_nfilters = (
         indicator(data.DNA_altDP < 5) + 
-        indicator(data.DNA_altDP< (data.DNA_refDP + data.DNA_altDP) * 0.1)
+        indicator(data.DNA_altDP < (data.DNA_refDP + data.DNA_altDP + 0.5) * 0.1)
     ) * are_snvs_or_indels
     
     t0_are_foreign = (t0foreign_nfilters == 0)
@@ -220,12 +220,12 @@ def compute_immunogenic_probs(data, paramset):
     presented_not_recog_sub_avg_burden = (prior_avg_burden * prior_weight + presented_not_recog_sumtpm - presented_not_recog_maxtpm) / (
             prior_weight + max((0, sum(presented_not_recog) - 1)))
 
-    # The variable immuno_strength should be positive/negative for patients with low/high immune strength
+    # The variable immuno_strength should be positive/negative for patients with high/low immune strength
     immuno_strength = log(presented_not_recog_average_burden / presented_and_recog_average_burden) * 2 
     
     # Please be aware that t2presented_nfilters should be zero if the data were hard-filtered with t2 thresholds first. 
     log_odds_ratio = (t1BindAff / (t1BindAff + data.MT_BindAff)
-            + np.minimum(1 - t0recognized_nfilters + immuno_strength, 1)
+            + np.minimum(indicator(t0recognized_nfilters == 0) + immuno_strength, 1)
             - t1presented_nfilters 
             - (t2presented_nfilters * 3) - (t2dna_nfilters * 3)
             + (are_snvs_or_indels * snvindel_location_param) + (1 - are_snvs_or_indels) * non_snvindel_location_param)
@@ -334,8 +334,8 @@ If the keyword rerank is in function,
     parser.add_argument('-F', '--fusion-detail', help = 'Optional input file providing SourceAlterationDetail for fusion variants from RNA-seq', default = '')
     parser.add_argument('-S', '--splicing-detail', help = 'Optional input file providing SourceAlterationDetail for splicing variants from RNA-seq', default = '')
     
-    parser.add_argument('-t', '--alteration-type', default = 'snv,indel,fusion,splicing',
-            help = 'type of alterations detected, can be a combination of (snv, indel, sv, and/or fusion separated by comma)')
+    parser.add_argument('-t', '--alteration-type', default = 'snv,indel,fsv,fusion,splicing',
+            help = 'type of alterations detected, can be a combination of (snv, indel, fsv, sv, and/or fusion separated by comma)')
     parser.add_argument('--binding-affinity-hard-thres', default = 34.0*11, type=float,
             help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
     parser.add_argument('--binding-affinity-soft-thres', default = 34.0, type=float,
@@ -359,7 +359,7 @@ If the keyword rerank is in function,
             help = 'location parameter of the logistic regression used to estimate the probability that a peptide-MHC is immunogenic '
             'if the peptide originate from SNVs and InDels. '
             'This parameter does not change the ranking of peptide-MHC immunogenities for peptides originating from SNVs and InDels. ')
-    parser.add_argument('--non-snvindel-location-param', default = -2.5, type=float,
+    parser.add_argument('--non-snvindel-location-param', default = -1.5 - 3, type=float,
             help = 'location parameter of the logistic regression used to estimate the probability that a peptide-MHC is immunogenic '
             'if the peptide does not originate from SNVs and InDels. '
             'This parameter does not change the ranking of peptide-MHC immunogenities for peptides not originating from SNVs and InDels. ')
@@ -422,7 +422,7 @@ If the keyword rerank is in function,
     if fusion_file: fusion_file.close()
     if splicing_file: splicing_file.close() 
 
-    candidate_file = open(args.input_file) # open(F'{args.input_directory}/{prefix}_candidate_pmhc.csv')
+    candidate_file = open(args.input_file) # open(F'{args.input_directory}/{prefix}_candidate_pmhc.tsv')
     reader = csv.reader(candidate_file, delimiter='\t')
     fields=next(reader)
     fields.append("Foreignness")
@@ -452,7 +452,7 @@ If the keyword rerank is in function,
         line_info_string = ""
         is_frameshift = False
         identity = line[identity_idx]
-        if (identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL'] or identity.strip().split('_')[0].startswith("INDEL")):
+        if (identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL', 'FSV'] or identity.strip().split('_')[0].startswith("INDEL")):
             fastaID = identity.strip().split('_')[1]
             selected_snvindel = (rna_snvindel if (fastaID[0] == 'R') else dna_snvindel)
             line_num = int(fastaID[1:])
@@ -466,7 +466,7 @@ If the keyword rerank is in function,
                     if annotation_info[i] == 'Consequence' and (ele[i].lower().startswith('frameshift') or ele[i].lower().startswith('frame_shift')):
                         is_frameshift = True
                 chrom, pos, alts = ele[0].split('_')
-                if dnaseq_small_variants_file:                    
+                if dnaseq_small_variants_file:
                     for vcfrecord in dnaseq_small_variants_file.fetch(chrom, int(pos) - 6, int(pos) + 6):
                         vepvar, varqual, varRD, varAD = var_vcf2vep(vcfrecord)
                         if vep_lenient_equal(vepvar, ele[0]):
@@ -517,12 +517,12 @@ If the keyword rerank is in function,
         line.append(line_info_string if line_info_string else 'N/A')
         line.append(is_frameshift)
         data_raw.append(line)
-        
     picked_rows = []
     alt_type = args.alteration_type.replace(' ', '').strip().split(',')
     for line in data_raw:
         atype = line[identity_idx].strip().split('_')[0]
         if (atype == 'SP'): atype='SPLICING'
+        if (atype == 'FUS'): atype='FUSION'
         if atype.lower() in alt_type: picked_rows.append(line)
     # data can be emtpy (https://stackoverflow.com/questions/44513738/pandas-create-empty-dataframe-with-only-column-names)
     data=pd.DataFrame(picked_rows, columns = fields)
