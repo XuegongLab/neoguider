@@ -5,6 +5,8 @@ import pandas as pd
 
 from Bio.SubsMat import MatrixInfo
 
+NA_REP = 'N/A'
+#NAN_REP = 'nan' # https://en.wikipedia.org/wiki/NaN#Display
 NUM_INFO_INDEXES = 4
 INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX = tuple(range(NUM_INFO_INDEXES))
 
@@ -15,8 +17,8 @@ ALPHABET = 'ARNDCQEGHILKMFPSTWYV'
 
 def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
 
-def str2str_show_empty(s, empty_str = 'N/A'): return (s if s else empty_str)
-def str2str_hide_empty(s, empty_str = 'N/A'): return (s if (s != empty_str) else '')
+def str2str_show_empty(s, empty_str = NA_REP): return (s if s else empty_str)
+def str2str_hide_empty(s, empty_str = NA_REP): return (s if (s != empty_str) else '')
 
 def alnscore_penalty(sequence, neighbour):
     assert len(sequence) == len(neighbour)
@@ -226,17 +228,23 @@ def main():
     parser.add_argument('-f', '--fasta-file',     help = 'fasta file that netMHCpan took as input to generate the netmhcpan-file', required = True)
     parser.add_argument('-n', '--netmhcpan-file', help = 'file containing the output of netMHCpan', required = True)
     parser.add_argument('-o', '--out-tsv-file',   help = F'''output TSV file with the following columns: {', '.join(OUT_HEADER)}''', required = True)
-    parser.add_argument('-b', '--binding-affinity-thres', help = F'binding affinity threshold in nanoMolar above which the peptide-MHC is filtered out '
+    parser.add_argument('-a', '--binding-affinity-thres', help = F'binding affinity threshold in nanoMolar above which the peptide-MHC is filtered out '
             F'(higher nanoMolar value means lower binding affinity)', required = True, type = float)
+    parser.add_argument('-l', '--bind-levels', help = F'comma-separated tokens describing bind levels '
+            F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB')
+    
     args = parser.parse_args()
     
     et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file) 
     df1 = netmhcpan_result_to_df(args.netmhcpan_file, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup)
-    df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) & (df1['MT_pep'] != df1['WT_pep']) & (df1['ET_pep'] != df1['WT_pep'])]
+    df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) 
+            & (df1['BindLevel'].isin(args.bind_levels.split(',')))
+            & (df1['MT_pep'] != df1['WT_pep']) 
+            & (df1['ET_pep'] != df1['WT_pep'])]
     df3 = df2.drop_duplicates(subset=['HLA_type','ET_pep'])
     df3['Agretopicity'] = df3['ET_BindAff'] / df3['WT_BindAff']
     col2last(df3, 'PepTrace')
-    df3.to_csv(args.out_tsv_file, header = 1, sep = '\t', index = 0) # used tsv instead of csv to prevent conflict with min-json encoding
+    df3.to_csv(args.out_tsv_file, header = 1, sep = '\t', index = 0, na_rep = NA_REP) # not NAN_REP # used tsv instead of csv to prevent conflict with min-json encoding
     
 if __name__ == '__main__': main()
 

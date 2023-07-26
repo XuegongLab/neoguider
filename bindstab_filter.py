@@ -66,7 +66,7 @@ def main(args_input = sys.argv[1:]):
     reader = csv.reader(open(input_file), delimiter="\t")
     fields = next(reader)
     sys.stdout.write("Waiting for results from NetMHCStabPan... |")
-    binstab_raw_csv = output_folder+"/"+prefix+"_bindstab_raw.csv"
+    binstab_raw_csv = output_folder+"/"+prefix+"_bindstab_raw.txt"
     if netMHCstabpan_path != 'None': os.system("rm {}".format(binstab_raw_csv))
     
     if netMHCstabpan_path.startswith("ssh://"):
@@ -108,7 +108,7 @@ def main(args_input = sys.argv[1:]):
             logging.info(remote_exe)
             subprocess.call(remote_exe, shell=True)
         else:
-            local_argslist = [netMHCstabpan_path, "-ia", "-p", stage_pep, "-a", hla] #, " > ", output_folder+"/"+prefix+"_bindstab_raw.csv"
+            local_argslist = [netMHCstabpan_path, "-ia", "-p", stage_pep, "-a", hla] #, " > ", output_folder+"/"+prefix+"_bindstab_raw.txt"
             local_exe = "{} >> {}".format(" ".join(local_argslist), binstab_raw_csv)
             if (i & (i-1)) == 0: logging.info(local_exe)
             subprocess.call(local_exe, shell=True)
@@ -118,7 +118,7 @@ def main(args_input = sys.argv[1:]):
     print("OK")
 
     bind_stab = []
-    with open(output_folder+"/"+prefix+"_bindstab_raw.csv") as f:
+    with open(output_folder+"/"+prefix+"_bindstab_raw.txt") as f:
         data = f.read()
     nw_data = data.split('-----------------------------------------------------------------------------------------------------\n')
     WT_neo = []
@@ -131,7 +131,7 @@ def main(args_input = sys.argv[1:]):
             # assert len(WT_neo[i][j].strip().split()) >= 5, F'{WT_neo[i][j]} (btw ( {WT_neo[i][max((j-1,0))]} ) and ( {WT_neo[i][min((j+1,len(WT_neo[i])-1))]} )) at {(i,j)} is not a valid line!'
             bind_stab.append(WT_neo[i][j].strip().split()[5])
     fields.append("BindStab")
-    with open(output_folder+"/"+prefix+"_candidate_pmhc.csv","w") as f:
+    with open(output_folder+"/"+prefix+"_candidate_pmhc.tsv","w") as f:
         write = csv.writer(f, delimiter='\t')
         write.writerow(fields)
         reader = csv.reader(open(input_file), delimiter="\t")

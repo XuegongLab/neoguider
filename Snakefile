@@ -121,7 +121,7 @@ tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_spe
 final_pipeline_out = F'{RES}/{PREFIX}_final_neoheadhunter_neoantigens.tsv'
 
 rule all:
-    input: neoheadhunter_prioritization_tsv, tcr_specificity_result
+    input: neoheadhunter_prioritization_tsv, tcr_specificity_result, final_pipeline_out
 
 # Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
 #   https://github.com/FRED-2/OptiType/issues/125
@@ -441,7 +441,7 @@ rule PeptideMHC_binding_affinity_filter:
     output: all_vars_netmhc_filtered_tsv
     shell: 
         'python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
-        '-b {binding_affinity_hard_thres}'
+        '-a {binding_affinity_hard_thres} -l SB,WB'
 
 try:
     from urllib.parse import urlparse
@@ -471,8 +471,8 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         run_calculation = F'python {bindstab_filter_py} -i {inputfile} -o {outdir} -n {path} -b {binding_stability_hard_thres} -p {PREFIX}'
         call_with_infolog(run_calculation)
     else:
-        outputfile1 = F'{outdir}/{PREFIX}_bindstab_raw.csv'
-        outputfile2 = F'{outdir}/{PREFIX}_candidate_pmhc.csv'
+        outputfile1 = F'{outdir}/{PREFIX}_bindstab_raw.txt'
+        outputfile2 = F'{outdir}/{PREFIX}_candidate_pmhc.tsv'
         remote_rmdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
         remote_mkdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:/tmp/{outdir}/'
@@ -487,11 +487,11 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         call_with_infolog(remote_receive1)
         call_with_infolog(remote_receive2)
 
-all_vars_bindstab_raw_tsv = F'{pmhc_dir}/{PREFIX}_bindstab_raw.csv'
-all_vars_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.csv'
+all_vars_bindstab_raw_txt = F'{pmhc_dir}/{PREFIX}_bindstab_raw.txt'
+all_vars_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.tsv'
 rule PeptideMHC_binding_stability_filter:
     input: all_vars_netmhc_filtered_tsv
-    output: all_vars_bindstab_raw_tsv, all_vars_bindstab_filtered_tsv
+    output: all_vars_bindstab_raw_txt, all_vars_bindstab_filtered_tsv
     run: 
         bindstab_filter_py = F'{script_basedir}/bindstab_filter.py'
         run_netMHCstabpan(bindstab_filter_py, F'{all_vars_netmhc_filtered_tsv}', F'{pmhc_dir}')
@@ -514,7 +514,7 @@ logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization
 rule Prioritization_with_all_TCRs:
     input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf, rna_tumor_depth_summary, 
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file #, splicing_info_file
-    output: neoheadhunter_prioritization_tsv
+    output: neoheadhunter_prioritization_tsv, final_pipeline_out
     run: 
         #call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')
         #call_with_infolog(F'bcftools view {rna_vcf} -Oz -o {rna_vcf}.gz && bcftools index -ft {rna_vcf}.gz')
