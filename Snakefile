@@ -234,18 +234,20 @@ rule RNA_preprocess:
         ' | samtools markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_tumor_bam}'
 
+# This rule is not-used in the end results (but may still be needed for QC), so it is still kept
 HIGH_DP=1000*1000
 rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
 rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
 rule RNA_postprocess:
     input: rna_tumor_bam, rna_tumor_bai
-    output: rna_tumor_depth, rna_tumor_depth_summary
+    output: rna_tumor_depth #, rna_tumor_depth_summary
     shell:
         ' samtools view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
         ' | bcftools mpileup --threads {bcftools_nthreads} -a DP,AD -d {HIGH_DP} -f {REF} -q 0 -Q 0 -T {CTAT}/ref_annot.gtf.mini.sortu.bed - -o {rna_tumor_depth} '
         ' && bcftools index --threads {bcftools_nthreads} -ft {rna_tumor_depth} '
         ''' && cat {CTAT}/ref_annot.gtf.mini.sortu.bed | awk '{{ i += 1; s += $3-$2 }} END {{ print "exome_total_bases\t" s; }}' > {rna_tumor_depth_summary} '''
         ''' && bcftools query -f '%DP\n' {rna_tumor_depth} | awk '{{ i += 1 ; s += $1 }} END {{ print "exome_total_depth\t" s; }}' >> {rna_tumor_depth_summary} '''
+# End of the not-used rule
    
 asneo_out = F'{RES}/splicing/{PREFIX}_rna_tumor_splicing_asneo_out'
 asneo_sjo = F'{asneo_out}/SJ.out.tab'
@@ -512,7 +514,7 @@ prioritization_function_params = ''
 
 logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
 rule Prioritization_with_all_TCRs:
-    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf, rna_tumor_depth_summary, 
+    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf #, rna_tumor_depth_summary, 
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file #, splicing_info_file
     output: neoheadhunter_prioritization_tsv, final_pipeline_out
     run: 
@@ -521,7 +523,7 @@ rule Prioritization_with_all_TCRs:
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
             F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
-            F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} --rna-depth {rna_tumor_depth_summary} '
+            F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
         call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
 
