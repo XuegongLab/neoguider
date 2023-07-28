@@ -240,7 +240,8 @@ rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
 rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
 rule RNA_postprocess:
     input: rna_tumor_bam, rna_tumor_bai
-    output: rna_tumor_depth #, rna_tumor_depth_summary
+    output: rna_tumor_depth 
+    #, rna_tumor_depth_summary
     shell:
         ' samtools view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
         ' | bcftools mpileup --threads {bcftools_nthreads} -a DP,AD -d {HIGH_DP} -f {REF} -q 0 -Q 0 -T {CTAT}/ref_annot.gtf.mini.sortu.bed - -o {rna_tumor_depth} '
@@ -514,8 +515,10 @@ prioritization_function_params = ''
 
 logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
 rule Prioritization_with_all_TCRs:
-    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf #, rna_tumor_depth_summary, 
-        dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file #, splicing_info_file
+    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf, 
+        # rna_tumor_depth_summary, 
+        dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
+        # splicing_info_file
     output: neoheadhunter_prioritization_tsv, final_pipeline_out
     run: 
         #call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')
