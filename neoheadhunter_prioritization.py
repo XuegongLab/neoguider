@@ -206,30 +206,30 @@ def compute_immunogenic_probs(data, paramset):
     
     rescued_by_bindstab_ind = indicator(data.BindStab > paramset.resue_by_bindstab_thres)
 
-    t0foreign_nfilters = indicator(np.logical_and((t0Foreignness > data.Foreignness), (t0Agretopicity < data.Agretopicity)))
+    t0foreign_nfilters = indicator(np.logical_and((t0Foreignness >= data.Foreignness), (t0Agretopicity <= data.Agretopicity)))
     t0recognized_nfilters = (
-        indicator(data.ET_BindAff > t1BindAff) +
-        indicator(data.BindStab < t1BindStab) +
-        indicator(data.Quantification < t0Abundance) + 
+        indicator(data.ET_BindAff >= t1BindAff) +
+        indicator(data.BindStab <= t1BindStab) +
+        indicator(data.Quantification <= t0Abundance) + 
         t0foreign_nfilters)
     t1presented_nfilters = (
-        indicator(data.ET_BindAff > t1BindAff) +
-        indicator(data.BindStab < t1BindStab) +
-        indicator(data.Quantification < t1Abundance) 
+        indicator(data.ET_BindAff >= t1BindAff) +
+        indicator(data.BindStab <= t1BindStab) +
+        indicator(data.Quantification <= t1Abundance) 
     )
     t2presented_nfilters = (
-        indicator(data.ET_BindAff > t2BindAff) +
-        indicator(data.BindStab < t2BindStab) +
-        indicator(data.Quantification < t2Abundance) 
+        indicator(data.ET_BindAff >= t2BindAff) +
+        indicator(data.BindStab <= t2BindStab) +
+        indicator(data.Quantification <= t2Abundance) 
         # + indicator(~data.BindLevel.isin(['SB', 'WB']))
     )
     t2dna_nfilters = (
         indicator(data.DNA_altDP < 5) + 
-        indicator(data.DNA_altDP < (data.DNA_refDP + data.DNA_altDP + 0.5) * 0.1)
+        indicator(data.DNA_altDP < (data.DNA_refDP + data.DNA_altDP + sys.float_info.epsilon) * 0.1)
     ) * are_snvs_or_indels
     t2rna_nfilters = (
         indicator(data.RNA_altDP < 5) + 
-        indicator(data.RNA_altDP < (data.RNA_refDP + data.RNA_altDP + 0.5) * 0.1)
+        indicator(data.RNA_altDP < (data.RNA_refDP + data.RNA_altDP + sys.float_info.epsilon) * 0.1)
     ) * are_snvs_or_indels
     
     t0_are_foreign = (t0foreign_nfilters == 0)
@@ -293,7 +293,7 @@ def compute_immunogenic_probs(data, paramset):
     # if med_immuno_strength <= -1 then heavily penalize for non-recognition by foreignness # this happened for TESLA patient 2
     log_odds_ratio = (t1BindAff / (t1BindAff + data.MT_BindAff)
             + np.maximum(indicator(t0recognized_nfilters == 0), med_immuno_strength)
-            - indicator(t0Foreignness > data.Foreignness) * indicator(med_immuno_strength < 0) * 3
+            - indicator(t0Foreignness >= data.Foreignness) * indicator(med_immuno_strength < 0) * 3
             - (t1presented_nfilters)
             - (t2presented_nfilters * 3)
             - indicator(t2dna_nfilters > 0) * 3
@@ -395,15 +395,15 @@ If the keyword rerank is in function,
     
     parser.add_argument('-t',  u2d('alteration_type'), default = 'snv,indel,fsv,fusion,splicing',
             help = 'type of alterations detected, can be a combination of (snv, indel, fsv, sv, and/or fusion separated by comma)')
-    parser.add_argument(u2d('binding_affinity_hard_thres'), default = 230, type=float, # 34 is not used because newer version of netMHCpan generates lower values
+    parser.add_argument(u2d('binding_affinity_hard_thres'), default = 231, type=float, # 34 is not used because newer version of netMHCpan generates lower values
             help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
-    parser.add_argument(u2d('binding_affinity_soft_thres'), default = 23, type=float,
+    parser.add_argument(u2d('binding_affinity_soft_thres'), default = 21, type=float,
             help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
-    parser.add_argument(u2d('binding_stability_hard_thres'), default = 0.14, type=float,
+    parser.add_argument(u2d('binding_stability_hard_thres'), default = 0.13, type=float,
             help = 'hard threshold of peptide-MHC binding stability to predict peptide-MHC presentation to cell surface')
     parser.add_argument(u2d('binding_stability_soft_thres'), default = 1.4, type=float,
             help = 'soft threshold of peptide-MHC binding stability to predict peptide-MHC presentation to cell surface')
-    parser.add_argument(u2d('tumor_abundance_hard_thres'), default = 1.1, type=float,
+    parser.add_argument(u2d('tumor_abundance_hard_thres'), default = 1.0, type=float,
             help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC recognition by T-cells')
     parser.add_argument(u2d('tumor_abundance_soft_thres'), default = 11, type=float,
             help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC recognition by T-cells')
