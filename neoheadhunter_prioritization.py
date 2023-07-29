@@ -428,7 +428,7 @@ If the keyword rerank is in function,
     parser.add_argument(u2d('immuno_strength_effect_size'), default = 1.5, type=float,
             help = 'The median of recognized neo-abundance to the median of unrecognized one, '
             'above which/below the inverse of which the immuno-strength is high if p-value is also low. ')
-    parser.add_argument(u2d('resue_by_bindstab_thres'), default = 1.4*3, type=float,
+    parser.add_argument(u2d('resue_by_bindstab_thres'), default = 5.0, type=float,
             help = 'A pMHC with WB (weak bind-level) or low RNA-seq variant signal is not penalized if the pMHC binding stability is above this threshold')
     
     
