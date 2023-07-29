@@ -178,7 +178,7 @@ def read_tesla_xls(tesla_xls, patientID):
     
     ret = df.dropna(subset=['ET_BindAff', 'BindStab', 'Quantification', 'Agretopicity', 'Foreignness'])
     # ret = df.dropna(subset=['ET_BindAff', 'BindStab', 'Quantification', 'Foreignness'])
-    if len(ret) * 2 < len(df): logging.severe(F'Only {len(ret)} rows out of {len(df)} rows are kept from the file {tesla_xls} with patientID={patientID}')
+    if len(ret) * 2 < len(df): logging.warning(F'Only {len(ret)} rows out of {len(df)} rows are kept from the file {tesla_xls} with patientID={patientID}')
     return ret
 
 def indicator(x): return np.where(x, 1, 0)
@@ -301,7 +301,7 @@ def compute_immunogenic_probs(data, paramset):
             - rnaqlevel_penal
             + (are_snvs_or_indels * snvindel_location_param) + (1 - are_snvs_or_indels) * non_snvindel_location_param
             )
-    p = 1 / (1 + np.exp(-log_odds_ratio))
+    p = 1 / (1 + 2.0**(-log_odds_ratio))
     return (p, t2presented_nfilters, t1presented_nfilters, t0recognized_nfilters, 
             sum(presented_not_recog), sum(presented_and_recog),
             #presented_not_recog_sumtpm, presented_and_recog_sumtpm,
@@ -395,9 +395,9 @@ If the keyword rerank is in function,
     
     parser.add_argument('-t',  u2d('alteration_type'), default = 'snv,indel,fsv,fusion,splicing',
             help = 'type of alterations detected, can be a combination of (snv, indel, fsv, sv, and/or fusion separated by comma)')
-    parser.add_argument(u2d('binding_affinity_hard_thres'), default = 210, type=float, # 34 is not used because newer version of netMHCpan generates lower values
+    parser.add_argument(u2d('binding_affinity_hard_thres'), default = 230, type=float, # 34 is not used because newer version of netMHCpan generates lower values
             help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
-    parser.add_argument(u2d('binding_affinity_soft_thres'), default = 21, type=float,
+    parser.add_argument(u2d('binding_affinity_soft_thres'), default = 23, type=float,
             help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
     parser.add_argument(u2d('binding_stability_hard_thres'), default = 0.14, type=float,
             help = 'hard threshold of peptide-MHC binding stability to predict peptide-MHC presentation to cell surface')
@@ -423,9 +423,9 @@ If the keyword rerank is in function,
             'if the peptide does not originate from SNVs and InDels. '
             'This parameter does not change the ranking of peptide-MHC immunogenities for peptides not originating from SNVs and InDels. ')
     
-    parser.add_argument(u2d('immuno_strength_p_value'), default = 0.02, type=float,
+    parser.add_argument(u2d('immuno_strength_p_value'), default = 0.05, type=float,
             help = 'The p-value threshold for the mannwhitneyu test for recognized versus unrecognized neo-abundance. ')
-    parser.add_argument(u2d('immuno_strength_effect_size'), default = 2, type=float,
+    parser.add_argument(u2d('immuno_strength_effect_size'), default = 1.5, type=float,
             help = 'The median of recognized neo-abundance to the median of unrecognized one, '
             'above which/below the inverse of which the immuno-strength is high if p-value is also low. ')
     parser.add_argument(u2d('resue_by_bindstab_thres'), default = 1.4*3, type=float,
