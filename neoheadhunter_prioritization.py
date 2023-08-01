@@ -423,7 +423,7 @@ If the keyword rerank is in function,
             'if the peptide does not originate from SNVs and InDels. '
             'This parameter does not change the ranking of peptide-MHC immunogenities for peptides not originating from SNVs and InDels. ')
     
-    parser.add_argument(u2d('immuno_strength_p_value'), default = 0.05, type=float,
+    parser.add_argument(u2d('immuno_strength_p_value'), default = 0.02, type=float,
             help = 'The p-value threshold for the mannwhitneyu test for recognized versus unrecognized neo-abundance. ')
     parser.add_argument(u2d('immuno_strength_effect_size'), default = 1.5, type=float,
             help = 'The median of recognized neo-abundance to the median of unrecognized one, '
