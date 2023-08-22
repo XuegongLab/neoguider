@@ -182,7 +182,7 @@ def read_tesla_xls(tesla_xls, patientID):
     return ret
 
 def indicator(x): return np.where(x, 1, 0)
-def compute_immunogenic_probs(data, paramset):
+def compute_immunogenic_probs(data, paramset, enable_high_varqual):
     
     t2BindAff      = paramset.binding_affinity_hard_thres
     t1BindAff      = paramset.binding_affinity_soft_thres
@@ -223,14 +223,15 @@ def compute_immunogenic_probs(data, paramset):
         indicator(data.Quantification <= t2Abundance) 
         # + indicator(~data.BindLevel.isin(['SB', 'WB']))
     )
+   
     t2dna_nfilters = (
         indicator(data.DNA_altDP < 5) + 
         indicator(data.DNA_altDP < (data.DNA_refDP + data.DNA_altDP + sys.float_info.epsilon) * 0.1)
-    ) * are_snvs_or_indels
+    ) * are_snvs_or_indels * (1 - indicator(enable_high_varqual))
     t2rna_nfilters = (
         indicator(data.RNA_altDP < 5) + 
         indicator(data.RNA_altDP < (data.RNA_refDP + data.RNA_altDP + sys.float_info.epsilon) * 0.1)
-    ) * are_snvs_or_indels
+    ) * are_snvs_or_indels * (1 - indicator(enable_high_varqual))
     
     t0_are_foreign = (t0foreign_nfilters == 0)
     t1_are_presented = (t1presented_nfilters == 0)
@@ -289,6 +290,8 @@ def compute_immunogenic_probs(data, paramset):
     bindlevel_penal = indicator(~data.BindLevel.isin(['SB'])) * 3 * (1 - rescued_by_bindstab_ind * indicator(med_immuno_strength >= 0))
     rnaqlevel_penal = indicator(t2rna_nfilters > 0)           * 3 * (1 - rescued_by_bindstab_ind * indicator(med_immuno_strength >= 0))
     
+    recog_penal = (indicator((t0Foreignness**0.5 >= data.Foreignness) & (t0Agretopicity**0.5 <= data.Agretopicity)) 
+            * indicator((t2presented_nfilters > 0) | (bindlevel_penal > 0) | (rnaqlevel_penal > 0) | indicator(t2dna_nfilters > 0)))
     # if med_immuno_strength >=  1 then neoepitopes are always recognized # this never happened in the TESLA dataset though
     # if med_immuno_strength <= -1 then heavily penalize for non-recognition by foreignness # this happened for TESLA patient 2
     log_odds_ratio = (t1BindAff / (t1BindAff + data.MT_BindAff)
@@ -299,6 +302,7 @@ def compute_immunogenic_probs(data, paramset):
             - indicator(t2dna_nfilters > 0) * 3
             - bindlevel_penal
             - rnaqlevel_penal
+            - recog_penal
             + (are_snvs_or_indels * snvindel_location_param) + (1 - are_snvs_or_indels) * non_snvindel_location_param
             )
     p = 1 / (1 + 2.0**(-log_odds_ratio))
@@ -313,7 +317,7 @@ def compute_immunogenic_probs(data, paramset):
             #presented_not_recog_medtpm_3, presented_and_recog_medtpm_3,
             mwutest, med_immuno_strength)
    
-def datarank(data, outcsv, paramset, drop_cols = []):
+def datarank(data, outcsv, paramset, drop_cols = [], enable_high_varqual = False):
     
     (probs, t2presented_filters, t1presented_filters, t0recognized_filters, 
             n_presented_not_recognized, n_presented_and_recognized, 
@@ -324,7 +328,7 @@ def datarank(data, outcsv, paramset, drop_cols = []):
             #presented_not_recog_sub_avg_burden, presented_and_recog_sub_avg_burden, 
             presented_not_recog_vals,   presented_and_recog_vals,
             #presented_not_recog_medtpm_3, presented_and_recog_medtpm_3,
-            mwutest, med_immuno_strength) = compute_immunogenic_probs(data, paramset)
+            mwutest, med_immuno_strength) = compute_immunogenic_probs(data, paramset, enable_high_varqual)
     
     #immuno_strength_lo = log(presented_not_recog_sub_avg_burden / presented_and_recog_average_burden) * 2
     #immuno_strength_hi = log(presented_not_recog_average_burden / presented_and_recog_sub_avg_burden) * 2
@@ -428,7 +432,7 @@ If the keyword rerank is in function,
     parser.add_argument(u2d('immuno_strength_effect_size'), default = 1.5, type=float,
             help = 'The median of recognized neo-abundance to the median of unrecognized one, '
             'above which/below the inverse of which the immuno-strength is high if p-value is also low. ')
-    parser.add_argument(u2d('resue_by_bindstab_thres'), default = 5.0, type=float,
+    parser.add_argument(u2d('resue_by_bindstab_thres'), default = 4.8, type=float, # from 5.0
             help = 'A pMHC with WB (weak bind-level) or low RNA-seq variant signal is not penalized if the pMHC binding stability is above this threshold')
     
     
@@ -445,16 +449,30 @@ If the keyword rerank is in function,
             help = 'Table S4 and S7 at https://doi.org/10.1016/j.cell.2020.09.015')
     parser.add_argument(u2d('tesla_patientID'), default = -1, type = int,
             help = 'the ID in the PATIENT_ID column to select the rows in --tesla-xls')
+    parser.add_argument(u2d('nsclc2016'), default = '',
+            help = 'Table at https://services.healthtech.dtu.dk/services/MuPeXI-1.1/files/SupplTable2.csv')
     
     args = parser.parse_args()
     paramset = args
     print(paramset)
-    
+   
+    if not isna(args.nsclc2016):
+        origdata = pd.read_csv(args.nsclc2016)
+        origdata['peptideMHC'] = origdata['Mut_peptide'].astype(str) + '/' + origdata['HLA_allele'].astype(str)
+        keptdata = pd.read_csv(args.output_file + '.expansion', sep='\t')        
+        keptdata = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
+        keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + keptdata['HLA_type'].astype(str).str.replace('*', '')
+        print(origdata['peptideMHC'])
+        print(keptdata['peptideMHC'])        
+        keptdata1 = pd.merge(origdata, keptdata, how = 'inner', left_on = 'peptideMHC', right_on = 'peptideMHC')
+        args.snvindel_location_param -= 1.5 # due to the lack of TPM, DNA-seq and RNA-seq variant calling info
+        data1, _ = datarank(keptdata1, args.output_file + '.filtered', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], enable_high_varqual = True)
+        exit(0)
     if not isna(args.tesla_xls):
         data = read_tesla_xls(args.tesla_xls, args.tesla_patientID)
         # read_tesla_xls filled the missing columns (such as RNA-seq stats) with the default values resulting in maximum probabilities
         # so we decrease the location param to decrease the probabilities accordingly.
-        # args.snvindel_location_param -= 0.5
+        args.snvindel_location_param -= 0.5 # due to the lack of DNA-seq and RNA-seq variant calling info
         data2, _ = datarank(data, args.output_file, paramset)
         exit(0)
     if args.function == 'rerank':
@@ -514,7 +532,7 @@ If the keyword rerank is in function,
         line_info_string = ""
         is_frameshift = False
         identity = line[identity_idx]
-        if (identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL', 'FSV'] or identity.strip().split('_')[0].startswith("INDEL")):
+        if ((identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL', 'FSV'] or identity.strip().split('_')[0].startswith("INDEL"))) and dna_snvindel and rna_snvindel:
             fastaID = identity.strip().split('_')[1]
             selected_snvindel = (rna_snvindel if (fastaID[0] == 'R') else dna_snvindel)
             line_num = int(fastaID[1:])
@@ -567,8 +585,8 @@ If the keyword rerank is in function,
                                 "exonLens","exonStarts","ensembl_transcript"]
             for i in range(0, len(ele),1):
                 line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
-        else:
-            continue
+        #else:
+        #    continue
         #line[5] = identity.strip().split('_')[0]
         line.append(dna_varqual)
         line.append(dna_ref_depth)
@@ -601,7 +619,7 @@ If the keyword rerank is in function,
     # are_highly_abundant is not used because we have too little positive data
     # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
     # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
-    keptdata = data    
+    keptdata = data
     #keptdata.to_csv(F'{args.output_file}.debug')
     keptdata1 = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
     data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'])
