@@ -23,6 +23,7 @@ tumor_vaf: 0.1
 normal_vaf: 0.05
 tumor_normal_var_qual : 63 # # Equivalent to tlod=6.3 in Mutect2
 
+binding_affinity_filt_thres: 693.00 # 21*11*3
 binding_affinity_hard_thres: 231.00 # 21*11
 binding_affinity_soft_thres: 21.00 # 21 instead of 34 is used because newer version of netMHCpan generates lower affinities
 binding_stability_hard_thres: 0.1300 # 1.4/11 rounded up
