@@ -524,6 +524,9 @@ prioritization_thres_params = ' '.join([x.strip() for x in F'''
 prioritization_function_params = ''
 
 logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
+
+ruleorder: Prioritization_with_all_TCRs > Prioritization_with_all_TCRs_with_minimal_varinfo
+
 rule Prioritization_with_all_TCRs:
     input: iedb_path, all_vars_bindstab_filtered_tsv, dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf, 
         # rna_tumor_depth_summary, 
