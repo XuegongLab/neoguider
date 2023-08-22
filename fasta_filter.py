@@ -51,7 +51,7 @@ def main():
     parser = argparse.ArgumentParser(description = 'Read FASTA records from stdin, keep records with sequences in --alphabet, and write FASTA records to stdout. ',
             formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-a', '--alphabet', default = ALPHABET, help = 'The alphabet that each kept FASTA sequence must conform to. ')
-    parser.add_argument('-h', '--hla', default = '', type = float, help = 'String of comma-separated HLA alleles to be added as comment to each FASTA sequence. ')
+    parser.add_argument(      '--hla', default = '', type = str, help = 'String of comma-separated HLA alleles to be added as comment to each FASTA sequence. ')
     parser.add_argument('-t', '--tpm', default = 1.0, type = float, help = 'Transcript per million (TPM) below which the FASTA sequence is filtered out. ')
     
     args = parser.parse_args()
