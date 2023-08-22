@@ -29,6 +29,7 @@ tumor_vaf = config['tumor_vaf']
 normal_vaf = config['normal_vaf']
 tumor_normal_var_qual = config['tumor_normal_var_qual']
 
+binding_affinity_filt_thres = config['binding_affinity_filt_thres']
 binding_affinity_hard_thres = config['binding_affinity_hard_thres']
 binding_affinity_soft_thres = config['binding_affinity_soft_thres']
 binding_stability_hard_thres = config['binding_stability_hard_thres']
@@ -140,7 +141,7 @@ hla_bam   = F'{hla_typing_dir}/{PREFIX}.rna_hla_typing.bam'
 hla_out   = F'{hla_typing_dir}/{PREFIX}_hlatype.tsv'
 logging.debug(F'HLA_REF = {HLA_REF}')
 
-rule HLA_typing_preparation:
+rule RNA_tumor_HLA_typing_preparation:
     output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
     resources: mem_mb = bwa_mem_mb
     threads: bwa_nthreads
@@ -171,7 +172,7 @@ rule HLA_typing:
     
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
-rule RNA_transcript_abundance_estimation:
+rule RNA_tumor_transcript_abundance_estimation:
     output: outf_rna_quantification
     resources: mem_mb = kallisto_mem_mb
     run:
@@ -186,7 +187,7 @@ starfusion_bam = F'{starfusion_out}/Aligned.out.bam'
 starfusion_res = F'{starfusion_out}/star-fusion.fusion_predictions.abridged.coding_effect.tsv'
 starfusion_sjo = F'{starfusion_out}/SJ.out.tab'
 starfusion_params = F' --genome_lib_dir {CTAT} --examine_coding_effect --output_dir {starfusion_out} --min_FFPM 0.1 '
-rule RNA_fusion_detection:
+rule RNA_tumor_fusion_detection:
     output:
         outbam = starfusion_bam,
         outres = starfusion_res,
@@ -221,7 +222,7 @@ rna_t_spl_bai = F'{alignment_dir}/{PREFIX}_RNA_t_spl.bam.bai'
 dna_tumor_bai = F'{alignment_dir}/{PREFIX}_DNA_tumor.bam.bai'
 dna_normal_bai = F'{alignment_dir}/{PREFIX}_DNA_normal.bam.bai'
 
-rule RNA_preprocess:
+rule RNA_tumor_preprocessing:
     input: starfusion_bam
     output:
         outbam = rna_tumor_bam,
@@ -238,7 +239,7 @@ rule RNA_preprocess:
 HIGH_DP=1000*1000
 rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
 rna_tumor_depth_summary = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth_summary.tsv.gz'
-rule RNA_postprocess:
+rule RNA_postprocessing:
     input: rna_tumor_bam, rna_tumor_bai
     output: rna_tumor_depth 
     #, rna_tumor_depth_summary
@@ -253,7 +254,7 @@ rule RNA_postprocess:
 asneo_out = F'{RES}/splicing/{PREFIX}_rna_tumor_splicing_asneo_out'
 asneo_sjo = F'{asneo_out}/SJ.out.tab'
 splicing_neopeptide_faa=F'{peptide_dir}/{PREFIX}_splicing.fasta'
-rule RNA_splicing_alignment:
+rule RNA_tumor_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
     resources: mem_mb = star_mem_mb
     threads: star_nthreads
@@ -400,7 +401,8 @@ def retrieve_hla_alleles():
         reader = csv.reader(file, delimiter='\t')
         for line in reader:
             if line[0] == '': continue
-            for i in range(1,7,1): ret.append('HLA-' + line[i].replace('*',''))
+            for i in range(1,7,1): 
+                if line[i] != 'None': ret.append('HLA-' + line[i].replace('*',''))
     return ret
 
 def run_netMHCpan(args):
@@ -422,13 +424,13 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs):
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
-rule PeptideMHC_binding_affinity_prediction:
-    input: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa, 
-           rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, 
-           fusion_neopeptide_faa, splicing_neopeptide_faa, hla_out
-    output: all_vars_peptide_faa, all_vars_netmhcpan_txt
-    threads: netmhc_nthreads # 12
-    run: 
+rule Peptide_preprocessing:
+    input: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa,
+           rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa,
+           fusion_neopeptide_faa, splicing_neopeptide_faa
+    output: all_vars_peptide_faa
+    threads: 1
+    run:
         shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_hard_thres} '
             ' | python {script_basedir}/neoexpansion.py --nbits 1.0 > {dna_snvindel_neopeptide_faa}.expansion')
         shell('cat'
@@ -436,15 +438,12 @@ rule PeptideMHC_binding_affinity_prediction:
             ' {rna_snvindel_neopeptide_faa}           {rna_snvindel_wt_peptide_faa} '
             ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} '
             ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_hard_thres} > {all_vars_peptide_faa}')
+rule PeptideMHC_binding_affinity_prediction:
+    input: all_vars_peptide_faa, hla_out
+    output: all_vars_netmhcpan_txt
+    threads: netmhc_nthreads # 12
+    run: 
         peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles())
-
-all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
-rule PeptideMHC_binding_affinity_filter:
-    input: all_vars_peptide_faa, all_vars_netmhcpan_txt
-    output: all_vars_netmhc_filtered_tsv
-    shell: 
-        'python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
-        '-a {binding_affinity_hard_thres} -l SB,WB'
 
 try:
     from urllib.parse import urlparse
@@ -490,13 +489,24 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         call_with_infolog(remote_receive1)
         call_with_infolog(remote_receive2)
 
+all_vars_netmhc_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
+#rule PeptideMHC_binding_affinity_filter:
+#    input: all_vars_peptide_faa, all_vars_netmhcpan_txt
+#    output: all_vars_netmhc_filtered_tsv
+#    shell: 
+#        'python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
+#        '-a {binding_affinity_filt_thres} -l SB,WB'
+
 all_vars_bindstab_raw_txt = F'{pmhc_dir}/{PREFIX}_bindstab_raw.txt'
 all_vars_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.tsv'
-rule PeptideMHC_binding_stability_filter:
-    input: all_vars_netmhc_filtered_tsv
+rule PeptideMHC_binding_stability_prediction:
+    input: all_vars_peptide_faa, all_vars_netmhcpan_txt
+    # all_vars_netmhc_filtered_tsv
     output: all_vars_bindstab_raw_txt, all_vars_bindstab_filtered_tsv
     run: 
         bindstab_filter_py = F'{script_basedir}/bindstab_filter.py'
+        shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
+              '-a {binding_affinity_filt_thres} -l SB,WB,NB')
         run_netMHCstabpan(bindstab_filter_py, F'{all_vars_netmhc_filtered_tsv}', F'{pmhc_dir}')
 
 iedb_path = F'{script_basedir}/database/iedb.fasta' # '/mnt/d/code/neohunter/NeoHunter/database/iedb.fasta'
@@ -515,7 +525,7 @@ prioritization_function_params = ''
 
 logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
 rule Prioritization_with_all_TCRs:
-    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_vcf, rna_vcf, 
+    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf, 
         # rna_tumor_depth_summary, 
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
         # splicing_info_file
@@ -530,6 +540,17 @@ rule Prioritization_with_all_TCRs:
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
         call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
 
+rule Prioritization_with_all_TCRs_with_minimal_varinfo:
+    input: iedb_path, all_vars_bindstab_filtered_tsv #, dna_vcf, rna_vcf, 
+        # dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
+        # splicing_info_file
+    output: neoheadhunter_prioritization_tsv, final_pipeline_out
+    run: 
+        call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
+            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
+            F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
+        call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
+
 ### auxiliary prioritization steps
 
 mixcr_output_dir = F'{prioritization_dir}/{PREFIX}_mixcr_output'
@@ -538,7 +559,7 @@ mixcr_output_done_flag = F'{mixcr_output_dir}.DONE'
 mixcr_cmdline_params = ' analyze shotgun -s hs --starting-material rna --only-productive --receptor-type tcr '
 mixcr_mem_gb = max((mixcr_mem_mb // 1000 - 4, 1))
 logging.debug(F'MIXCR_PATH = {MIXCR_PATH}')
-rule MixCR_run:
+rule TCR_clonotype_detection:
     output: mixcr_output_done_flag
     resources: mem_mb = mixcr_mem_mb
     threads: mixcr_nthreads
@@ -549,7 +570,7 @@ rule MixCR_run:
     '''
 tcr_specificity_software = 'ERGO'
 ergo2_score = F'{prioritization_dir}/{PREFIX}_tcr_specificity_score.csv'
-rule ERGO_run:
+rule PeptideMHC_TCR_interaction_prediction:
     input: all_vars_bindstab_filtered_tsv, mixcr_output_done_flag
     output: ergo2_score
     threads: ergo2_nthreads # 12
