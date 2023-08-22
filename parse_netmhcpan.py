@@ -231,7 +231,7 @@ def main():
     parser.add_argument('-a', '--binding-affinity-thres', help = F'binding affinity threshold in nanoMolar above which the peptide-MHC is filtered out '
             F'(higher nanoMolar value means lower binding affinity)', required = True, type = float)
     parser.add_argument('-l', '--bind-levels', help = F'comma-separated tokens describing bind levels '
-            F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB')
+            F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB,NB')
     
     args = parser.parse_args()
     
