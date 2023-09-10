@@ -9,6 +9,8 @@ from math import log, exp
 
 import pysam
 
+BIG_INT = 1000*1000
+
 def u2d(s): return '--' + s.replace('_', '-')
 
 def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
@@ -177,7 +179,6 @@ def read_tesla_xls(tesla_xls, patientID):
     df['RNA_altDP'] = 100
     
     ret = df.dropna(subset=['ET_BindAff', 'BindStab', 'Quantification', 'Agretopicity', 'Foreignness'])
-    # ret = df.dropna(subset=['ET_BindAff', 'BindStab', 'Quantification', 'Foreignness'])
     if len(ret) * 2 < len(df): logging.warning(F'Only {len(ret)} rows out of {len(df)} rows are kept from the file {tesla_xls} with patientID={patientID}')
     return ret
 
@@ -199,7 +200,6 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
     
     snvindel_location_param     = paramset.snvindel_location_param
     non_snvindel_location_param = paramset.non_snvindel_location_param
-    # prior_weight                = paramset.immuno_strength_null_hypothesis_prior_weight
     
     are_snvs_or_indels_bool = (data.Identity.str.startswith(('SNV_', 'INS_', 'DEL_', 'INDEL_', 'FSV_')))
     are_snvs_or_indels = indicator(are_snvs_or_indels_bool)
@@ -221,9 +221,9 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
         indicator(data.ET_BindAff >= t2BindAff) +
         indicator(data.BindStab <= t2BindStab) +
         indicator(data.Quantification <= t2Abundance) 
-        # + indicator(~data.BindLevel.isin(['SB', 'WB']))
     )
-   
+    # Please be aware that t2presented_nfilters should be zero if the data were hard-filtered with t2 thresholds first. 
+    
     t2dna_nfilters = (
         indicator(data.DNA_altDP < 5) + 
         indicator(data.DNA_altDP < (data.DNA_refDP + data.DNA_altDP + sys.float_info.epsilon) * 0.1)
@@ -237,40 +237,15 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
     t1_are_presented = (t1presented_nfilters == 0)
     presented_not_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters >  0)
     presented_and_recog = t1_are_presented * are_snvs_or_indels * indicator(t0foreign_nfilters == 0)
-    #presented_not_recog_sumtpm = sum(data.RNA_normAD * presented_not_recog)
-    #presented_and_recog_sumtpm = sum(data.RNA_normAD * presented_and_recog)
-    #presented_not_recog_maxtpm = max(data.RNA_normAD * presented_not_recog)
-    #presented_and_recog_maxtpm = max(data.RNA_normAD * presented_and_recog)
     presented_not_recog_vals = sorted(ad for (ad, ind) in zip(data.RNA_normAD, presented_not_recog) if ind)
     presented_and_recog_vals = sorted(ad for (ad, ind) in zip(data.RNA_normAD, presented_and_recog) if ind)
     presented_not_recog_medtpm = (statistics.median(presented_not_recog_vals) if len(presented_not_recog_vals) else math.nan)
     presented_and_recog_medtpm = (statistics.median(presented_and_recog_vals) if len(presented_and_recog_vals) else math.nan)
     
-    #def get_lower_upper_bounds(arr):
-    #    npos = len(arr)
-    #    # https://en.wikipedia.org/wiki/Standard_normal_table
-    #    mednpos = 1.28*math.sqrt(0.5*(1-0.5)*len(arr)) # 85% -> 1.44 | 90% -> 1.645
-    #    medlower = npos * 0.5 - mednpos
-    #    medupper = npos * 0.5 + mednpos
-    #    retlower = (np.percentile(arr, medlower / len(arr) * 100) if (medlower > 0.5) else -float('inf'))
-    #    retupper = (np.percentile(arr, medupper / len(arr) * 100) if (medupper < len(arr) - 0.5) else float('inf'))
-    #    retmid = (np.percentile(arr, 0.5*100) if arr else 0)
-    #    return (retlower, retmid, retupper)
-    
-    #presented_not_recog_medtpm_3 = get_lower_upper_bounds(presented_not_recog_vals)
-    #presented_and_recog_medtpm_3 = get_lower_upper_bounds(presented_and_recog_vals)
-    
     if presented_not_recog_vals and presented_and_recog_vals:
         mwutest = scipy.stats.mannwhitneyu(presented_not_recog_vals, presented_and_recog_vals)
     else:
         mwutest = None
-    #prior_avg_burden = (presented_and_recog_sumtpm + presented_not_recog_sumtpm + 0.5) / (sum(presented_not_recog) + sum(presented_and_recog) + 1)
-    #presented_and_recog_average_burden = (prior_avg_burden * prior_weight + presented_and_recog_sumtpm) / (prior_weight + sum(presented_and_recog))
-    #presented_not_recog_average_burden = (prior_avg_burden * prior_weight + presented_not_recog_sumtpm) / (prior_weight + sum(presented_not_recog))
-    #presented_and_recog_sub_avg_burden = (prior_avg_burden * prior_weight + presented_and_recog_sumtpm - presented_and_recog_maxtpm) / (
-    #        prior_weight + max((0, sum(presented_and_recog) - 1)))
-    #presented_not_recog_sub_avg_burden = (prior_avg_burden * prior_weight + presented_not_recog_sumtpm - presented_not_recog_maxtpm) / (
-    #        prior_weight + max((0, sum(presented_not_recog) - 1)))
 
     # The variable immuno_strength should be positive/negative for patients with high/low immune strength
     # immuno_strength = log(presented_not_recog_average_burden / presented_and_recog_average_burden) * 2 
@@ -280,16 +255,13 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
             med_immuno_strength = -1
         if paramset.immuno_strength_effect_size * presented_and_recog_medtpm < presented_not_recog_medtpm:
             med_immuno_strength = 1
-    #if presented_not_recog_medtpm_3[1] < presented_and_recog_medtpm_3[0] and presented_not_recog_medtpm_3[2] < presented_and_recog_medtpm_3[1]:
-    #    med_immuno_strength = -1
-    #if presented_and_recog_medtpm_3[1] < presented_not_recog_medtpm_3[0] and presented_and_recog_medtpm_3[2] > presented_not_recog_medtpm_3[1]:
-    #    med_immuno_strength = 1
-    
-    # Please be aware that t2presented_nfilters should be zero if the data were hard-filtered with t2 thresholds first. 
     
     bindlevel_penal = indicator(~data.BindLevel.isin(['SB'])) * 3 * (1 - rescued_by_bindstab_ind * indicator(med_immuno_strength >= 0))
     rnaqlevel_penal = indicator(t2rna_nfilters > 0)           * 3 * (1 - rescued_by_bindstab_ind * indicator(med_immuno_strength >= 0))
-    
+    rescue_status = ((indicator(med_immuno_strength >= 0) + 1) * 1000 
+        + (indicator(~data.BindLevel.isin(['SB'])) + 1) * 100 + (indicator(t2rna_nfilters > 0) + 1) * 10
+        + (rescued_by_bindstab_ind + 1))
+    data['rescue_status'] = rescue_status
     recog_penal = (indicator((t0Foreignness**0.5 >= data.Foreignness) & (t0Agretopicity**0.5 <= data.Agretopicity)) 
             * indicator((t2presented_nfilters > 0) | (bindlevel_penal > 0) | (rnaqlevel_penal > 0) | indicator(t2dna_nfilters > 0)))
     # if med_immuno_strength >=  1 then neoepitopes are always recognized # this never happened in the TESLA dataset though
@@ -308,37 +280,36 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
     p = 1 / (1 + 2.0**(-log_odds_ratio))
     return (p, t2presented_nfilters, t1presented_nfilters, t0recognized_nfilters, 
             sum(presented_not_recog), sum(presented_and_recog),
-            #presented_not_recog_sumtpm, presented_and_recog_sumtpm,
-            #presented_not_recog_maxtpm, presented_and_recog_maxtpm,
             presented_not_recog_medtpm, presented_and_recog_medtpm,
-            #presented_not_recog_average_burden, presented_and_recog_average_burden,
-            #presented_not_recog_sub_avg_burden, presented_and_recog_sub_avg_burden,
             presented_not_recog_vals,   presented_and_recog_vals,
-            #presented_not_recog_medtpm_3, presented_and_recog_medtpm_3,
             mwutest, med_immuno_strength)
    
 def datarank(data, outcsv, paramset, drop_cols = [], enable_high_varqual = False):
     
     (probs, t2presented_filters, t1presented_filters, t0recognized_filters, 
             n_presented_not_recognized, n_presented_and_recognized, 
-            #presented_not_recog_sumtpm, presented_and_recog_sumtpm,
-            #presented_not_recog_maxtpm, presented_and_recog_maxtpm,
             presented_not_recog_medtpm, presented_and_recog_medtpm,
-            #presented_not_recog_average_burden, presented_and_recog_average_burden,
-            #presented_not_recog_sub_avg_burden, presented_and_recog_sub_avg_burden, 
             presented_not_recog_vals,   presented_and_recog_vals,
-            #presented_not_recog_medtpm_3, presented_and_recog_medtpm_3,
             mwutest, med_immuno_strength) = compute_immunogenic_probs(data, paramset, enable_high_varqual)
     
-    #immuno_strength_lo = log(presented_not_recog_sub_avg_burden / presented_and_recog_average_burden) * 2
-    #immuno_strength_hi = log(presented_not_recog_average_burden / presented_and_recog_sub_avg_burden) * 2
-    
+    # We are unable to reproduce the AUCs at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8983234/ using their NeoScore equations
+    # The AUCs that we obtained are much worse than theirs
+    # For the above paper, neither code nor intermediate results are available
+    # Therefore, we omitted comparison for now. 
+    data['NeoScore'] = (-4.1922
+            + 2.2958 * np.log(data['Quantification']+0.1) / log(10) 
+            - 1.8478 * np.log(data['ET_BindAff']) / log(10) 
+            + 0.7698 * np.log(data['BindStab'] / log(10)))
+    data['AbbrevNeoScore'] = (-1.2364 
+            - 1.2146 * np.log(data['ET_BindAff']) / log(10) 
+            + 0.9903 * np.log(data['BindStab']) / log(10))
     data['Probability'] = probs
     data['PresentationPreFilters'] = t2presented_filters
     data['PresentationFilters'] = t1presented_filters
     data['RecognitionFilters'] = t0recognized_filters
     data["Rank"]=data["Probability"].rank(method="first", ascending=False)
     
+    data['Rank'] = data['Rank'].fillna(BIG_INT)
     data=data.sort_values("Rank")
     data=data.astype({"Rank":int})
     data=data.drop(drop_cols, axis=1)
@@ -445,17 +416,56 @@ If the keyword rerank is in function,
 
     parser.add_argument(u2d('function'), default = '',
             help = 'The keyword rerank means using existing stats (affinity, stability, etc.) to re-rank the neoantigen candidates')
+    parser.add_argument(u2d('truth_file'), default = '',
+            help = 'File containing ground-truth of immunogenicity for some tested pMHCs')
+    parser.add_argument(u2d('truth_patientID'), default = '',
+            help = 'PatientID to select rows from the truth-file')
+ 
     parser.add_argument(u2d('tesla_xls'), default = '',
             help = 'Table S4 and S7 at https://doi.org/10.1016/j.cell.2020.09.015')
     parser.add_argument(u2d('tesla_patientID'), default = -1, type = int,
             help = 'the ID in the PATIENT_ID column to select the rows in --tesla-xls')
     parser.add_argument(u2d('nsclc2016'), default = '',
-            help = 'Table at https://services.healthtech.dtu.dk/services/MuPeXI-1.1/files/SupplTable2.csv')
+            help = 'Table S2 at https://services.healthtech.dtu.dk/services/MuPeXI-1.1/files/SupplTable2.csv')
+    parser.add_argument(u2d('PD'), default = '',
+            help = 'Table S8 at https://www.science.org/doi/10.1126/science.aaf2288')
     
     args = parser.parse_args()
     paramset = args
     print(paramset)
-   
+    
+    if not isna(args.truth_file):
+        def norm_hla(h): return h.astype(str).str.replace('*', '', regex=False).str.replace('HLA-', '', regex=False).str.replace(':', '', regex=False).str.strip()
+        origdata = pd.read_csv(args.truth_file)
+        origdata = origdata[origdata['PatientID'] == args.truth_patientID]
+        origdata['peptideMHC'] = origdata['MT_pep'].astype(str) + '/' + norm_hla(origdata['HLA_type'])
+        
+        #keptdata = pd.read_csv(args.output_file, sep='\t')
+        keptdata = pd.read_csv(args.output_file + '.expansion', sep='\t')
+        keptdata = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
+        keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + norm_hla(keptdata['HLA_type'])
+        
+        print(origdata['peptideMHC'])
+        print(keptdata['peptideMHC'])
+        keptdata1 = pd.merge(origdata, keptdata, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
+        args.snvindel_location_param -= np.mean(keptdata1['Offset'])
+        data1, _ = datarank(keptdata1, args.output_file + '.validation', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], enable_high_varqual = True)
+        exit(0)
+    if not isna(args.PD):
+        # Please note that this expriment is special
+        origdata = pd.read_excel(args.PD)
+        origdata['peptideMHC'] = origdata['Mutant peptide'].astype(str) + '/' + origdata['HLA restriction'].astype(str).str.replace('*', '').str.replace('HLA-', '')
+        # To be consistent with https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8983234/figure/F6/
+        origdata = origdata[origdata['CD8+ T cell response induced in healthy donor: Tested/Observed'].astype(str).str.startswith('YES')]
+        keptdata = pd.read_csv(args.output_file + '.expansion', sep='\t')
+        keptdata = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
+        keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + keptdata['HLA_type'].astype(str).str.replace('*', '').str.replace('HLA-', '')
+        print(origdata['peptideMHC'])
+        print(keptdata['peptideMHC'])
+        keptdata1 = pd.merge(origdata, keptdata, how = 'inner', left_on = 'peptideMHC', right_on = 'peptideMHC')
+        args.snvindel_location_param -= 0.5 # due to the lack of TPM and RNA-seq variant calling info
+        data1, _ = datarank(keptdata1, args.output_file + '.filtered', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], enable_high_varqual = True)
+        exit(0)
     if not isna(args.nsclc2016):
         origdata = pd.read_csv(args.nsclc2016)
         origdata['peptideMHC'] = origdata['Mut_peptide'].astype(str) + '/' + origdata['HLA_allele'].astype(str)
@@ -615,6 +625,7 @@ If the keyword rerank is in function,
     data.Agretopicity = data.Agretopicity.astype(str).replace('N/A', np.nan).astype(float)
     data.Quantification = data.Quantification.astype(float)
     data['RNA_normAD'] = data.Quantification # data.RNA_altDP.astype(float) / get_avg_depth_from_rna_depth_filename(args.rna_depth)
+
     
     # are_highly_abundant is not used because we have too little positive data
     # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
