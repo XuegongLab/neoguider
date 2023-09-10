@@ -126,16 +126,17 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
             if toks[0] == 'Pos': 
                 assert inheader == None or inheader == toks
                 inheader = toks
-                assert len(inheader) == 17, F'The header-line {line} is invalid.'
+                assert len(inheader) == 17 or len(inheader) == 15, F'The header-line {line} is invalid.'
             else:
-                assert (len(toks) == 16 or len(toks) == 18), F'The content-line {line} is invalid'
-                if len(toks) == 16: row = toks + ['NB'] # no-binding
-                if len(toks) == 18: row = toks[0:16] + [toks[17]]
+                assert (len(toks) == (len(inheader) - 1) or len(toks) == (len(inheader) + 1)), F'The content-line {line} is invalid'
+                if len(toks) == (len(inheader) - 1): row = toks + ['NB'] # no-binding
+                if len(toks) == (len(inheader) + 1): row = toks[0:(len(inheader) - 1)] + [toks[(len(inheader))]]
                 for aa in toks[2]: # aaseq2canonical(toks[2]):
                     assert aa in ALPHABET, (F'The amino-acid sequence ({toks[2]}) from ({toks}) does not use the alphabet ({ALPHABET})')
                 rows.append(row)
     print(F'File={infilename} inheader={inheader}')
     df = pd.DataFrame(rows, columns = inheader)
+    df.columns = df.columns.str.replace('HLA', 'MHC')
     mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist = []
     mtpep_pipesep_dflist = []
     wtpep_pipesep_dflist = []
