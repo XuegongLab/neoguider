@@ -41,3 +41,21 @@ netmhc_nthreads: 12
 ergo2_nthreads: 12
 fifo_dir: '/tmp'
 
+# You can add the comma_sep_hla_list and all_vars_peptide_faa config params if you would like to run with given MHCs and peptides
+# for example:
+#   comma_sep_hla_list = 'HLA-A01:01,HLA-A02:01'
+#   all_vars_peptide_faa = /path/to/your/peptide_fasta
+# where the /path/to/your/peptide_fasta file contains
+#   >${vTypes[0]}_${vIDs[0]} MT=${pepseq1} WT=${pepseq2} TPM=100
+#   ${pepseq1}
+#   >${vTypes[1]}_${vIDs[1]} MT=${pepseq1} WT=${pepseq2} TPM=100
+#   ${pepseq2}
+#   >${vTypes[2]}_${vIDs[2]} MT=${pepseq3} TPM=200
+#   ${pepseq3}
+# such that
+#   each element of $vTypes can be 'SNV' 'INS' 'DEL' 'FUS' or 'SP' and
+#   each element of $vIDs consists of at most 11 alpha-numeric characters and
+#   the MT and TPM key-value pairs are required and
+#   the WT key-value pair is optional and
+#   ${pepseq1} ${pepseq2} ${pepseq3} all consist of capital letters from the alphabet of the 20 standard amino acids
+

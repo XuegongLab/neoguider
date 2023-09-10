@@ -65,6 +65,8 @@ tmpdirID = '.'.join([script_start_datetime.strftime('%Y-%m-%d_%H-%M-%S'), str(os
 fifo_path_prefix = os.path.sep.join([config['fifo_dir'], tmpdirID])
 logging.debug(F'fifo_path_prefix={fifo_path_prefix}')
 
+variantcaller = config.get('variantcaller', 'uvc') # uvc or mutect2, please be aware that the performance of mutect2 is not evaluated. 
+
 ### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
 
 samtools_nthreads = 3
@@ -112,11 +114,12 @@ RNA_PREFIX = F'{PREFIX}_RNA'
 dna_snvindel_info_file = F'{info_dir}/{DNA_PREFIX}_snv_indel.annotation.tsv'
 rna_snvindel_info_file = F'{info_dir}/{RNA_PREFIX}_snv_indel.annotation.tsv'
 
-
 fusion_info_file = F'{info_dir}/{PREFIX}_fusion.tsv'
 splicing_info_file = F'{info_dir}/{PREFIX}_splicing.tsv' # TODO: check if it makese sense to add_detail_info to TCR-unaware prioritization
 
 neoheadhunter_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_neoheadhunter.tsv'
+pmhc_as_input_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_pmhc_as_input.tsv' # prioritization from pMHC candidate summary info
+
 tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity_with_detail.tsv'
 
 final_pipeline_out = F'{RES}/{PREFIX}_final_neoheadhunter_neoantigens.tsv'
@@ -139,6 +142,15 @@ hla_fq_se = F'{hla_typing_dir}/{hla_fq_se_fname}'
 
 hla_bam   = F'{hla_typing_dir}/{PREFIX}.rna_hla_typing.bam'
 hla_out   = F'{hla_typing_dir}/{PREFIX}_hlatype.tsv'
+
+if 'comma_sep_hla_list' in config:
+    os.makedirs(os.path.dirname(hla_out), exist_ok=True)
+    with open(hla_out, 'w') as f: f.write('NotUsed')
+elif os.path.exists(hla_out):
+    with open(hla_out) as f: 
+        lines = f.readlines()
+        if lines and lines[0].strip() == 'NotUsed': os.system(F'rm {hla_out}')
+
 logging.debug(F'HLA_REF = {HLA_REF}')
 
 rule RNA_tumor_HLA_typing_preparation:
@@ -304,41 +316,53 @@ rule DNA_normal_alignment:
         ' | samtools markdup -@ {samtools_nthreads} - {dna_normal_bam}'
         ' && samtools index -@ {samtools_nthreads} {dna_normal_bam}'
     
+gatk_jar=F'{script_basedir}/software/gatk-4.3.0.0/gatk-package-4.3.0.0-local.jar'
+
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
 dna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/{PREFIX}_DNA_tumor_uvc1.vcf.gz'
 rule DNA_SmallVariant_detection:
     input: tbam=dna_tumor_bam, tbai=dna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai,
-    output: dna_vcf,dna_tonly_raw_vcf,
+    output: dna_vcf, #dna_tonly_raw_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
-        vcf3 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',        
+        vcf3 = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',
     resources: mem_mb = uvc_mem_mb
     threads: uvc_nthreads
-    shell:
+    run:
+        if variantcaller == 'mutect2':
+            shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {dna_tumor_bam} -I {dna_normal_bam} -O {dna_vcf} 1> {dna_vcf}.stdout 2> {dna_vcf}.stderr ')
+        else:
+            shell(
         'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= {tumor_normal_var_qual}) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
         ' && bash uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins'
         ' && bcftools view {output.vcf3} -Ov -o {dna_vcf}'
+            )
 
 rna_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.vcf'
 rna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/{PREFIX}_RNA_tumor_uvc1.vcf.gz'
 rule RNA_SmallVariant_detection: # RNA filtering is more stringent
     input: tbam=rna_tumor_bam, tbai=rna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai
-    output: rna_vcf,rna_tonly_raw_vcf,
+    output: rna_vcf, #rna_tonly_raw_vcf,
         vcf1 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN.vcf.gz',
         vcf2 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-filter.vcf.gz',
         vcf3 = F'{snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins.merged-simple-delins.vcf.gz',
     resources: mem_mb = uvc_mem_mb
     threads: uvc_nthreads
-    shell:
+    run:
+         if variantcaller == 'mutect2':
+             shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {rna_tumor_bam} -I {dna_normal_bam} -O {rna_vcf} 1> {rna_vcf}.stdout 2> {rna_vcf}.stderr ')
+         else:
+             shell(
         'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 83) && (tAD[1] >= 7) && (tAD[1] >= (tAD[0] + tAD[1]) * 0.8) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
         ' && bash uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins'
         ' && bcftools view {output.vcf3} -Ov -o {rna_vcf}'
+        )
 
 # start-of-DNA-vep-mainline
 
@@ -394,8 +418,10 @@ rule RNA_SmallVariant_peptide_generation:
         cp {rna_variant_effect} {rna_snvindel_info_file}'''
 
 # end-of-RNA-vep-sideline-for-rescue
-   
+
+# example return value: ['HLA-A02:01']
 def retrieve_hla_alleles():
+    if 'comma_sep_hla_list' in config: return config['comma_sep_hla_list'].split(',')
     ret = []
     with open(F'{hla_out}') as file:
         reader = csv.reader(file, delimiter='\t')
@@ -422,8 +448,12 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs):
     call_with_infolog(F'find {outtsv}.tmpdir/ -iname "SPLITTED.*.netMHCpan-result" | xargs cat > {outtsv}')
     
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
-all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
+
+if 'all_vars_peptide_faa' in config:
+    os.makedirs(os.path.dirname(all_vars_peptide_faa), exist_ok=True)
+    os.system(F'''cp {config['all_vars_peptide_faa']} {all_vars_peptide_faa}''')
+
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa,
            rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa,
@@ -528,31 +558,58 @@ logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization
 ruleorder: Prioritization_with_all_TCRs > Prioritization_with_all_TCRs_with_minimal_varinfo
 
 rule Prioritization_with_all_TCRs:
-    input: iedb_path, all_vars_bindstab_filtered_tsv, dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf, 
-        # rna_tumor_depth_summary, 
+    input: iedb_path, all_vars_bindstab_filtered_tsv, # dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf,
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
-        # splicing_info_file
+        # splicing_info_file   
     output: neoheadhunter_prioritization_tsv, final_pipeline_out
-    run: 
-        #call_with_infolog(F'bcftools view {dna_vcf} -Oz -o {dna_vcf}.gz && bcftools index -ft {dna_vcf}.gz')
-        #call_with_infolog(F'bcftools view {rna_vcf} -Oz -o {rna_vcf}.gz && bcftools index -ft {rna_vcf}.gz')
-        call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
+    run:
+        if variantcaller == 'mutect2':
+            call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
+            F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
+            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
+            F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
+        else:
+            call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
             F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
         call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
 
+### rules that were not run by default
+
 rule Prioritization_with_all_TCRs_with_minimal_varinfo:
-    input: iedb_path, all_vars_bindstab_filtered_tsv #, dna_vcf, rna_vcf, 
-        # dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
-        # splicing_info_file
-    output: neoheadhunter_prioritization_tsv, final_pipeline_out
+    input: iedb_path, all_vars_bindstab_filtered_tsv 
+    output: pmhc_as_input_prioritization_tsv
     run: 
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
+            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} '
+            F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
+
+neoheadhunter_validation_out=F'{neoheadhunter_prioritization_tsv}.validation'
+pmhc_as_input_validation_out=F'{pmhc_as_input_prioritization_tsv}.validation'
+
+###   validation rules
+
+rule Prioritization_with_all_TCRs_validation:
+    input: neoheadhunter_prioritization_tsv
+    output: neoheadhunter_validation_out
+    run:
+        truth_file = config.get('truth_file')
+        truth_patientID = config.get('truth_patientID')
+        call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
             F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
-        call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
+
+rule Prioritization_with_all_TCRs_with_minimal_varinfo_validation:
+    input: pmhc_as_input_prioritization_tsv
+    output: pmhc_as_input_validation_out
+    run:
+        truth_file = config.get('truth_file')
+        truth_patientID = config.get('truth_patientID')
+        call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
+            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} '
+            F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
 
 ### auxiliary prioritization steps
 
