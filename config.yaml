@@ -10,9 +10,10 @@ rna_tumor_fq2: '-'
 output_directory: '-'
 prefix: '-'
 
-### Section 2: paramters having no default values: one set-up per installation and for all samples
+### Section 2: parameters having no default values: one set-up per installation and for all samples
 # variables that begins with ssh:// requires the NeohunterRemotePassword environment variable to be set and exported
 
+#netmhcpan_cmd: '/mnt/d/code/netMHCpan-4.0/netMHCpan'
 netmhcpan_cmd: '/mnt/d/code/neohunter/netMHCpan-4.1/netMHCpan'
 netmhcstabpan_cmd: 'ssh://zxf@166.111.130.101:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
 
@@ -23,7 +24,7 @@ tumor_vaf: 0.1
 normal_vaf: 0.05
 tumor_normal_var_qual : 63 # # Equivalent to tlod=6.3 in Mutect2
 
-binding_affinity_filt_thres: 693.00 # 21*11*3
+binding_affinity_filt_thres: 693.00 # 693=21*11*3
 binding_affinity_hard_thres: 231.00 # 21*11
 binding_affinity_soft_thres: 21.00 # 21 instead of 34 is used because newer version of netMHCpan generates lower affinities
 binding_stability_hard_thres: 0.1300 # 1.4/11 rounded up
