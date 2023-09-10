@@ -23,7 +23,7 @@ $conda install -y -n $neoheadhunter python=3.10 \
     gcc openjdk parallel perl podman sshpass tcsh \
     perl-carp-assert psutil pyyaml requests-cache zlib \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
-    bcftools blast bwa ensembl-vep gatk kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
+    bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
     'biopython<=1.79' pybiomart pyfaidx pysam
 
 conda run -n $neoheadhunter pip install sj2psi # for ASNEO.py

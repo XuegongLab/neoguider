@@ -47,6 +47,11 @@ fi
 ## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCstabpan&version=1.0&packageversion=1.0a&platform=Linux
 ## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=2.8&packageversion=2.8a&platform=Linux # used with netMHCstabpan
 
+if [ $(echo "$1" | grep -cP "skip-mutect2|skip-all-software") -eq 0 ]; then
+    wget https://github.com/broadinstitute/gatk/releases/download/4.3.0.0/gatk-4.3.0.0.zip
+    unzip gatk-4.3.0.0.zip
+fi
+
 #wget -c https://snpeff.blob.core.windows.net/versions/snpEff_latest_core.zip
 #unzip snpEff_latest_core.zip
 #git clone https://github.com/XuegongLab/NeoHunter.git && cd NeoHunter
