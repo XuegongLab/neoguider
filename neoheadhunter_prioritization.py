@@ -183,7 +183,7 @@ def read_tesla_xls(tesla_xls, patientID):
     return ret
 
 def indicator(x): return np.where(x, 1, 0)
-def compute_immunogenic_probs(data, paramset, enable_high_varqual):
+def compute_immunogenic_probs(data, paramset, passflag):
     
     t2BindAff      = paramset.binding_affinity_hard_thres
     t1BindAff      = paramset.binding_affinity_soft_thres
@@ -227,11 +227,11 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
     t2dna_nfilters = (
         indicator(data.DNA_altDP < 5) + 
         indicator(data.DNA_altDP < (data.DNA_refDP + data.DNA_altDP + sys.float_info.epsilon) * 0.1)
-    ) * are_snvs_or_indels * (1 - indicator(enable_high_varqual))
+    ) * are_snvs_or_indels * (1 - indicator(passflag & 0x1))
     t2rna_nfilters = (
         indicator(data.RNA_altDP < 5) + 
         indicator(data.RNA_altDP < (data.RNA_refDP + data.RNA_altDP + sys.float_info.epsilon) * 0.1)
-    ) * are_snvs_or_indels * (1 - indicator(enable_high_varqual))
+    ) * are_snvs_or_indels * (1 - indicator(passflag & 0x2))
     
     t0_are_foreign = (t0foreign_nfilters == 0)
     t1_are_presented = (t1presented_nfilters == 0)
@@ -284,13 +284,13 @@ def compute_immunogenic_probs(data, paramset, enable_high_varqual):
             presented_not_recog_vals,   presented_and_recog_vals,
             mwutest, med_immuno_strength)
    
-def datarank(data, outcsv, paramset, drop_cols = [], enable_high_varqual = False):
+def datarank(data, outcsv, paramset, drop_cols = [], passflag = 0x0):
     
     (probs, t2presented_filters, t1presented_filters, t0recognized_filters, 
             n_presented_not_recognized, n_presented_and_recognized, 
             presented_not_recog_medtpm, presented_and_recog_medtpm,
             presented_not_recog_vals,   presented_and_recog_vals,
-            mwutest, med_immuno_strength) = compute_immunogenic_probs(data, paramset, enable_high_varqual)
+            mwutest, med_immuno_strength) = compute_immunogenic_probs(data, paramset, passflag)
     
     # We are unable to reproduce the AUCs at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8983234/ using their NeoScore equations
     # The AUCs that we obtained are much worse than theirs
@@ -420,6 +420,8 @@ If the keyword rerank is in function,
             help = 'File containing ground-truth of immunogenicity for some tested pMHCs')
     parser.add_argument(u2d('truth_patientID'), default = '',
             help = 'PatientID to select rows from the truth-file')
+    parser.add_argument(u2d('passflag'), default = 0x0, type = int,
+            help = 'A variant is passing all DNA-seq and RNA-seq thresholds if and only if the 0x1 and 0x2 bits are set, respectively. ')
  
     parser.add_argument(u2d('tesla_xls'), default = '',
             help = 'Table S4 and S7 at https://doi.org/10.1016/j.cell.2020.09.015')
@@ -449,7 +451,7 @@ If the keyword rerank is in function,
         print(keptdata['peptideMHC'])
         keptdata1 = pd.merge(origdata, keptdata, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
         args.snvindel_location_param -= np.mean(keptdata1['Offset'])
-        data1, _ = datarank(keptdata1, args.output_file + '.validation', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], enable_high_varqual = True)
+        data1, _ = datarank(keptdata1, args.output_file + '.validation', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
         exit(0)
     if not isna(args.PD):
         # Please note that this expriment is special
@@ -464,7 +466,7 @@ If the keyword rerank is in function,
         print(keptdata['peptideMHC'])
         keptdata1 = pd.merge(origdata, keptdata, how = 'inner', left_on = 'peptideMHC', right_on = 'peptideMHC')
         args.snvindel_location_param -= 0.5 # due to the lack of TPM and RNA-seq variant calling info
-        data1, _ = datarank(keptdata1, args.output_file + '.filtered', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], enable_high_varqual = True)
+        data1, _ = datarank(keptdata1, args.output_file + '.filtered', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
         exit(0)
     if not isna(args.nsclc2016):
         origdata = pd.read_csv(args.nsclc2016)
@@ -476,20 +478,20 @@ If the keyword rerank is in function,
         print(keptdata['peptideMHC'])        
         keptdata1 = pd.merge(origdata, keptdata, how = 'inner', left_on = 'peptideMHC', right_on = 'peptideMHC')
         args.snvindel_location_param -= 1.5 # due to the lack of TPM, DNA-seq and RNA-seq variant calling info
-        data1, _ = datarank(keptdata1, args.output_file + '.filtered', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], enable_high_varqual = True)
+        data1, _ = datarank(keptdata1, args.output_file + '.filtered', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
         exit(0)
     if not isna(args.tesla_xls):
         data = read_tesla_xls(args.tesla_xls, args.tesla_patientID)
         # read_tesla_xls filled the missing columns (such as RNA-seq stats) with the default values resulting in maximum probabilities
         # so we decrease the location param to decrease the probabilities accordingly.
         args.snvindel_location_param -= 0.5 # due to the lack of DNA-seq and RNA-seq variant calling info
-        data2, _ = datarank(data, args.output_file, paramset)
+        data2, _ = datarank(data, args.output_file, paramset, passflag = args.passflag)
         exit(0)
     if args.function == 'rerank':
         keptdata = pd.read_csv(args.output_file + '.expansion', sep='\t')
         keptdata1 = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
-        data1, _ = datarank(keptdata1, args.output_file + '.reranked', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'])
-        data, _ = datarank(keptdata, args.output_file + 'reranked.expansion', paramset)
+        data1, _ = datarank(keptdata1, args.output_file + '.reranked', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
+        data, _ = datarank(keptdata, args.output_file + 'reranked.expansion', paramset, passflag = args.passflag)
         exit(0)
     
     def openif(fname): return (open(fname) if fname else [])
@@ -633,8 +635,8 @@ If the keyword rerank is in function,
     keptdata = data
     #keptdata.to_csv(F'{args.output_file}.debug')
     keptdata1 = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
-    data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'])
-    data, _ = datarank(keptdata, args.output_file + '.expansion', paramset)
+    data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
+    data, _ = datarank(keptdata, args.output_file + '.expansion', paramset, passflag = args.passflag)
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()

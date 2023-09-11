@@ -571,12 +571,12 @@ rule Prioritization_with_all_TCRs:
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
-            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
+            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} --passflag 0 '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
         else:
             call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
-            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
+            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} --passflag 0 '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
         call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
@@ -588,7 +588,7 @@ rule Prioritization_with_all_TCRs_with_minimal_varinfo:
     output: pmhc_as_input_prioritization_tsv
     run: 
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i {all_vars_bindstab_filtered_tsv} -I {iedb_path} '
-            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} '
+            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} --passflag 3 '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
 
 neoheadhunter_validation_out=F'{neoheadhunter_prioritization_tsv}.validation'
@@ -603,7 +603,7 @@ rule Prioritization_with_all_TCRs_validation:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} '
+            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} --passflag 0'
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
 
 rule Prioritization_with_all_TCRs_with_minimal_varinfo_validation:
@@ -613,7 +613,7 @@ rule Prioritization_with_all_TCRs_with_minimal_varinfo_validation:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/neoheadhunter_prioritization.py -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} '
+            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} --passflag 3 '
             F''' {prioritization_thres_params} {prioritization_function_params.replace('_', '-')}''')
 
 ### auxiliary prioritization steps
