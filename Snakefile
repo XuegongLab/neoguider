@@ -32,10 +32,15 @@ tumor_normal_var_qual = config['tumor_normal_var_qual']
 binding_affinity_filt_thres = config['binding_affinity_filt_thres']
 binding_affinity_hard_thres = config['binding_affinity_hard_thres']
 binding_affinity_soft_thres = config['binding_affinity_soft_thres']
+
+binding_stability_filt_thres = config['binding_stability_filt_thres']
 binding_stability_hard_thres = config['binding_stability_hard_thres']
 binding_stability_soft_thres = config['binding_stability_soft_thres']
+
+tumor_abundance_filt_thres = config['tumor_abundance_filt_thres']
 tumor_abundance_hard_thres = config['tumor_abundance_hard_thres']
 tumor_abundance_soft_thres = config['tumor_abundance_soft_thres']
+
 agretopicity_thres = config['agretopicity_thres']
 foreignness_thres = config['foreignness_thres']
 alteration_type = config['alteration_type']
@@ -461,13 +466,13 @@ rule Peptide_preprocessing:
     output: all_vars_peptide_faa
     threads: 1
     run:
-        shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_hard_thres} '
+        shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
             ' | python {script_basedir}/neoexpansion.py --nbits 1.0 > {dna_snvindel_neopeptide_faa}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_faa}.expansion {dna_snvindel_wt_peptide_faa} '
             ' {rna_snvindel_neopeptide_faa}           {rna_snvindel_wt_peptide_faa} '
             ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} '
-            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_hard_thres} > {all_vars_peptide_faa}')
+            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} > {all_vars_peptide_faa}')
 rule PeptideMHC_binding_affinity_prediction:
     input: all_vars_peptide_faa, hla_out
     output: all_vars_netmhcpan_txt
@@ -500,7 +505,7 @@ def uri_to_user_address_port_path(uri):
 def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bindaff_filtered.tsv', outdir = pmhc_dir):
     user, address, port, path = uri_to_user_address_port_path(netmhcstabpan_cmd)
     if netmhcstabpan_cmd == path:
-        run_calculation = F'python {bindstab_filter_py} -i {inputfile} -o {outdir} -n {path} -b {binding_stability_hard_thres} -p {PREFIX}'
+        run_calculation = F'python {bindstab_filter_py} -i {inputfile} -o {outdir} -n {path} -b {binding_stability_filt_thres} -p {PREFIX}'
         call_with_infolog(run_calculation)
     else:
         outputfile1 = F'{outdir}/{PREFIX}_bindstab_raw.txt'
@@ -508,7 +513,7 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         remote_rmdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
         remote_mkdir = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:/tmp/{outdir}/'
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_hard_thres} -p {PREFIX}'
+        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_filt_thres} -p {PREFIX}'
         remote_exe = F' sshpass -p "$NeohunterRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'
         remote_receive1 = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1} {outdir}'
         remote_receive2 = F' sshpass -p "$NeohunterRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile2} {outdir}'
