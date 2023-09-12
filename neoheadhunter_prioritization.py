@@ -465,8 +465,9 @@ If the keyword rerank is in function,
 
         #print(origdata['peptideMHC'])
         #print(keptdata['peptideMHC'])
-        keptdata1 = pd.merge(origdata, data1, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
-        keptdata1.to_csv(args.output_file + '.validation' , header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
+        combdata = pd.merge(origdata, data1, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
+        combdata["Rank"] = combdata["Probability"].rank(method="first", ascending=False)
+        combdata.to_csv(args.output_file + '.validation' , header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
         exit(0)
     if not isna(args.PD):
         # Please note that this expriment is special
