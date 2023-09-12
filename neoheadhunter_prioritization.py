@@ -408,7 +408,7 @@ If the keyword rerank is in function,
             help = 'File containing ground-truth of immunogenicity for some tested pMHCs')
     parser.add_argument(u2d('truth_patientID'), default = '',
             help = 'PatientID to select rows from the truth-file')
-    parser.add_argument(u2d('passflag'), default = 0x0, type = int,
+    parser.add_argument(u2d('passflag'), default = 0x0, type = (lambda x: int(x,0)),
             help = 'A variant is passing all DNA-seq and RNA-seq thresholds if and only if the 0x1 and 0x2 bits are set, respectively. ')
  
     parser.add_argument(u2d('tesla_xls'), default = '',
