@@ -1,4 +1,4 @@
-import argparse,copy,csv,getopt,logging,math,multiprocessing,os,statistics,sys,subprocess # ,os
+import argparse,collections,copy,csv,getopt,logging,math,multiprocessing,os,statistics,sys,subprocess # ,os
 import pandas as pd
 import numpy as np
 import scipy
@@ -146,6 +146,30 @@ def runblast(query_seq, target_fasta, output_file):
             sseq = tokens[5]
             is_canonical = all([(aa in 'ARNDCQEGHILKMFPSTWYV') for aa in sseq])
             if is_canonical: ret.append(sseq)
+    return ret
+
+def allblast(query_seqs, target_fasta, output_file):
+    os.system(F'mkdir -p {output_file}.tmp')
+    query_fasta = F'{output_file}.tmp/foreignness_query.all.fasta'
+    with open(query_fasta, 'w') as query_fasta_file:
+        for query_seq in query_seqs:
+            query_fasta_file.write(F'>{query_seq}\n{query_seq}\n')
+    # from https://github.com/andrewrech/antigen.garnish/blob/main/R/antigen.garnish_predict.R
+    cmd = F'''blastp \
+        -query {query_fasta} -db {target_fasta} \
+        -evalue 100000000 -matrix BLOSUM62 -gapopen 11 -gapextend 1 \
+        -out {query_fasta}.blastp_iedbout.csv -num_threads 8 \
+        -outfmt '10 qseqid sseqid qseq qstart qend sseq sstart send length mismatch pident evalue bitscore' '''
+    logging.debug(cmd)
+    os.system(cmd)
+    ret = collections.defaultdict(list)
+    with open(F'{query_fasta}.blastp_iedbout.csv') as blastp_csv:
+        for line in blastp_csv:
+            tokens = line.strip().split(',')
+            qseq = tokens[2]
+            sseq = tokens[5]
+            is_canonical = all([(aa in 'ARNDCQEGHILKMFPSTWYV') for aa in sseq])
+            if is_canonical: ret[qseq].append(sseq)
     return ret
 
 def read_tesla_xls(tesla_xls, patientID):
@@ -523,9 +547,10 @@ If the keyword rerank is in function,
     identity_idx = fields.index('Identity')
     for line1 in reader:
         line = copy.deepcopy(line1)
-        blast_iedb_seqs = runblast(line[1], args.iedb_fasta, args.output_file)
-        R = getR(line[1], blast_iedb_seqs)
-        line.append(R)
+        #blast_iedb_seqs = runblast(line[1], args.iedb_fasta, args.output_file)
+        #R = getR(line[1], blast_iedb_seqs)
+        #line.append(R)
+        line.append(-1)
         dna_varqual = 0
         dna_ref_depth = 0
         dna_alt_depth = 0
@@ -600,6 +625,7 @@ If the keyword rerank is in function,
         line.append(line_info_string if line_info_string else 'N/A')
         line.append(is_frameshift)
         data_raw.append(line)
+    
     picked_rows = []
     alt_type = args.alteration_type.replace(' ', '').strip().split(',')
     for line in data_raw:
@@ -610,6 +636,12 @@ If the keyword rerank is in function,
         else: logging.debug(F'Skipping {line} because {atype} is-not-in {alt_type}')
     # data can be emtpy (https://stackoverflow.com/questions/44513738/pandas-create-empty-dataframe-with-only-column-names)
     data=pd.DataFrame(picked_rows, columns = fields)
+    qseq2sseqs = allblast(list(data['ET_pep']), args.iedb_fasta, args.output_file)
+    Rs = []
+    for qseq in list(data['ET_pep']):
+        Rs.append(getR(qseq, qseq2sseqs[qseq]))
+    data['Foreignness'] = Rs
+
     data.ET_BindAff = data.ET_BindAff.astype(float)
     data.MT_BindAff = data.MT_BindAff.astype(float)
     data.WT_BindAff = data.WT_BindAff.astype(str).replace('N/A', np.nan).astype(float)
