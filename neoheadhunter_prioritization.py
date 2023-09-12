@@ -437,7 +437,7 @@ If the keyword rerank is in function,
         keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + norm_hla(keptdata['HLA_type'])
         
         paramset.snvindel_location_param -= np.mean(origdata['Offset'])
-        data1, _ = datarank(keptdata1, '', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
+        data1, _ = datarank(keptdata, '', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
 
         #print(origdata['peptideMHC'])
         #print(keptdata['peptideMHC'])
