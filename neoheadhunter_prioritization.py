@@ -166,10 +166,10 @@ def allblast(query_seqs, target_fasta, output_file):
     with open(F'{query_fasta}.blastp_iedbout.csv') as blastp_csv:
         for line in blastp_csv:
             tokens = line.strip().split(',')
-            qseq = tokens[2]
+            qseqid = tokens[0]
             sseq = tokens[5]
             is_canonical = all([(aa in 'ARNDCQEGHILKMFPSTWYV') for aa in sseq])
-            if is_canonical: ret[qseq].append(sseq)
+            if is_canonical: ret[qseqid].append(sseq)
     return ret
 
 def read_tesla_xls(tesla_xls, patientID):
