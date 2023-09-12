@@ -316,33 +316,21 @@ def datarank(data, outcsv, paramset, drop_cols = [], passflag = 0x0):
     col2last(data, 'SourceAlterationDetail')
     col2last(data, 'PepTrace')
     dropcols(data, ['BindLevel', 'BindAff'])
-    data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
-    with open(outcsv + ".extrainfo", "w") as extrafile:
-        # Presented: expected to be bound pMHC
-        # Recognized: expected to be immunogenic if bound pMHC
-        extrafile.write(F'N_presented_and_recognized={n_presented_and_recognized}\n')
-        extrafile.write(F'N_presented_not_recognized={n_presented_not_recognized}\n')
-        extrafile.write(F'Presented_and_recog_vals={sorted(presented_and_recog_vals)}\n')
-        extrafile.write(F'Presented_not_recog_vals={sorted(presented_not_recog_vals)}\n')
+    if outcsv:
+        data.to_csv(outcsv, header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
+        with open(outcsv + ".extrainfo", "w") as extrafile:
+            # Presented: expected to be bound pMHC
+            # Recognized: expected to be immunogenic if bound pMHC
+            extrafile.write(F'N_presented_and_recognized={n_presented_and_recognized}\n')
+            extrafile.write(F'N_presented_not_recognized={n_presented_not_recognized}\n')
+            extrafile.write(F'Presented_and_recog_vals={sorted(presented_and_recog_vals)}\n')
+            extrafile.write(F'Presented_not_recog_vals={sorted(presented_not_recog_vals)}\n')
 
-        #extrafile.write(F'Presented_not_recog_sumtpm={presented_not_recog_sumtpm}\n')
-        #extrafile.write(F'Presented_and_recog_sumtpm={presented_and_recog_sumtpm}\n')
-        #extrafile.write(F'Presented_not_recog_maxtpm={presented_not_recog_maxtpm}\n')
-        #extrafile.write(F'Presented_and_recog_maxtpm={presented_and_recog_maxtpm}\n')
-        extrafile.write(F'Presented_not_recog_medtpm={presented_not_recog_medtpm}\n')
-        extrafile.write(F'Presented_and_recog_medtpm={presented_and_recog_medtpm}\n')
-        #extrafile.write(F'Presented_not_recog_average_burden={presented_not_recog_average_burden}\n')
-        #extrafile.write(F'Presented_and_recog_average_burden={presented_and_recog_average_burden}\n')
-        #extrafile.write(F'Presented_not_recog_sub_avg_burden={presented_not_recog_sub_avg_burden}\n')
-        #extrafile.write(F'Presented_and_recog_suv_avg_burden={presented_and_recog_sub_avg_burden}\n')
-        #extrafile.write(F'Immuno_strength_lo={immuno_strength_lo}\n')
-        #extrafile.write(F'Immuno_strength_hi={immuno_strength_hi}\n')
-        #xtrafile.write(F'Immuno_strength={immuno_strength}\n')
-        #extrafile.write(F'Presented_not_recog_medtpm_3={presented_not_recog_medtpm_3}\n')
-        #extrafile.write(F'Presented_and_recog_medtpm_3={presented_and_recog_medtpm_3}\n')
-        extrafile.write(F'StatisticalTest={mwutest}\n')
-        extrafile.write(F'Med_immuno_strength={med_immuno_strength}\n')
-        extrafile.write(F'Expected_immunogenic_peptide_num={np.nansum(probs)}\n')
+            extrafile.write(F'Presented_not_recog_medtpm={presented_not_recog_medtpm}\n')
+            extrafile.write(F'Presented_and_recog_medtpm={presented_and_recog_medtpm}\n')
+            extrafile.write(F'StatisticalTest={mwutest}\n')
+            extrafile.write(F'Med_immuno_strength={med_immuno_strength}\n')
+            extrafile.write(F'Expected_immunogenic_peptide_num={np.nansum(probs)}\n')
     return data, (n_presented_not_recognized, n_presented_and_recognized, med_immuno_strength)
     #def between(x, a, b): return min((max((x,a)),b))
     #immuno_strength_real = between(0, immuno_strength_hi, immuno_strength_lo)
@@ -439,6 +427,7 @@ If the keyword rerank is in function,
     if not isna(args.truth_file):
         def norm_hla(h): return h.astype(str).str.replace('*', '', regex=False).str.replace('HLA-', '', regex=False).str.replace(':', '', regex=False).str.strip()
         origdata = pd.read_csv(args.truth_file)
+        origdata['PatientID'] = origdata['PatientID'].astype(str)
         origdata = origdata[origdata['PatientID'] == args.truth_patientID]
         origdata['peptideMHC'] = origdata['MT_pep'].astype(str) + '/' + norm_hla(origdata['HLA_type'])
         
@@ -447,11 +436,13 @@ If the keyword rerank is in function,
         keptdata = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
         keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + norm_hla(keptdata['HLA_type'])
         
-        print(origdata['peptideMHC'])
-        print(keptdata['peptideMHC'])
-        keptdata1 = pd.merge(origdata, keptdata, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
-        args.snvindel_location_param -= np.mean(keptdata1['Offset'])
-        data1, _ = datarank(keptdata1, args.output_file + '.validation', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
+        paramset.snvindel_location_param -= np.mean(origdata['Offset'])
+        data1, _ = datarank(keptdata1, '', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
+
+        #print(origdata['peptideMHC'])
+        #print(keptdata['peptideMHC'])
+        keptdata1 = pd.merge(origdata, data1, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
+        keptdata1.to_csv(args.output_file + '.validation' , header=1, sep='\t', index=0, float_format='%6g', na_rep = 'NA')
         exit(0)
     if not isna(args.PD):
         # Please note that this expriment is special
