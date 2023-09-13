@@ -7,19 +7,20 @@ bioconda="-c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/bioconda/" # -c
 pytorch="-c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/" # -c pytorch
 
 conda=mamba
-neoheadhunter=nhh # neoheadhunter
+neoheadhunter="$1" # neoheadhunter env name
+if [ -z "$neoheadhunter" ]; then neoheadhunter=nhh; fi
 
 conda install -y mamba -n base
 conda create -y -n $neoheadhunter
 
 # Order of packages: common bin, common lib, machine-learning lib, bioinformatics bin, bioinformatics lib 
-# note: 
+# note:
 #   pyfasta is replaced by pyfaidx
 #   ASNEO requires 'biopython<=1.79' (ASNEO code can be refactored to upgrade biopython)
-#   ERGO-II requires pytorch-lightning=0.8, but we will change a few lines of source code in ERGO-II 
+#   ERGO-II requires pytorch-lightning=0.8, but we will change a few lines of source code in ERGO-II
 #     in the next installation step to make it work with higher versions of pytorch-lightning
 #   podman will be used to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
-$conda install -y -n $neoheadhunter python=3.10 \
+$conda install -y -n $neoheadhunter python=3.10 xlrd \
     gcc openjdk parallel perl podman sshpass tcsh \
     perl-carp-assert psutil pyyaml requests-cache zlib \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
@@ -31,12 +32,17 @@ conda run -n $neoheadhunter podman pull quay.io/biocontainers/optitype:1.3.2--py
 
 # The optitype environment should be able to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
 # However, it seems that conda and mamba cannot install the obsolete python versions that the previous versions of optitype depend on
-# Therefore, we commented out the following 3-4 lines of code
+# Therefore, we commented out the following 4 lines of code
 # optitype=optitype_env
 # conda create -y -n $optitype
 # $conda install -y -n $optitype optitype=1.3.2
 # conda env export -n ${optitype} > ${optitype}.freeze.yml &&  conda list -e -n ${optitype} > ${optitype}.requirements.txt
 
-# The following command can be run to generate the freeze and requirement files
-# conda env export -n ${neoheadhunter} > freeze.yml &&  conda list -e -n ${neoheadhunter} > requirements.txt
+# The following commands can generate the requirements and freeze files
+if false; then
+    conda list       -n ${neoheadhunter} -e | grep -v "^sj2psi=" > env/requirements.list_e_no_pypi.txt
+    conda env export -n ${neoheadhunter}                         > env/freeze.env_export.yml
+    conda env export -n ${neoheadhunter} --no-builds             > env/freeze.env_export_no_builds.yml
+    conda env export -n ${neoheadhunter} --from-history          > env/freeze.env_export_from_history.yml
+fi
 
