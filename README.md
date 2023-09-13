@@ -9,9 +9,15 @@ First, follow the instruction at https://bioconda.github.io/ to install bioconda
 Then, run the following commands: 
 ```
 # If the working directory is not neoheadhunter, then change it to neoheadhunter
-conda create -n nhh -r requirements.txt # install packages through conda, you can change the environment name nhh (neo-head-hunter) as you wish
-conda run -n nhh podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 # get the optitype container without memory leak
+sh -evx install-step-1-by-conda.sh nhh    # install all dependencies by conda
 conda run -n hhh sh install-step-2.sh # download databases and build database indexes
+```
+If the "$conda install" command in install-step-1-by-conda.sh ran into any error, you can try replacing this command by each of the following commands:
+```
+conda create     --name nhh --file env/requirements.list_e_no_pypi.txt    # if this command does not work then try the next one below
+conda env create --name nhh --file env/freeze.env_export.yml              # if this command does not work then try the next one below
+conda env create --name nhh --file env/freeze.env_export_no_builds.yml    # if this command does not work then try the next one below
+conda env create --name nhh --file env/freeze.env_export_from_history.yml
 ```
 
 Next, you have to manually set up netMHCpan, netMHCstabpan and MixCR (due to their licensing requirements). 

@@ -435,7 +435,6 @@ scipy=1.11.0=py310ha4c1d20_0
 setuptools=68.0.0=pyhd8ed1ab_0
 setuptools-scm=7.1.0=pyhd8ed1ab_0
 six=1.16.0=pyh6c4a22f_0
-sj2psi=0.1.2=pypi_0
 slacker=0.14.0=py_0
 slclust=02022010=1
 sleef=3.5.1=h9b69904_2
@@ -489,6 +488,7 @@ wget=1.20.3=ha56f1ee_1
 wheel=0.40.0=pyhd8ed1ab_0
 wrapt=1.15.0=py310h1fa729e_0
 xgboost=1.7.4=cuda112py310hd9b4ab7_2
+xlrd=2.0.1=pyhd8ed1ab_3
 xorg-fixesproto=5.0=h7f98852_1002
 xorg-inputproto=2.3.2=h7f98852_1002
 xorg-kbproto=1.0.7=h7f98852_1002
