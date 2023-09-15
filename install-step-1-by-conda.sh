@@ -1,10 +1,18 @@
-#sudo apt install tcsh # is required by netMHCpan-4 /usr/bin/tcsh
-# sshpass is required if we want to run netMHC command on a remote server
+# note: the line below (which installs the tcsh shell) is part of the manual install of netMHCpan and netMHCstabpan, so the line below is commented out
+#   sudo apt install tcsh # is required by netMHCpan-4 /usr/bin/tcsh
+# note: sshpass is required if we want to run netMHCstabpan command on a remote server
+# note: these mirror channels (for example, used with "-c $condaforge -c $bioconda" on the cmd-line) are used to speed up installation in China
+#   you can set these mirror channels according to your geolocation
+condaforge='https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/'
+bioconda='https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/bioconda/'
+main='https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/'
+free='https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/'
+fastai='https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/fastai/'
+pytorch='https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/'
 
-# note: you can use these mirror channels (i.e., with "-c $conda-forge -c $bioconda -c $pytorch") to speed up installation in China
-condaforge="-c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/" # -c conda-forge
-bioconda="-c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/bioconda/" # -c bioconda
-pytorch="-c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/" # -c pytorch
+for channel in $pytorch $fastai $free $main $bioconda $condaforge ; do
+    conda config --add channels "${channel}"
+done
 
 conda=mamba
 neoheadhunter="$1" # neoheadhunter env name
@@ -26,6 +34,10 @@ $conda install -y -n $neoheadhunter python=3.10 xlrd \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
     bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
     'biopython<=1.79' pybiomart pyfaidx pysam
+# note: if you have encountered the error: *** is not installable because it requires __cuda, which is missing on the system,
+#   then you can refer to the work-around at
+#   https://stackoverflow.com/questions/74836151/nothing-provides-cuda-needed-by-tensorflow-2-10-0-cuda112py310he87a039-0 
+#   to solve this error (namely, export CONDA_OVERRIDE_CUDA="11.8" && export CONDA_CUDA_OVERRIDE="11.8").
 
 conda run -n $neoheadhunter pip install sj2psi # for ASNEO.py
 conda run -n $neoheadhunter podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 # work-around for https://github.com/FRED-2/OptiType/issues/125
