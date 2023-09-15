@@ -48,8 +48,8 @@ fifo_dir: '/tmp'
 
 # You can add the comma_sep_hla_list and all_vars_peptide_faa config params if you would like to run with given MHCs and peptides
 # for example:
-#   comma_sep_hla_list = 'HLA-A01:01,HLA-A02:01'
-#   all_vars_peptide_faa = /path/to/your/peptide_fasta
+#   comma_sep_hla_list: 'HLA-A01:01,HLA-A02:01'
+#   all_vars_peptide_faa: /path/to/your/peptide_fasta
 # where the /path/to/your/peptide_fasta file contains
 #   >${vTypes[0]}_${vIDs[0]} MT=${pepseq1} WT=${pepseq2} TPM=100
 #   ${pepseq1}
