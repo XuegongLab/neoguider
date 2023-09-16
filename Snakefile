@@ -96,15 +96,27 @@ bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
 IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = True
-OPTITYPE_CONFIG = F"{workflow.basedir}/software/optitype.config.ini"
+OPTITYPE_CONFIG = F"{script_basedir}/software/optitype.config.ini"
 
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
     subprocess.call(cmd, shell = in_shell)
+def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile'):
+    logging.info(F'Trying to create the dummy placeholder files {files}')
+    for file in files:
+        if config.get('refresh_placeholders', 0) == 1 or not os.path.exists(file):
+            if os.path.exists(file): call_with_infolog(F'rm {file}')
+            logging.info(F'Making directory of the file {file}')
+            os.makedirs(os.path.dirname(file), exist_ok=True)
+            call_with_infolog(F'cp {origfile} {file} && touch {file} && touch {file}.DummyPlaceholder')
 
 DNA_TUMOR_ISPE  = (DNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
 DNA_NORMAL_ISPE = (DNA_NORMAL_FQ2 not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
 RNA_TUMOR_ISPE  = (RNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
+
+isRNAskipped = (RNA_TUMOR_FQ1 in [None, '', 'NA', 'Na', 'None', 'none', '.'])
+if isRNAskipped and not ('comma_sep_hla_list' in config):
+    logging.warning(F'Usually, either RNA FASTQ files (rna_tumor_fq1 and rna_tumor_fq2) or comma_sep_hla_list is specified in the config. ')
 
 hla_typing_dir = F'{RES}/hla_typing'
 info_dir = F'{RES}/info'
@@ -167,7 +179,7 @@ rule RNA_tumor_HLA_typing_preparation:
     shell : '''
         bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | samtools view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
         samtools fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
-
+if 'comma_sep_hla_list' in config: make_dummy_files([hla_out])
 rule HLA_typing:
     input: hla_fq_r1, hla_fq_r2, hla_fq_se
     output: out = hla_out
@@ -189,6 +201,10 @@ rule HLA_typing:
     
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
 outf_rna_quantification = F'{RES}/rna_quantification/abundance.tsv'
+if 'outf_rna_quantification' in config:
+    outf_rna_quantification = config['outf_rna_quantification']
+elif isRNAskipped:
+    make_dummy_files([outf_rna_quantification], F'{script_basedir}/placeholders/HighAbundance.tsv')
 rule RNA_tumor_transcript_abundance_estimation:
     output: outf_rna_quantification
     resources: mem_mb = kallisto_mem_mb
@@ -218,17 +234,19 @@ rule RNA_tumor_fusion_detection:
             shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         
 fusion_neopeptide_faa = F'{peptide_dir}/{PREFIX}_fusion.fasta'
+if isRNAskipped: make_dummy_files([fusion_neopeptide_faa, fusion_info_file])
 rule RNA_fusion_peptide_generation:
     input:
         starfusion_res, outf_rna_quantification
     output:
         fusion_neopeptide_faa, fusion_info_file
-    shell:
+    run:
+        shell(
         'python {script_basedir}/parse_star_fusion.py -i {starfusion_res}'
         ' -e {outf_rna_quantification} -o {starfusion_out} -p {PREFIX} -t 1.0'
         ' && cp {starfusion_out}/{PREFIX}_fusion.fasta {peptide_dir}/{PREFIX}_fusion.fasta'
         ' && cp {starfusion_res} {fusion_info_file}'
-        
+        )
 rna_tumor_bam = F'{alignment_dir}/{PREFIX}_RNA_tumor.bam'
 rna_t_spl_bam = F'{alignment_dir}/{PREFIX}_RNA_t_spl.bam' # tumor splicing
 dna_tumor_bam = F'{alignment_dir}/{PREFIX}_DNA_tumor.bam'
@@ -238,20 +256,20 @@ rna_tumor_bai = F'{alignment_dir}/{PREFIX}_RNA_tumor.bam.bai'
 rna_t_spl_bai = F'{alignment_dir}/{PREFIX}_RNA_t_spl.bam.bai'
 dna_tumor_bai = F'{alignment_dir}/{PREFIX}_DNA_tumor.bam.bai'
 dna_normal_bai = F'{alignment_dir}/{PREFIX}_DNA_normal.bam.bai'
-
 rule RNA_tumor_preprocessing:
     input: starfusion_bam
     output:
         outbam = rna_tumor_bam,
         outbai = rna_tumor_bai,
     threads: 1 # samtools_nthreads
-    shell:
+    run:
+        shell(
         'rm {output.outbam}.tmp.*.bam || true '
         ' && samtools fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
         ' | samtools sort -@ {samtools_nthreads} -o - - '
         ' | samtools markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_tumor_bam}'
-
+        )
 # This rule is not-used in the end results (but may still be needed for QC), so it is still kept
 HIGH_DP=1000*1000
 rna_tumor_depth = F'{alignment_dir}/{PREFIX}_rna_tumor_F0xD04_depth.vcf.gz'
@@ -271,11 +289,13 @@ rule RNA_postprocessing:
 asneo_out = F'{RES}/splicing/{PREFIX}_rna_tumor_splicing_asneo_out'
 asneo_sjo = F'{asneo_out}/SJ.out.tab'
 splicing_neopeptide_faa=F'{peptide_dir}/{PREFIX}_splicing.fasta'
+if isRNAskipped: make_dummy_files([splicing_neopeptide_faa])
 rule RNA_tumor_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
     resources: mem_mb = star_mem_mb
     threads: star_nthreads
-    shell: # same as in PMC7425491 except for --sjdbOverhang 100
+    run: # same as in PMC7425491 except for --sjdbOverhang 100
+        shell(
         'STAR --genomeDir {REF}.star.idx --readFilesIn {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --runThreadN {star_nthreads} '
         ' –-outFilterMultimapScoreRange 1 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --alignIntronMax 500000 –alignMatesGapMax 1000000 '
         ' --sjdbScore 2 --alignSJDBoverhangMin 1 --genomeLoad NoSharedMemory --outFilterMatchNminOverLread 0.33 --outFilterScoreMinOverLread 0.33 '
@@ -285,18 +305,20 @@ rule RNA_tumor_splicing_alignment:
         ' | samtools sort -@ {samtools_nthreads} -o - -'
         ' | samtools markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_t_spl_bam}'
+        )
 
 rule RNA_splicing_peptide_generation:
     input: rna_quant=outf_rna_quantification, sj=asneo_sjo # starfusion_sjo may also work (we didn't test this)
     output: splicing_neopeptide_faa 
     resources: mem_mb = 20000 # performance measured by Xiaofei Zhao
     threads: 1
-    shell:
+    run:
+        shell(
         'mkdir -p {info_dir} '
         ' && python {script_basedir}/software/ASNEO/neoheadhunter_ASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t 1.0 '
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {peptide_dir}/{PREFIX}_splicing.fasta'
-
+        )
 rule DNA_tumor_alignment:
     output: dna_tumor_bam, dna_tumor_bai
     resources: mem_mb = bwa_samtools_mem_mb
@@ -325,6 +347,9 @@ gatk_jar=F'{script_basedir}/software/gatk-4.3.0.0/gatk-package-4.3.0.0-local.jar
 
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
 dna_tonly_raw_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN.vcf.gz.byproduct/{PREFIX}_DNA_tumor_uvc1.vcf.gz'
+if 'dna_vcf' in config: dna_vcf = config['dna_vcf']
+    #os.makedirs(os.path.dirname(dna_vcf), exist_ok=True)
+    #os.system(F'''cp {config['dna_vcf']} {dna_vcf}''')
 rule DNA_SmallVariant_detection:
     input: tbam=dna_tumor_bam, tbai=dna_tumor_bai, nbam=dna_normal_bam, nbai=dna_normal_bai,
     output: dna_vcf, #dna_tonly_raw_vcf,
@@ -414,6 +439,7 @@ rule RNA_SmallVariant_effect_prediction:
         # --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf}.isecdir/0001.vcf.gz --output_file {rna_variant_effect}
 rna_snvindel_neopeptide_faa = F'{peptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
 rna_snvindel_wt_peptide_faa = F'{peptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
+if isRNAskipped: make_dummy_files([rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, rna_snvindel_info_file])
 rule RNA_SmallVariant_peptide_generation:
     input: rna_variant_effect, outf_rna_quantification
     output: rna_snvindel_neopeptide_faa, rna_snvindel_wt_peptide_faa, rna_snvindel_info_file
@@ -454,10 +480,7 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs):
     
 all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 all_vars_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
-
-if 'all_vars_peptide_faa' in config:
-    os.makedirs(os.path.dirname(all_vars_peptide_faa), exist_ok=True)
-    os.system(F'''cp {config['all_vars_peptide_faa']} {all_vars_peptide_faa}''')
+if 'all_vars_peptide_faa' in config: all_vars_peptide_faa = config['all_vars_peptide_faa']
 
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_faa, dna_snvindel_wt_peptide_faa,
