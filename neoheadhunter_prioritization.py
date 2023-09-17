@@ -391,9 +391,9 @@ If the keyword rerank is in function,
     parser.add_argument(u2d('binding_stability_soft_thres'), default = 1.4, type=float,
             help = 'soft threshold of peptide-MHC binding stability to predict peptide-MHC presentation to cell surface')
     parser.add_argument(u2d('tumor_abundance_hard_thres'), default = 1.0, type=float,
-            help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC recognition by T-cells')
+            help = 'hard threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
     parser.add_argument(u2d('tumor_abundance_soft_thres'), default = 11, type=float,
-            help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC recognition by T-cells')
+            help = 'soft threshold of peptide-MHC binding affinity to predict peptide-MHC presentation to cell surface')
     parser.add_argument(u2d('agretopicity_thres'), default = 0.1, type=float,
             help = 'threshold of agretopicity to predict peptide-MHC recognition by T-cells')
     parser.add_argument(u2d('foreignness_thres'), default = 1e-16, type=float,
