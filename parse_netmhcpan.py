@@ -20,6 +20,15 @@ def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(
 def str2str_show_empty(s, empty_str = NA_REP): return (s if s else empty_str)
 def str2str_hide_empty(s, empty_str = NA_REP): return (s if (s != empty_str) else '')
 
+def pep_norm(pep):
+    ret = []
+    for aa in pep:
+        #assert aa in ALPHABET, (F'The amino-acid sequence ({toks[2]}) from ({toks}) does not use the alphabet ({ALPHABET})')
+        if aa in ALPHABET: ret.append(aa)
+        else: ret.append('X')
+    if 'X' in ret: logging.warning(F'{pep} contains non-standard amino acid and is replaced by {ret}')
+    return ''.join(ret)
+    
 def alnscore_penalty(sequence, neighbour):
     assert len(sequence) == len(neighbour)
     ret = 0
@@ -72,6 +81,9 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                     wt_fpep = ''
             else:
                 et_fpep = line # aaseq2canonical(line)
+                wt_fpep = pep_norm(wt_fpep)
+                mt_fpep = pep_norm(mt_fpep)
+                et_fpep = pep_norm(et_fpep)
                 assert len(wt_fpep) == 0 or len(wt_fpep) == len(et_fpep)
                 assert len(et_fpep) == len(mt_fpep), F'len({et_fpep}) == len({mt_fpep}) failed'
                 logging.debug(F'ET={et_fpep} MT={mt_fpep} WT={wt_fpep}')
@@ -131,8 +143,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
                 assert (len(toks) == (len(inheader) - 1) or len(toks) == (len(inheader) + 1)), F'The content-line {line} is invalid'
                 if len(toks) == (len(inheader) - 1): row = toks + ['NB'] # no-binding
                 if len(toks) == (len(inheader) + 1): row = toks[0:(len(inheader) - 1)] + [toks[(len(inheader))]]
-                for aa in toks[2]: # aaseq2canonical(toks[2]):
-                    assert aa in ALPHABET, (F'The amino-acid sequence ({toks[2]}) from ({toks}) does not use the alphabet ({ALPHABET})')
+                row[2] = pep_norm(row[2])
                 rows.append(row)
     print(F'File={infilename} inheader={inheader}')
     df = pd.DataFrame(rows, columns = inheader)
