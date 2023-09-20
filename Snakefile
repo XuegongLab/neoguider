@@ -96,12 +96,14 @@ mixcr_mem_mb = 32*1000
 bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
-IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = True
-OPTITYPE_CONFIG = F"{script_basedir}/software/optitype.config.ini"
+IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = False
+OPTITYPE_CONDA_ENV = 'optitype_env'
+OPTITYPE_CONFIG = f"{script_basedir}/software/optitype.config.ini"
+OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
-    subprocess.call(cmd, shell = in_shell)
+    return subprocess.call(cmd, shell = in_shell)
 def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile'):
     logging.info(F'Trying to create the dummy placeholder files {files}')
     for file in files:
@@ -187,17 +189,27 @@ rule HLA_typing:
     resources: mem_mb = optitype_mem_mb
     threads: 1
     run:
-        shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out && cp {OPTITYPE_CONFIG} {RES}/hla_typing/config.ini')
+        shell('rm -r {RES}/hla_typing/optitype_out/ || true && mkdir -p {RES}/hla_typing/optitype_out')
+        if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
+            shell('cp {OPTITYPE_CONFIG} {RES}/hla_typing/config.ini')
         if RNA_TUMOR_ISPE:
             if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
                 shell('podman run -v {hla_typing_dir}:/data/ -t quay.io/biocontainers/optitype:1.3.2--py27_3 /usr/local/bin/OptiTypePipeline.py'
                       ' -c /data/config.ini -i /data/{hla_fq_r1_fname} /data/{hla_fq_r2_fname} --rna -o /data/optitype_out/ > {hla_out}.OptiType-container.stdout')
-            else: shell('OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
+            elif OPTITYPE_CONDA_ENV != '':
+                shell('$CONDA_EXE run -n {OPTITYPE_CONDA_ENV} OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/'
+                      ' -c {OPTITYPE_NOPATH_CONFIG} > {output.out}.OptiType.stdout')
+            else:
+                shell('OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
         else:
             if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
                 shell('podman run -v {hla_typing_dir}:/data/ -t quay.io/biocontainers/optitype:1.3.2--py27_3 /usr/local/bin/OptiTypePipeline.py'
                       ' -c /data/config.ini -i /data/{hla_fq_se_fname}                         --rna -o /data/optitype_out/ > {hla_out}.OptiType-container.stdout')
-            else: shell('OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
+            elif OPTITYPE_CONDA_ENV != '':
+                shell('$$CONDA_EXE run -n {OPTITYPE_CONDA_ENV} OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/'
+                      ' -c {OPTITYPE_NOPATH_CONFIG} > {output.out}.OptiType.stdout')
+            else:
+                shell('OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/ > {output.out}.OptiType.stdout')
         shell('cp {RES}/hla_typing/optitype_out/*/*_result.tsv {output.out}')
     
 kallisto_out = F'{RES}/rna_quantification/{PREFIX}_kallisto_out'
@@ -544,7 +556,9 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         call_with_infolog(remote_rmdir)
         call_with_infolog(remote_mkdir)
         call_with_infolog(remote_send)
-        call_with_infolog(remote_exe)
+        for iter_num in range(3):
+            remote_exe_retcode = call_with_infolog(remote_exe)
+            if remote_exe_retcode == 0: break
         call_with_infolog(remote_receive1)
         call_with_infolog(remote_receive2)
 
