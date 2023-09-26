@@ -556,9 +556,7 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         call_with_infolog(remote_rmdir)
         call_with_infolog(remote_mkdir)
         call_with_infolog(remote_send)
-        for iter_num in range(3):
-            remote_exe_retcode = call_with_infolog(remote_exe)
-            if remote_exe_retcode == 0: break
+        remote_exe_retcode = call_with_infolog(remote_exe)
         call_with_infolog(remote_receive1)
         call_with_infolog(remote_receive2)
 
