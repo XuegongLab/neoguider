@@ -4,8 +4,12 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.isotonic import IsotonicRegression
 
-pseudocount = 0.05
-### This is the pseudo-code for the logistic regression with odds ratios estimated by isotonic regressions, full implementation will be given soon.
+pseudocount = 0.5
+# This is some example code for an implementation of the logistic regression with odds ratios estimated by isotonic regressions.
+# In the future, we may 
+# - implement the L0 and/or L1 norm versions of isotonic regressions
+# - better estimate the odds ratios
+# - optimize both the isotonic curve and the logistic curve together so the the overall cross-entropy loss is minimized  (maybe with some EM algorithm)
 
 class IsotonicLogisticRegression:
     
