@@ -33,7 +33,7 @@ $conda install -y -n $neoheadhunter python=3.10 xlrd \
     perl-carp-assert psutil pyyaml requests-cache zlib \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
     bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
-    'biopython<=1.79' pybiomart pyfaidx pysam
+    'biopython<=1.79' pybiomart pyfaidx pysam # Currently, edit-distance based on blosum alignment instead of edit-distance based on edlib is used
 # note: if you have encountered the error: *** is not installable because it requires __cuda, which is missing on the system,
 #   then you can refer to the work-around at
 #   https://stackoverflow.com/questions/74836151/nothing-provides-cuda-needed-by-tensorflow-2-10-0-cuda112py310he87a039-0 
