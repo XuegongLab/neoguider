@@ -452,9 +452,9 @@ for i in range(len(trans_name)):
             else:
                 print("[WARNING] Wrong Consequence!")
                 break
-            head_comment = F'WT={wt_pep} MT={mt_pep} TPM={tpm_num[i]}'
-            wt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_A {head_comment}'
-            mt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_B {head_comment}'
+            head_comment = F'VariantType={head_id} VariantMoleculeType={molecule_type} VariantLineNo={output_line_num[i]} VLN2={i} TPM={tpm_num[i]} MT={mt_pep} WT={wt_pep}'
+            wt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_A {head_comment} IsHelperPeptide=1 IsComputedFromWildTypeLocus=1'
+            mt_head = F'>{head_id}_{molecule_type}{output_line_num[i]} {head_comment}'
 
         mt_header.append(mt_head)
         wt_header.append(wt_head)
@@ -493,13 +493,13 @@ if not os.path.exists(tmp_fasta_folder):
     os.mkdir(tmp_fasta_folder)
 
 mt_f_w=open(out_dir+"/"+prefix+"_snv_indel.fasta",'w')
-wt_f_w=open(tmp_fasta_folder+"/"+prefix+"_snv_indel_wt.fasta",'w')
+#wt_f_w=open(tmp_fasta_folder+"/"+prefix+"_snv_indel_wt.fasta",'w')
 for i in range(len(data_dd_reindex.mutation_header)):
     if ('*' in data_dd_reindex.mutation_peptide[i]) or ('*' in data_dd_reindex.wild_peptide[i]):
         logging.warning(F'{data_dd_reindex.mutation_header[i]} or {data_dd_reindex.wild_header[i]} have stop codon (*) and are therefore skipped. ')
     else:
         mt_f_w.write('%s%s%s%s'%(data_dd_reindex.mutation_header[i],'\n',data_dd_reindex.mutation_peptide[i],'\n'))
-        wt_f_w.write('%s%s%s%s'%(data_dd_reindex.wild_header[i],'\n',data_dd_reindex.wild_peptide[i],'\n'))
-wt_f_w.close()
+        #wt_f_w.write('%s%s%s%s'%(data_dd_reindex.wild_header[i],'\n',data_dd_reindex.wild_peptide[i],'\n'))
 mt_f_w.close()
+#wt_f_w.close()
 

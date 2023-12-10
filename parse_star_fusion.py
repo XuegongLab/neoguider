@@ -143,7 +143,7 @@ for line in reader:
                 continue
         mt_pep_seq = translate(cds.upper())
         mt_pep_seq_list.append(mt_pep_seq)
-        mt_head = F'>FUS_{line_num} MT={mt_pep_seq} TPM={tpm}'
+        mt_head = F'>FUS_R{line_num} VariantType=FUS VariantMoleculeType=R VariantLineNo={line_num} MT={mt_pep_seq} TPM={tpm}'
         mt_head_list.append(mt_head)
         output_line_num.append(line_num)
 

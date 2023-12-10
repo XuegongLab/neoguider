@@ -6,6 +6,7 @@ from __future__ import print_function
 import os, logging, sj2psi, sys, subprocess, shutil, pysam
 import pickle, tempfile, multiprocessing, warnings
 from subprocess import PIPE
+import numpy as np
 import pandas as pd
 from functools import partial
 from math import log, exp
@@ -364,7 +365,9 @@ def ProcessIsoform(genome, length, tpm_threshold, expression_file):
             for pep in pep_out:
                 #f.write(">SP_"+pep.split('_')[1]+"_"+pep.split('_')[2]+'\n')
                 pep_seq, pep_id, pep_tpm = pep.split('_')
-                f.write(F'>SP_{pep_id}_{pep_ordinal} MT={pep_seq} TPM={pep_tpm}\n')
+                # https://stackoverflow.com/questions/2267362/how-to-convert-an-integer-to-a-string-in-any-base
+                pep_ord_base36 = np.base_repr(pep_ordinal, base=26+10)
+                f.write(F'>SP_R{pep_id}_{pep_ord_base36} VariantType=SP VariantMoleculeType=R VariantLineNo={pep_id} VariantOrdinal={pep_ordinal} MT={pep_seq} TPM={pep_tpm}\n')
                 f.write(pep_seq + '\n')
                 pep_ordinal += 1
     logging.info("All short pep number is: %s", len(remain_pep))
