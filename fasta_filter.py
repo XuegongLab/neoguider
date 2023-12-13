@@ -7,25 +7,15 @@ ALPHABET = 'ARNDCQEGHILKMFPSTWYV'
 
 def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
 
-def faa2newfaa(arg):
-    hdr, pep, nbits = arg
-    pep2 = aaseq2canonical(pep)
-    for aa in pep2:
-        if aa not in ALPHABET:
-            logging.warning(F'The FASTA record (header={hdr}, sequence={pep}) contains non-standard amino acids, so skipping this record. ')
-            return []
-    logging.debug(F'Processing {hdr} {pep}')
-    ret = []
-    seq2penalty = pep2simpeps(pep, nbits)
-    seqs = sorted(seq2penalty.keys())
-    seqs.remove(pep)
-    for i, simpep in enumerate([pep] + seqs):
-        new_ID = hdr.split()[0] + str(i)
-        pep_comment = ' '.join([tok for (j, tok) in enumerate(hdr.split()) if j > 0])
-        new_hdr = (F'{new_ID} {pep_comment} SOURCE={pep} MAX_BIT_DIST={seq2penalty[simpep]}')
-        new_seq = (simpep)
-        ret.append((new_hdr, new_seq))
-    return ret
+def get_val_by_key(fhdr, key):
+    val = None
+    for i, tok in enumerate(fhdr.split()):
+        if i > 0 and len(tok.split('=')) == 2:
+            k, v = tok.split('=')
+            if k == key:
+                assert val == None, 'The header {} has duplicated key {}'.format(fhdr, key)
+                val = v
+    return val
 
 def output(fhdr, fseq, alphabet, tpm_thres, hla):
     tpm = 0
@@ -52,7 +42,7 @@ def main():
             formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-a', '--alphabet', default = ALPHABET, help = 'The alphabet that each kept FASTA sequence must conform to. ')
     parser.add_argument(      '--hla', default = '', type = str, help = 'String of comma-separated HLA alleles to be added as comment to each FASTA sequence. ')
-    parser.add_argument('-t', '--tpm', default = 1.0, type = float, help = 'Transcript per million (TPM) below which the FASTA sequence is filtered out. ')
+    parser.add_argument('-t', '--tpm', default = -1, type = float, help = 'Transcript per million (TPM) below which the FASTA sequence is filtered out. ')
     
     args = parser.parse_args()
     fhdr = None
