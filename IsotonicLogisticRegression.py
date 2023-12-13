@@ -1,8 +1,14 @@
 #!/usr/bin/env python
 import collections,bisect,logging,math,pprint
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.isotonic import IsotonicRegression
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import KFold
+
+# sklearn.calibration.CalibratedClassifierCV(estimator=None, *, method='sigmoid', cv=KFold(n_splits=5, shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
+# sklearn.model_selection.KFold(n_splits=5, *, shuffle=False, random_state=None)
 
 # This is some example code for an implementation of the logistic regression with odds ratios estimated by isotonic regressions.
 # In the future, we may 
@@ -12,31 +18,33 @@ from sklearn.isotonic import IsotonicRegression
 
 class IsotonicLogisticRegression:
     
-    def __init__(self, pc = 0.5, penalty=None, **kwargs):
+    def __init__(self, pseudocount=0.5, penalty=None, n_splits=5, random_state=1, cccv_n_jobs=-1, **kwargs):
         """ Initialize """ 
         self.X0 = None
         self.X1 = None
         self.irs = []
         self.ivs = []
         self.logORX = None
-        self.lr = LogisticRegression(penalty=penalty, **kwargs)
-        self.pseudocount = pc
+        self.logr = LogisticRegression(penalty=penalty, **kwargs)
+        self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
+                cv=KFold(n_splits=n_splits, shuffle=True, random_state=random_state), n_jobs=cccv_n_jobs, ensemble=True)
+        self.pseudocount = pseudocount
     
     def get_params(self):
         """ Recursively get the params of this model """
-        ret = [self.logORX, self.lr.get_params()]
+        ret = [self.logORX, self.logr.get_params()]
         for ir in self.irs: ret.append(ir.get_params())
         return ret
     
     def get_info(self):
         """ Recursively get the fitted params of this model """
-        lr = self.lr
-        lr_info = [lr.classes_, lr.coef_, lr.intercept_, lr.n_features_in_, lr.n_iter_]
-        ir_info = []
+        logr = self.logr
+        logr_info = [logr.classes_, logr.coef_, logr.intercept_, logr.n_features_in_, logr.n_iter_]
+        isor_info = []
         for i in range(len(self.irs)):
             ir = self.irs[i]
-            ir_info.append([ir.X_min_, ir.X_max_, ir.X_thresholds_, ir.y_thresholds_, ir.f_, ir.increasing_])
-        return [lr_info, ir_info]
+            isor_info.append([ir.X_min_, ir.X_max_, ir.X_thresholds_, ir.y_thresholds_, ir.f_, ir.increasing_])
+        return [logr_info, isor_info]
     
     def _center(self, x, y, epsilon = 1e-6):
         """ Implement the centering step of the centered isotonic regression at https://arxiv.org/pdf/1701.05964.pdf """
@@ -193,7 +201,11 @@ class IsotonicLogisticRegression:
             
         self.logORX = np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
         logging.debug(self.logORX)
-        return self.lr.fit(self.logORX, y, **kwargs)
+        self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
+                cv=KFold(n_splits=min([sum(y), 5]), shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
+        self.cccv.fit(self.logORX, y)
+        self.logr.fit(self.logORX, y, **kwargs)
+        return self
 
     def transform(self, X1):
         """ scikit-learn transform """
@@ -210,17 +222,20 @@ class IsotonicLogisticRegression:
         irs = self.irs
         X = np.array(X1)
         test_orX    = np.array([irs[colidx].predict(X[:,colidx]) for colidx in range(X.shape[1])]).transpose()
-        return self.lr.predict(test_orX)
-    
+        return self.logr.predict(test_orX)
+        #return self.cccv.predict(test_orX)
+
     def predict_proba(self, X1):
         """ scikit-learn predict_proba using logistic regression built on top of isotonic scaler """
         irs = self.irs
         X = np.array(X1)
         test_orX    = np.array([irs[colidx].predict(X[:,colidx]) for colidx in range(X.shape[1])]).transpose()
-        return self.lr.predict_proba(test_orX)
+        return self.logr.predict_proba(test_orX)
+        #return self.cccv.predict_proba(test_orX)
         #logOR = [sum(vals) for vals in test_orX]
         #ret = 1.0 / (1.0 + np.exp(-np.array(logOR)))
         #return [(1-x, x) for x in ret]
+    
     def get_ivs():
         return self.ivs
 
