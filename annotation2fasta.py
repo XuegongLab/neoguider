@@ -452,7 +452,7 @@ for i in range(len(trans_name)):
             else:
                 print("[WARNING] Wrong Consequence!")
                 break
-            head_comment = F'VariantType={head_id} VariantMoleculeType={molecule_type} VariantLineNo={output_line_num[i]} VLN2={i} TPM={tpm_num[i]} MT={mt_pep} WT={wt_pep}'
+            head_comment = F'VariantType={head_id} VariantMoleculeType={molecule_type} VariantLineNo={output_line_num[i]} VLN2={i} TPM={tpm_num[i]} MT={mt_pep} WT={wt_pep} SourceData={software} SourcePatient={prefix}'
             wt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_A {head_comment} IsHelperPeptide=1 IsComputedFromWildTypeLocus=1'
             mt_head = F'>{head_id}_{molecule_type}{output_line_num[i]} {head_comment}'
 
