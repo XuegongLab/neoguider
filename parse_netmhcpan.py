@@ -253,6 +253,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
                             mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hamdist, mt_wt_scoredist*0.5, wt_pep, mt_wt_pep1_aln, mt_wt_pep2_aln))
                         
                         if wt_pep != '': wtpep_to_fpep_list[wt_pep].append(wt_fpep)
+                        if st_pep != '': stpep_to_fpep_list[st_pep].append(st_fpep)
                         if mt_pep != '': mtpep_to_fpep_list[mt_pep].append(mt_fpep)
                         if et_pep != '': etpep_to_fpep_list[et_pep].append(et_fpep)
                     '''
@@ -425,7 +426,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
                 #mtpep2wtpeplist[mtpep_key].append((mt_wt_hdist, wtpep_aff, wtpep, 'WT'))
         for pep in sorted(set([etpep] + mtpep_list + stpep_list + wtpep_list)):
             pep2fidlist[pep] = []
-            fpep_list = (etpep_to_fpep_list.get(pep, []) + mtpep_to_fpep_list.get(pep, []) + wtpep_to_fpep_list.get(pep, []))
+            fpep_list = (etpep_to_fpep_list.get(pep, []) + mtpep_to_fpep_list.get(pep, []) + stpep_to_fpep_list.get(pep, []) + wtpep_to_fpep_list.get(pep, []))
             # logging.warning(fpep_list)
             for fpep in fpep_list:
                 for fid in fpep_to_fid_list[fpep]:
@@ -434,7 +435,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         #mtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(mtpep_list))))))
         #wtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(wtpep_list))))))
         etpep_tpm_dflist.append(etpep_tpm)
-        mtpep2peplist_json = {'/'.join(str(x) for x in k) : '/'.join(str(x) for x in v) for (k,v) in sorted(mtpep2peplist.items())}
+        mtpep2peplist_json = {'/'.join(str(x) for x in k) : ['/'.join([str(y) for y in x]) for x in v] for (k,v) in sorted(mtpep2peplist.items())}
         mtpep_wtpep_fpep_fid_tpm_ddic_json = json.dumps((mtpep2peplist_json, pep2fidlist), separators=(',', ':'), sort_keys=True).replace('"', "'")
         mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist.append(mtpep_wtpep_fpep_fid_tpm_ddic_json)
         best_mtpep_key = sorted(mtpep2peplist.keys())[0]
