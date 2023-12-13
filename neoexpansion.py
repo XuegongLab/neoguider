@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import argparse, logging, multiprocessing, os, sys
+import argparse, collections, json, logging, multiprocessing, os, sys
 
 from Bio.Align import substitution_matrices
 #from Bio.SubsMat import MatrixInfo
@@ -11,6 +11,16 @@ def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 ALPHABET = 'ARNDCQEGHILKMFPSTWYV'
 
 def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
+
+def get_val_by_key(fhdr, key):
+    val = None
+    for i, tok in enumerate(fhdr.split()):
+        if i > 0 and len(tok.split('=')) == 2:
+            k, v = tok.split('=')
+            if k == key:
+                assert val == None, 'The header {} has duplicated key {}'.format(fhdr, key)
+                val = v
+    return val
 
 def get_neighbour_seqs(in_string_seq, alphabet = 'ARNDCQEGHILKMFPSTWYV'):
     ret = []
@@ -44,7 +54,8 @@ def pep2simpeps(bioseq, nbits, blosum62):
     while queue:
         nextseq = queue.pop(0)
         for neighbour in get_neighbour_seqs(nextseq):
-            penalty = alnscore_penalty(bioseq, neighbour, blosum62)
+            # neighbour is the original sequence whose TCR can cross react with bioseq
+            penalty = alnscore_penalty(neighbour, bioseq, blosum62)
             if not neighbour in seq2penalty and penalty * 0.5 <= nbits * (1.0 + sys.float_info.epsilon):
                 queue.append(neighbour)
                 seq2penalty[neighbour] = penalty * 0.5
@@ -81,56 +92,78 @@ def runblast(query_seqs, target_fasta, output_file, ncores):
         -evalue 100000000 -matrix BLOSUM62 -gapopen 11 -gapextend 1 \
         -out {query_fasta}.blastp_out.tmp -num_threads {ncores} \
         -outfmt '10 qseqid sseqid qseq qstart qend sseq sstart send length mismatch pident evalue bitscore' '''
+    #            -1 0      1      2    3      4    5    6      7    8      9        10     11     12
     logging.info(cmd)
     os.system(cmd)
-    ret = []
     qseq2sseq = {}
     qseq2maxb = {}
-    qseq2tpm  = {}
+    qseq2info = collections.defaultdict(list)
     with open(F'{query_fasta}.blastp_out.tmp') as blastp_csv:
         for line in blastp_csv:
             tokens = line.strip().split(',')
-            qseq = tokens[2]
-            sseq = tokens[5]
-            bitscore = float(tokens[-1])
+            qseq = tokens[2].replace('-', '')
+            sseq = tokens[5].replace('-', '')
+            bitscore = float(tokens[12])
+            qseq2info[qseq].append((bitscore, tokens[1], sseq, tokens[9], tokens[10]))
             is_canonical = all([(aa in 'ARNDCQEGHILKMFPSTWYV') for aa in sseq])
             if is_canonical and qseq2maxb.get(qseq, -1) < bitscore:
                 qseq2sseq[qseq] = sseq
                 qseq2maxb[qseq] = bitscore
-    ret = []
+    ret1 = []
+    ret2 = []
     for qseq in query_seqs:
-        ret.append(qseq2sseq.get(qseq, NA_STRING))
-    return ret
+        ret1.append(qseq2sseq.get(qseq, NA_STRING))
+        ret2.append(qseq2info.get(qseq, []))
+    return ret1, ret2
 
 def blast_search(hdr_pep_list, reference, output_file, ncores):
-    pep_list = [pep for (hdr, pep, _) in hdr_pep_list]
-    selfpeps1 = runblast(pep_list, reference, output_file, ncores)
+    pep_list = [pep                        for (hdr, pep, _) in hdr_pep_list]
+    hla_list = [get_val_by_key(hdr, 'HLA') for (hdr, pep, _) in hdr_pep_list]
+    selfpeps1, alninfos1  = runblast(pep_list, reference, output_file, ncores)
+    pep2hla = {}
+    for hla, selfpep in zip(hla_list, selfpeps1):
+        if selfpep in pep2hla and pep2hla[selfpep] != hla:
+            logging.warning(F'The peptide {selfpep} has multiple mutant sequences with different HLA alleles {hla} and {pep2hla[selfpep]}')
+            pep2hla[selfpep] = pep2hla[selfpep] + ',' + hla
+        elif not (selfpep in pep2hla):
+            pep2hla[selfpep] = hla
     selfpeps = sorted(list(set(selfpeps1)))
-    for (hdr, pep, _), selfpep in zip(hdr_pep_list, selfpeps1):
-        print(F'{hdr} ST={selfpep} IsNeoPeptide=1')
+    for (hdr, pep, _), selfpep, alninfo in zip(hdr_pep_list, selfpeps1, alninfos1):
+        alninfo_str = json.dumps(sorted(alninfo)[::-1], separators=(',', ':'), sort_keys=True)
+        print(F'{hdr} ST={selfpep} IsNeoPeptide=1 SelfAlnInfo={alninfo_str}')
         print(pep)
     for i, selfpep in enumerate(selfpeps):
         if isna(selfpep):
-            logging.warning('The string (ST={selfpep}) is found in the list of peptides and is skipped. ')
+            logging.warning(F'The string (ST="{selfpep}") is not found in the list of peptides and is skipped. ')
             continue
-        print(F'>SELF_{i+1} ST={selfpep} IsHelperPeptide=1 IsSearchedFromSelfProteome=1')
+        hla = pep2hla[selfpep]
+        print(F'>SELF_{i+1} HLA={hla} ST={selfpep} IsHelperPeptide=1 IsSearchedFromSelfProteome=1')
         print(selfpep)
 
 def process_WT(hdr_pep_list):
-    wt2peps = set([]) # collections.defaultdict(list)
+    wt2hlas = collections.defaultdict(set)
     for (hdr, pep, _) in hdr_pep_list:
-        toks = hdr.split()
-        if len(toks) == 1: continue
-        for tok in toks[1:]:
-            if 2 == len(tok.split('=')):
-                key, val = tok.split('=')
-                if key == 'WT': wt2peps.add(val) # [val].append(pep) # append((len(toks[0]), toks[0], hdr, pep))
-    wildpeps = sorted(list(wt2peps))
+        hla = get_val_by_key(hdr, 'HLA')
+        wtpep = get_val_by_key(hdr, 'WT')
+        # toks = hdr.split()
+        # if len(toks) == 1: continue
+        # for tok in toks[1:]:
+        #    if 2 == len(tok.split('=')):
+        #        key, val = tok.split('=')
+        #        if key == 'WT': wt2hlas[val].add() # [val].append(pep) # append((len(toks[0]), toks[0], hdr, pep))
+        wt2hlas[wtpep].add(hla)
+    wildpeps = sorted(list(wt2hlas.keys()))
     for i, wildpep in enumerate(wildpeps):
         if isna(wildpep):
-            logging.warning('The string (WT={wildpep}) is found in the list of peptides and is skipped. ')
+            logging.warning(F'The string (WT="{wildpep}") is found in the list of peptides and is skipped. ')
             continue
-        print(F'>WILD_{i+1} WT={wildpep} IsHelperPeptide=1 IsGeneratedFromWT=1')
+        hlas = sorted(list(wt2hlas[wildpep]))
+        if len(hlas) > 1:
+            logging.warning('The wild-type peptide (WT={wildpep}) is associated with multiple sets of HLA alleles ({hlas}). ')
+            hlastr = ','.join(hlas)
+        else:
+            hlastr = hlas[0]
+        print(F'>WILD_{i+1} HLA={hlastr} WT={wildpep} IsHelperPeptide=1 IsGeneratedFromWT=1')
         print(wildpep)
     
 def main():
