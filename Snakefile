@@ -1,4 +1,5 @@
-import csv,logging,multiprocessing,os,subprocess,datetime
+import csv, datetime, json, logging, multiprocessing, os, subprocess
+
 script_start_datetime = datetime.datetime.now()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
@@ -29,7 +30,11 @@ tumor_vaf = config['tumor_vaf']
 normal_vaf = config['normal_vaf']
 tumor_normal_var_qual = config['tumor_normal_var_qual']
 
-peplens = config['peplens']
+final_peplens = config['peplens']
+peplen_list = sorted(int(x) for x in final_peplens.split(','))
+assert peplen_list
+peplen_list = [peplen_list[0] - 1] + peplen_list + [peplen_list[0] + 1]
+peplens = ','.join(F'{peplen}' for peplen in peplen_list)
 
 binding_affinity_filt_thres = config['binding_affinity_filt_thres']
 binding_affinity_hard_thres = config['binding_affinity_hard_thres']
@@ -48,7 +53,6 @@ agretopicity_thres = config['agretopicity_thres']
 foreignness_thres = config['foreignness_thres']
 alteration_type = config['alteration_type']
 
-#num_cores = config['num_cores']
 netmhc_ncores = config['netmhc_ncores']
 netmhc_nthreads = config['netmhc_nthreads']
 ergo2_nthreads = config['ergo2_nthreads']
@@ -103,6 +107,7 @@ OPTITYPE_CONDA_ENV = 'optitype_env'
 OPTITYPE_CONFIG = f"{script_basedir}/software/optitype.config.ini"
 OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
+def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
     return subprocess.call(cmd, shell = in_shell)
@@ -115,11 +120,11 @@ def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile
             os.makedirs(os.path.dirname(file), exist_ok=True)
             call_with_infolog(F'cp {origfile} {file} && touch {file} && touch {file}.DummyPlaceholder')
 
-DNA_TUMOR_ISPE  = (DNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
-DNA_NORMAL_ISPE = (DNA_NORMAL_FQ2 not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
-RNA_TUMOR_ISPE  = (RNA_TUMOR_FQ2  not in [None, '', 'NA', 'Na', 'None', 'none', '.'])
+DNA_TUMOR_ISPE  = (not isna(DNA_TUMOR_FQ2))
+DNA_NORMAL_ISPE = (not isna(DNA_NORMAL_FQ2))
+RNA_TUMOR_ISPE  = (not isna(RNA_TUMOR_FQ2))
 
-isRNAskipped = (RNA_TUMOR_FQ1 in [None, '', 'NA', 'Na', 'None', 'none', '.'])
+isRNAskipped = isna(RNA_TUMOR_FQ1)
 if isRNAskipped and not ('comma_sep_hla_list' in config):
     logging.warning(F'Usually, either RNA FASTQ files (rna_tumor_fq1 and rna_tumor_fq2) or comma_sep_hla_list is specified in the config. ')
 
@@ -482,16 +487,17 @@ def retrieve_hla_alleles():
                 if line[i] != 'None': ret.append('HLA-' + line[i].replace('*',''))
     return sorted(list(set(ret)))
 
-def run_netMHCpan(args):
-    hla_str, infaa = args
-    return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l {peplens} -BA > {infaa}.netMHCpan-result')
+#def run_netMHCpan(args):
+#    hla_str, infaa = args
+#    return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l {peplens} -BA > {infaa}.netMHCpan-result')
 
-def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_strs):
+def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_string):
     call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true')
     call_with_infolog(F'mkdir -p {outtsv}.tmpdir/')
     call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
-    cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l {peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
-            for hla_str in hla_strs for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
+    cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_string} -l {peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_string}.netMHCpan-result'
+            # for hla_str in hla_strs
+            for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
     with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
         for cmd in cmds: shfile.write(cmd + '\n')
     # Each netmhcpan process uses much less than 100% CPU, so we can spawn many more processes
@@ -517,15 +523,15 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
     outdir = os.path.dirname(outtsv)
     logging.info(F'>>>>> outdir={outdir}')
     outputfile1 = outtsv
-
+    
     if netmhcstabpan_cmd == path:
-        run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -H {hla_string} -c {netmhc_ncores}'
+        run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores}'
         call_with_infolog(run_calculation)
     else:
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -H {hla_string} -c {netmhc_ncores}'
+        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -c {netmhc_ncores}'
         remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
         remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
-        remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:/tmp/{outdir}/'
+        remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {script_basedir}/fasta_partition.py {inputfile} {user}@{address}:/tmp/{outdir}/'
         # remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_filt_thres} -H {hla_string}
         remote_exe = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'
         remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1} {outdir}'
@@ -545,7 +551,8 @@ if 'all_vars_peptide_faa' in config: all_vars_peptide_faa = config['all_vars_pep
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_faa, # dna_snvindel_wt_peptide_faa,
            rna_snvindel_neopeptide_faa, # rna_snvindel_wt_peptide_faa,
-           fusion_neopeptide_faa, splicing_neopeptide_faa
+           fusion_neopeptide_faa, splicing_neopeptide_faa,
+           hla_out
     output: all_neo_peptide_faa
     threads: 1
     run:
@@ -562,19 +569,28 @@ rule Peptide_processing:
     output: all_vars_peptide_faa
     threads: workflow.cores
     run:
-        shell('cat {all_neo_peptide_faa} | python {script_basedir}/neoexpansion.py --reference {PEP_REF} --tmp {all_vars_peptide_faa}.tmp > {all_vars_peptide_faa}')
+        comma_sep_hla_str = ','.join(retrieve_hla_alleles())
+        shell('cat {all_neo_peptide_faa} '
+            ' | python {script_basedir}/fasta_addkey.py --key HLA --val "{comma_sep_hla_str}" '
+            ' | python {script_basedir}/neoexpansion.py --reference {PEP_REF} --tmp {all_vars_peptide_faa}.tmp > {all_vars_peptide_faa}')
 
 all_vars_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
 rule PeptideMHC_binding_affinity_prediction:
-    input: all_vars_peptide_faa, hla_out
+    input: all_vars_peptide_faa #, hla_out
     output: all_vars_netmhcpan_txt
     threads: netmhc_nthreads # 12
     run:
-        peptide_to_pmhc_binding_affinity(all_vars_peptide_faa, all_vars_netmhcpan_txt, retrieve_hla_alleles())
+        shell(F'cat {all_vars_peptide_faa} | python {script_basedir}/fasta_partition.py --key HLA --out {all_vars_peptide_faa}')
+        all_vars_peptide_faa_summary = F'{all_vars_peptide_faa}.partition/mapping.json'
+        with open(all_vars_peptide_faa_summary) as jsonfile: hla2faa = json.load(jsonfile)
+        all_vars_peptide_faa_partdir = os.path.dirname(os.path.realpath(all_vars_peptide_faa_summary))
+        for hla_str, faa in sorted(hla2faa.items()):
+            peptide_to_pmhc_binding_affinity(F'{all_vars_peptide_faa_partdir}/{faa}', F'{all_vars_peptide_faa_partdir}/{faa}.netmhcpan.txt', hla_str)
+        shell(F'cat {all_vars_peptide_faa_partdir}/*.netmhcpan.txt > {all_vars_netmhcpan_txt}')
 
 all_vars_netmhcstabpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcstabpan.txt'
 rule PeptideMHC_binding_stability_prediction:
-    input: all_vars_peptide_faa, hla_out
+    input: all_vars_peptide_faa #, hla_out
     output: all_vars_netmhcstabpan_txt
     threads: netmhc_nthreads # 12
     run:
@@ -644,7 +660,7 @@ all_vars_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.tsv'
 #    run: 
 #        bindstab_filter_py = F'{script_basedir}/bindstab_filter.py'
 #        shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
-#              '-a {binding_affinity_filt_thres} -l SB,WB,NB')
+#              '-a {binding_affinity_filt_thres} -l {final_peplens}')
 #        run_netMHCstabpan(bindstab_filter_py, F'{all_vars_netmhc_filtered_tsv}', F'{pmhc_dir}')
 
 iedb_path = F'{script_basedir}/database/iedb.fasta' # '/mnt/d/code/neohunter/NeoHunter/database/iedb.fasta'
@@ -673,7 +689,7 @@ rule Prioritization_with_all_TCRs:
     output: neoheadhunter_prioritization_tsv, final_pipeline_out
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l SB,WB,NB')
+              '-a {binding_affinity_filt_thres} -l {final_peplens}')
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
@@ -696,7 +712,7 @@ rule Prioritization_with_all_TCRs_with_minimal_varinfo:
     output: pmhc_as_input_prioritization_tsv
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l SB,WB,NB')
+              '-a {binding_affinity_filt_thres} -l {final_peplens}')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} '
             F''' {prioritization_function_params.replace('_', '-')}''')
