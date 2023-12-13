@@ -1,3 +1,4 @@
+species: 'Homo_sapiens' # will support Mus_musculus in the future
 
 ### Section 1: required input and output: one set-up per sample
 
