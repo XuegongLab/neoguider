@@ -16,16 +16,22 @@ import pysam
 
 NA_REP = 'N/A'
 BIG_INT = 2**32
-DROP_COLS = ['ET_pep', 'ET_BindAff', 'ET_MT_hamdist', 'ET_ST_hamdist', 'ET_WT_hamdist', 'ET_MT_bitdist', 'ET_MT_Agretopicity']
+DROP_COLS = [
+    'ET_pep',     #'MT_pep',     'ST_pep',     'WT_pep',
+    'ET_BindAff', # 'MT_BindAff', 'ST_BindAff', 'WT_BindAff',
+    'ET_MT_pairAln', 'ET_ST_pairAln', 'ET_WT_pairAln', # 'MT_ST_pairAln', 'MT_WT_pairAln',
+    'ET_MT_bitDist', 'ET_ST_bitDist', 'ET_WT_bitDist', # 'MT_ST_bitDist', 'MT_WT_bitDist',
+    'ET_MT_hamDist', 'ET_ST_hamDist', 'ET_WT_hamDist', # 'MT_ST_hamDist', 'MT_WT_hamDist',
+    'ET_MT_Agretopicity']
 
 def u2d(s): return '--' + s.replace('_', '-')
 
 def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
 
-def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
+def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1) # return operation status
 def dropcols(df, colnames = DROP_COLS):
     xs = [x for x in colnames if x in df.columns]
-    return df.drop(xs, axis = 1)
+    return df.drop(xs, axis = 1) # return DataFrame
 
 NA_VALS = [None, '', 'NA', 'Na', 'N/A', 'None', 'none', '.']
 def isna(arg): return arg in NA_VALS
@@ -151,7 +157,7 @@ def allblast(query_seqs, target_fasta, output_file):
                 if not isna(query_seq):
                     query_fasta_file.write(F'>{query_seq}\n{query_seq}\n')
                 elif not query_seq in warned_seqs:
-                    logging.warning(F'The query seq {query_seq} in file {query_fasta} is invalid and is therefore skipped. ')
+                    logging.warning(F'The query seq {query_seq} is invalid and is therefore skipped (not put in file {query_fasta}). ')
                     warned_seqs.add(query_seq)
     # from https://github.com/andrewrech/antigen.garnish/blob/main/R/antigen.garnish_predict.R
     cmd = F'''blastp \
@@ -166,7 +172,7 @@ def allblast(query_seqs, target_fasta, output_file):
         for line in blastp_csv:
             tokens = line.strip().split(',')
             qseqid = tokens[0]
-            sseq = tokens[5]
+            sseq = tokens[5].replace('-', '')
             is_canonical = all([(aa in 'ARNDCQEGHILKMFPSTWYV') for aa in sseq])
             if is_canonical: ret[qseqid].append(sseq)
     return ret
@@ -419,9 +425,11 @@ def main():
     # are_highly_abundant is not used because we have too little positive data
     # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
     # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
+    col2last(data, 'PepTrace')
     keptdata = data
     #keptdata.to_csv(F'{args.output_file}.debug')
-    keptdata1 = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
+    
+    keptdata1 = keptdata[keptdata['ET_pep']==keptdata['MT_pep']]
     keptdata2 = dropcols(keptdata1)
 
     #data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
