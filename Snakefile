@@ -552,7 +552,7 @@ rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_faa, # dna_snvindel_wt_peptide_faa,
            rna_snvindel_neopeptide_faa, # rna_snvindel_wt_peptide_faa,
            fusion_neopeptide_faa, splicing_neopeptide_faa,
-           hla_out
+           hla_out # required for Peptide_processing but still listed here because all_neo_peptide_faa that has pre-filled HLA key-value pairs in its FASTA header can be used as input to Peptide_processing
     output: all_neo_peptide_faa
     threads: 1
     run:
