@@ -5,7 +5,7 @@ import argparse, collections, json, logging, multiprocessing, os, sys
 from Bio.Align import substitution_matrices
 #from Bio.SubsMat import MatrixInfo
 
-def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
+def isna(arg): return arg in [None, '', 'NA', 'Na', 'N/A', 'None', 'none', '.']
 
 #          '12345678901234567890'
 ALPHABET = 'ARNDCQEGHILKMFPSTWYV'
@@ -80,7 +80,7 @@ def faa2newfaa(arg):
         ret.append((new_hdr, new_seq))
     return ret
 
-NA_STRING = ''
+NA_REP = 'N/A'
 def runblast(query_seqs, target_fasta, output_file, ncores):
     query_fasta = F'{output_file}.query_seqs.fasta.tmp'
     with open(query_fasta, 'w') as query_fasta_file:
@@ -112,7 +112,7 @@ def runblast(query_seqs, target_fasta, output_file, ncores):
     ret1 = []
     ret2 = []
     for qseq in query_seqs:
-        ret1.append(qseq2sseq.get(qseq, NA_STRING))
+        ret1.append(qseq2sseq.get(qseq, NA_REP))
         ret2.append(qseq2info.get(qseq, []))
     return ret1, ret2
 
