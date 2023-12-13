@@ -27,18 +27,13 @@ INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX = tuple(range(NUM_INFO_INDEX
 ALPHABET = 'ARNDCQEGHILKMFPSTWYV'
 
 # def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
-
+def isna(arg): return arg in [None, '', 'NA', 'Na', 'N/A', 'None', 'none', '.']
 def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1)
 
 def str2str_show_empty(s, empty_str = NA_REP): return (s if s else empty_str)
 def str2str_hide_empty(s, empty_str = NA_REP): return (s if (s != empty_str) else '')
 
-def hamming_dist(a, b):
-    assert not (pd.isna(a) and pd.isna(b)), F'The Hamming distance between {a} and {b} cannot be computed. '
-    if pd.isna(a) or '' == a: return len(b)
-    if pd.isna(b) or '' == b: return len(a)
-    assert len(a) == len(b)
-    return sum([(0 if (a1 == b1) else 1) for (a1, b1) in zip(a, b)])
+def dedup_vals(key2vals): return {k : sorted(set(vs)) for (k, vs) in key2vals.items()} # removed duplicated values
 
 def pep_norm(pep):
     ret = []
@@ -48,22 +43,37 @@ def pep_norm(pep):
         else: ret.append('X')
     if 'X' in ret: logging.warning(F'{pep} contains non-standard amino acid and is replaced by {ret}')
     return ''.join(ret)
-    
-def alnscore_penalty(sequence, neighbour, blosum62):
+
+def hamming_dist(a, b):
+    assert not (pd.isna(a) and pd.isna(b)), F'The Hamming distance between {a} and {b} cannot be computed. '
+    if pd.isna(a) or '' == a: return len(b)
+    if pd.isna(b) or '' == b: return len(a)
+    assert len(a) == len(b)
+    return sum([(0 if (a1 == b1) else 1) for (a1, b1) in zip(a, b)])
+
+def alnscore_penalty(sequence, neighbour, blosum62, gap_open=-11, gap_ext=-1):
     assert len(sequence) == len(neighbour)
     ret = 0
+    prev_gap_pos = -1-1
     for i in range(len(sequence)):
         if sequence[i] != neighbour[i]:
-            scoremax = blosum62[(sequence[i], sequence[i])]
-            ab = (sequence[i], neighbour[i])
-            ba = (neighbour[i], sequence[i])
-            if ab in blosum62:
-                score = blosum62[ab]
+            if sequence[i] == '-' or neighbour[i] == '-':
+                if i != (prev_gap_pos + 1): # and i != 0 and i != len(sequence)-1:
+                    ret += -gap_open
+                else:
+                    ret += -gap_ext
+                prev_gap_pos = i
             else:
-                score = blosum62[ba]
-            ret += scoremax - score
+                scoremax = blosum62[(sequence[i], sequence[i])]
+                ab = (sequence[i], neighbour[i])
+                ba = (neighbour[i], sequence[i])
+                if ab in blosum62:
+                    score = blosum62[ab]
+                else:
+                    score = blosum62[ba]
+                ret += scoremax - score
     return ret
-    
+''' 
 def bio_substr(s, subpos, sublen, is_zerolen_str_set_to_empty=True, skipchars=['-', '*']):
     ret = []
     i = subpos
@@ -72,6 +82,31 @@ def bio_substr(s, subpos, sublen, is_zerolen_str_set_to_empty=True, skipchars=['
         i += 1
     if is_zerolen_str_set_to_empty and len(ret) != sublen: return ''
     return ''.join(ret)
+'''
+def bio_endpos(s, subpos, sublen, skipchars=['-', '*']):
+    p = subpos
+    rlen = 0
+    while p < len(s) and rlen < sublen:
+        if not s[p] in skipchars: rlen += 1
+        p += 1
+    if rlen == sublen: return p
+    else: return -1
+def bio_strfilter(s, skipchars=['-', '*']): return ''.join([c for c in s if (not (c in skipchars))])
+
+def aln_2(aligner, pep1, pep2):
+    alns = aligner.align(pep1, pep2)
+    best_aln = alns[0]
+    best_faa = format(best_aln)
+    toks = best_faa.split('\n')
+    aln1_str = toks[0] # ret1
+    aln2_str = toks[2] # ret2
+    i = 0
+    j = len(aln1_str)
+    while aln1_str[i]   == '-': i += 1
+    while aln1_str[j-1] == '-': j -= 1
+    aln1_str = aln1_str[i:j]
+    aln2_str = aln2_str[i:j]
+    return (aln1_str, aln2_str, hamming_dist(aln1_str, aln2_str), alnscore_penalty(aln1_str, aln2_str, aligner.substitution_matrix))
 
 def threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep):
     if wt_fpep != '':
@@ -102,18 +137,9 @@ def threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep):
         wt_aln_str = '-' * len(et_fpep) # ret3
     return (wt_aln_str, mt_aln_str, et_aln_str)
 
-def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
+def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
     """ This function assumes that there is a one-to-one correspondence between peptide and RNA transcript in fasta_filename. """
-    
-    aligner = Align.PairwiseAligner()
-    aligner.mode = 'global'
-    #aligner.match_score = 2
-    #aligner.mismatch_score = -1
-    aligner.open_gap_score = -11
-    aligner.extend_gap_score = -1
-    #aligner.target_end_gap_score = 0.0
-    #aligner.query_end_gap_score = 0.0
-    aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
+    blosum62 = aligner.substitution_matrix
     
     etpep_to_mtpep_list_dic = collections.defaultdict(list)
     mtpep_to_stpep_list_dic = collections.defaultdict(list)
@@ -139,13 +165,13 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                         #print(tok)
                         key, val = tok.split('=')
                         if key == 'WT':
-                            wt_fpep = val # aaseq2canonical(val)
+                            if not isna(val): wt_fpep = val # aaseq2canonical(val)
                             tkeys.append(key)
                         if key == 'ST':
-                            st_fpep = val # aaseq2canonical(val)
+                            if not isna(val): st_fpep = val # aaseq2canonical(val)
                             tkeys.append(key)
                         if key == 'MT':
-                            mt_fpep = val # aaseq2canonical(val)
+                            if not isna(val): mt_fpep = val # aaseq2canonical(val)
                             tkeys.append(key)
                         if key == 'TPM': 
                             tpm = float(val)
@@ -202,34 +228,80 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
                 assert len(et_aln_str) == len(wt_aln_str)
                 
                 logging.debug(F'ET={et_fpep} MT={mt_fpep} ST={st_fpep} WT={wt_fpep}')
-                for peplen in [7,8,9,10,11,12]:
+                for peplen in [7,8,9,10,11,12,13]:
+                    for beg in range(len(et_fpep)):
+                        end = beg + peplen
+                        if end >= len(et_fpep): continue
+                        et_pep = et_fpep[beg:end]
+                        
+                        mt_pep = st_pep = wt_pep = ''
+                        if mt_fpep != '':
+                            et_mt_pep1_aln, et_mt_pep2_aln, et_mt_hamdist, et_mt_scoredist = aln_2(aligner, et_pep, mt_fpep)
+                            mt_pep = et_mt_pep2_aln.replace('-', '')
+                        if st_fpep != '':
+                            mt_st_pep1_aln, mt_st_pep2_aln, mt_st_hamdist, mt_st_scoredist = aln_2(aligner, mt_pep, st_fpep)
+                            st_pep = mt_st_pep2_aln.replace('-', '')
+                        if wt_fpep != '':
+                            mt_wt_pep1_aln, mt_wt_pep2_aln, mt_wt_hamdist, mt_wt_scoredist = aln_2(aligner, mt_pep, wt_fpep)
+                            wt_pep = mt_wt_pep2_aln.replace('-', '')
+                        
+                        if et_pep != '' and mt_pep != '': 
+                            etpep_to_mtpep_list_dic[et_pep].append((et_mt_hamdist, et_mt_scoredist*0.5, mt_pep, et_mt_pep1_aln, et_mt_pep2_aln))
+                        if mt_pep != '' and st_pep != '': 
+                            mtpep_to_stpep_list_dic[mt_pep].append((mt_st_hamdist, mt_st_scoredist*0.5, st_pep, mt_st_pep1_aln, mt_st_pep2_aln))
+                        if mt_pep != '' and wt_pep != '': 
+                            mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hamdist, mt_wt_scoredist*0.5, wt_pep, mt_wt_pep1_aln, mt_wt_pep2_aln))
+                        
+                        if wt_pep != '': wtpep_to_fpep_list[wt_pep].append(wt_fpep)
+                        if mt_pep != '': mtpep_to_fpep_list[mt_pep].append(mt_fpep)
+                        if et_pep != '': etpep_to_fpep_list[et_pep].append(et_fpep)
+                    '''
                     for pepbeg in range(len(et_aln_str)):
                         # if et_aln_str[pepbeg] == '-': continue
                         #et_pep = et_fpep[pepbeg:pepend]
-                        wt_pep = bio_substr(wt_aln_str, pepbeg, peplen, True)
-                        mt_pep = bio_substr(mt_aln_str, pepbeg, peplen, True)
-                        et_pep = bio_substr(et_aln_str, pepbeg, peplen, True)
-                        mt_wt_hdist = hamming_dist(mt_pep, wt_pep)
-                        if mt_pep != '' and wt_pep != '': mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hdist, wt_pep))
+                        pepend = bio_endpos(et_aln_str, pepbeg, peplen)
+                        et_pep_aln = et_aln_str[pepbeg:pepend]
+                        et_pep     = bio_strfilter(et_pep_aln)
+                        mt_pep_aln = mt_aln_str[pepbeg:pepend]
+                        mt_pep     = bio_strfilter(mt_pep_aln)
+                        wt_pep_aln = wt_aln_str[pepbeg:pepend]
+                        wt_pep     = bio_strfilter(wt_pep_aln)
+                        #wt_pep = bio_substr(wt_aln_str, pepbeg, peplen, True)
+                        #mt_pep = bio_substr(mt_aln_str, pepbeg, peplen, True)
+                        #et_pep = bio_substr(et_aln_str, pepbeg, peplen, True)
+                        mt_wt_hdist = hamming_dist(mt_pep_aln, wt_pep_aln)
+                        mt_wt_bdist = alnscore_penalty(mt_pep_aln, wt_pep_aln, blosum62) # timeline: mt is after wt
+
+                        if mt_pep != '' and wt_pep != '': mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hdist, mt_wt_bdist, wt_pep, mt_pep_aln, wt_pep_aln))
                         if wt_pep != '': wtpep_to_fpep_list[wt_pep].append(wt_fpep)
                         
-                        et_mt_hdist = hamming_dist(et_pep, mt_pep)
-                        if et_pep != '' and mt_pep != '': etpep_to_mtpep_list_dic[et_pep].append((et_mt_hdist, mt_pep))
+                        et_mt_hdist = hamming_dist(et_pep_aln, mt_pep_aln)
+                        et_mt_bdist = alnscore_penalty(et_pep_aln, mt_pep_aln, blosum62) # timeline: mt is after et
+                        if et_pep != '' and mt_pep != '': etpep_to_mtpep_list_dic[et_pep].append((et_mt_hdist, et_mt_bdist, mt_pep, et_pep_aln, mt_pep_aln))
                         if mt_pep != '': mtpep_to_fpep_list[mt_pep].append(mt_fpep)
                         if et_pep != '': etpep_to_fpep_list[et_pep].append(et_fpep)
                     
                     for pepbeg in range(len(et_aln_st2)):
-                        st_pep = bio_substr(st_aln_st2, pepbeg, peplen, True)
-                        mt_pep = bio_substr(mt_aln_st2, pepbeg, peplen, True)
-                        et_pep = bio_substr(et_aln_st2, pepbeg, peplen, True)
-                        mt_st_hdist = hamming_dist(mt_pep, st_pep)
-                        if mt_pep != '' and st_pep != '': mtpep_to_stpep_list_dic[mt_pep].append((mt_st_hdist, st_pep))
+                        pepend = bio_endpos(et_aln_st2, pepbeg, peplen)
+                        et_pep_aln = et_aln_st2[pepbeg:pepend]
+                        et_pep     = bio_strfilter(et_pep_aln)
+                        mt_pep_aln = mt_aln_st2[pepbeg:pepend]
+                        mt_pep     = bio_strfilter(mt_pep_aln)
+                        st_pep_aln = st_aln_st2[pepbeg:pepend]
+                        st_pep     = bio_strfilter(st_pep_aln)
+                        #st_pep = bio_substr(st_aln_st2, pepbeg, peplen, True)
+                        #mt_pep = bio_substr(mt_aln_st2, pepbeg, peplen, True)
+                        #et_pep = bio_substr(et_aln_st2, pepbeg, peplen, True)
+                        mt_st_hdist = hamming_dist(mt_pep_aln, st_pep_aln)
+                        mt_st_bdist = alnscore_penalty(st_pep_aln, mt_pep_aln, blosum62) # timeline: mt is after st                        
+                        if mt_pep != '' and st_pep != '': mtpep_to_stpep_list_dic[mt_pep].append((mt_st_hdist, mt_st_bdist, st_pep, mt_pep_aln, st_pep_aln))
                         if st_pep != '': stpep_to_fpep_list[st_pep].append(st_fpep)
+                    '''
                 # INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX (NUM_INFO_INDEXES)
             
     logging.debug(etpep_to_mtpep_list_dic)
     logging.debug(mtpep_to_wtpep_list_dic)
-    def dedup_vals(key2vals): return {k : sorted(set(vs)) for (k, vs) in key2vals.items()} # removed duplicated values
+    
     etpep_to_mtpep_list_dic = dedup_vals(etpep_to_mtpep_list_dic)
     mtpep_to_stpep_list_dic = dedup_vals(mtpep_to_stpep_list_dic)
     mtpep_to_wtpep_list_dic = dedup_vals(mtpep_to_wtpep_list_dic)    
@@ -238,7 +310,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
     stpep_to_fpep_list = dedup_vals(stpep_to_fpep_list)
     wtpep_to_fpep_list = dedup_vals(wtpep_to_fpep_list)
     fpep_to_fid_list = dedup_vals(fpep_to_fid_list)
-
+    
     return ((etpep_to_mtpep_list_dic, mtpep_to_stpep_list_dic, mtpep_to_wtpep_list_dic), # mutation tracing
             (etpep_to_fpep_list, mtpep_to_fpep_list, stpep_to_fpep_list, wtpep_to_fpep_list), # superstring tracing
             (fpep_to_fid_list, fid_to_seqs)) # ID-TPM tracing
@@ -246,15 +318,16 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename):
 # We need (et_subseq -> mt_subseq) (mt_subseq -> wt_subseq) (subseq -> listof_seqs) (seq -> listof_fastaID) (fastaID -> TPM)
 # OUT_CSV_HEADER = ['HLA_type', 'MT_pep', 'WT_pep', 'BindAff', 'WT_BindAff', 'BindLevel', 'Identity', 'Quantification']
 OUT_HEADER = ['HLA_type',
-    'ET_pep', 'MT_pep', 'ST_pep', 'WT_pep', 
-    'ET_BindAff', 'MT_BindAff', 'ST_BindAff', 'WT_BindAff', 
-    'ET_MT_hamdist', 'ET_ST_hamdist', 'ET_WT_hamdist', 'MT_ST_hamdist', 'MT_WT_hamdist',
-    'ET_MT_bitdist',
+    'ET_pep',     'MT_pep',     'ST_pep',     'WT_pep', 
+    'ET_BindAff', 'MT_BindAff', 'ST_BindAff', 'WT_BindAff',
+    'ET_MT_pairAln', 'ET_ST_pairAln', 'ET_WT_pairAln', 'MT_ST_pairAln', 'MT_WT_pairAln',
+    'ET_MT_bitDist', 'ET_ST_bitDist', 'ET_WT_bitDist', 'MT_ST_bitDist', 'MT_WT_bitDist',
+    'ET_MT_hamDist', 'ET_ST_hamDist', 'ET_WT_hamDist', 'MT_ST_hamDist', 'MT_WT_hamDist',
     'Identity', 'Quantification', 'BindLevel', 
     'Core', 'Of', 'Gp', 'Gl', 'Ip', 'Il', 'Icore', 'Score_EL', '%Rank_EL', 'Score_BA', '%Rank_BA',
     'PepTrace']
 
-def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup): 
+def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner): 
     # https://stackoverflow.com/questions/35514214/create-nested-dictionary-on-the-fly-in-python
     def fix(f): return lambda *args, **kwargs: f(fix(f), *args, **kwargs)
     etpep_to_mtpep_list_dic, mtpep_to_stpep_list_dic, mtpep_to_wtpep_list_dic = et2mt_mt2wt_2tup_pep2pep
@@ -307,7 +380,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
     df = df.loc[df['Peptide'].isin(set(etpep_to_mtpep_list_dic.keys())),:]
     for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
         aff = float(aff)
-        fids = set(fid for (_, mtpep) in etpep_to_mtpep_list_dic[etpep] for (fpep) in mtpep_to_fpep_list[mtpep] for fid in fpep_to_fid_list[fpep])
+        fids = set(fid for (_, _, mtpep, _, _) in etpep_to_mtpep_list_dic[etpep] for (fpep) in mtpep_to_fpep_list[mtpep] for fid in fpep_to_fid_list[fpep])
         # fids = set()
         # for (_, mtpep) in etpep_to_mtpep_list_dic[etpep]:
         #    for (fpep) in mtpep_to_fpep_list[mtpep]:
@@ -329,22 +402,26 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         #mtpep2wtpeplist = {}
         mtpep2peplist = {}
         pep2fidlist = {}
-        for et_mt_hdist, mtpep in etpep_to_mtpep_list_dic[etpep]:
+        for et_mt_hdist, et_mt_bdist, mtpep, et_aln1, mt_aln1 in etpep_to_mtpep_list_dic[etpep]:
             mtpep_list.append(mtpep)
             mtpep_aff = etpep_mhc_to_aff.get((mtpep,mhc), BIG_INT)
-            mtpep_key = (et_mt_hdist, mtpep_aff, mtpep, 'MT')
+            mtpep_key = (et_mt_hdist, et_mt_bdist, mtpep_aff, mtpep, 'MT', et_aln1, mt_aln1)
             #mtpep2stpeplist[mtpep_key] = []
             #mtpep2wtpeplist[mtpep_key] = []
             mtpep2peplist[mtpep_key] = []
-            for mt_st_hdist, stpep in mtpep_to_stpep_list_dic.get(mtpep, []):
+            for mt_st_hdist, mt_st_bdist, stpep, mt_aln, st_aln in mtpep_to_stpep_list_dic.get(mtpep, []):
+                assert len(mt_aln) >= len(mtpep), F'{mt_aln} is not at least as long as {mtpep}'
+                assert len(st_aln) >= len(stpep), F'{wt_aln} is not at least as long as {wtpep}'
                 stpep_list.append(stpep)
                 stpep_aff = etpep_mhc_to_aff.get((stpep,mhc), BIG_INT)
-                mtpep2peplist[mtpep_key].append((mt_st_hdist, stpep_aff, stpep, 'ST'))
+                mtpep2peplist[mtpep_key].append((mt_st_hdist, mt_st_bdist, stpep_aff, stpep, 'ST', mt_aln, st_aln))
                 #mtpep2stpeplist[mtpep_key].append((mt_st_hdist, stpep_aff, stpep, 'ST'))
-            for mt_wt_hdist, wtpep in mtpep_to_wtpep_list_dic.get(mtpep, []):
+            for mt_wt_hdist, mt_wt_bdist, wtpep, mt_aln, wt_aln in mtpep_to_wtpep_list_dic.get(mtpep, []):
+                assert len(mt_aln) >= len(mtpep), F'{mt_aln} is not at least as long as {mtpep}'
+                assert len(wt_aln) >= len(wtpep), F'{wt_aln} is not at least as long as {wtpep}'
                 wtpep_list.append(wtpep)
                 wtpep_aff = etpep_mhc_to_aff.get((wtpep,mhc), BIG_INT)
-                mtpep2peplist[mtpep_key].append((mt_wt_hdist, wtpep_aff, wtpep, 'WT'))
+                mtpep2peplist[mtpep_key].append((mt_wt_hdist, mt_wt_bdist, wtpep_aff, wtpep, 'WT', mt_aln, wt_aln))
                 #mtpep2wtpeplist[mtpep_key].append((mt_wt_hdist, wtpep_aff, wtpep, 'WT'))
         for pep in sorted(set([etpep] + mtpep_list + stpep_list + wtpep_list)):
             pep2fidlist[pep] = []
@@ -353,6 +430,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
             for fpep in fpep_list:
                 for fid in fpep_to_fid_list[fpep]:
                     pep2fidlist[pep].append(fid)
+        pep2fidlist = dedup_vals(pep2fidlist)
         #mtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(mtpep_list))))))
         #wtpep_pipesep_dflist.append(str2str_show_empty('|'.join(sorted(list(set(wtpep_list))))))
         etpep_tpm_dflist.append(etpep_tpm)
@@ -361,10 +439,10 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist.append(mtpep_wtpep_fpep_fid_tpm_ddic_json)
         best_mtpep_key = sorted(mtpep2peplist.keys())[0]
         peplist = mtpep2peplist[best_mtpep_key]
-        sorted_st_peplist = sorted(p for p in peplist if p[3] == 'ST')
-        sorted_wt_peplist = sorted(p for p in peplist if p[3] == 'WT')
-        best_stpep_key = (sorted_st_peplist[0] if sorted_st_peplist else ([BIG_INT, BIG_INT, pd.NA, 'ST']))
-        best_wtpep_key = (sorted_wt_peplist[0] if sorted_wt_peplist else ([BIG_INT, BIG_INT, pd.NA, 'WT']))
+        sorted_st_peplist = sorted(p for p in peplist if p[4] == 'ST')
+        sorted_wt_peplist = sorted(p for p in peplist if p[4] == 'WT')
+        best_stpep_key = (sorted_st_peplist[0] if sorted_st_peplist else (BIG_INT, BIG_INT, BIG_INT, pd.NA, 'ST', '', ''))
+        best_wtpep_key = (sorted_wt_peplist[0] if sorted_wt_peplist else (BIG_INT, BIG_INT, BIG_INT, pd.NA, 'WT', '', ''))
         best_mtpep_dflist.append(best_mtpep_key)
         best_stpep_dflist.append(best_stpep_key)
         best_wtpep_dflist.append(best_wtpep_key)
@@ -392,27 +470,52 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         bit_dist_dflist.append(min_bit_dist)
     '''
     
+    df['Quantification'] = etpep_tpm_dflist
     df['ET_pep'] = df['Peptide']
-    df['MT_pep'] = [x[2] for x in best_mtpep_dflist] # mtpep_pipesep_dflist
-    df['ST_pep'] = [x[2] for x in best_stpep_dflist] # wtpep_pipesep_dflist
-    df['WT_pep'] = [x[2] for x in best_wtpep_dflist] # wtpep_pipesep_dflist
+    df['MT_pep'] = [x[3] for x in best_mtpep_dflist] # mtpep_pipesep_dflist
+    df['ST_pep'] = [x[3] for x in best_stpep_dflist] # wtpep_pipesep_dflist
+    df['WT_pep'] = [x[3] for x in best_wtpep_dflist] # wtpep_pipesep_dflist
     
     df['ET_BindAff'] = df['Aff(nM)'].astype(float)
-    df['MT_BindAff'] = [x[1] for x in best_mtpep_dflist]
-    df['ST_BindAff'] = [x[1] for x in best_stpep_dflist]
-    df['WT_BindAff'] = [x[1] for x in best_wtpep_dflist]
+    df['MT_BindAff'] = [x[2] for x in best_mtpep_dflist]
+    df['ST_BindAff'] = [x[2] for x in best_stpep_dflist]
+    df['WT_BindAff'] = [x[2] for x in best_wtpep_dflist]
     
-    df['ET_MT_hamdist'] = [x[0] for x in best_mtpep_dflist]
-    df['ET_ST_hamdist'] = [hamming_dist(a,b) for (a,b) in zip(df['ET_pep'], df['ST_pep'])]
-    df['ET_WT_hamdist'] = [hamming_dist(a,b) for (a,b) in zip(df['ET_pep'], df['WT_pep'])]
-    df['MT_ST_hamdist'] = [x[0] for x in best_stpep_dflist]
-    df['MT_WT_hamdist'] = [x[0] for x in best_wtpep_dflist]
+    def aln_2a(aligner, a, b): return (('', '', BIG_INT, BIG_INT) if (pd.isna(a) or pd.isna(b) or isna(a) or isna(b)) else aln_2(aligner, a, b))
+    # ET crw MT, MT crw (ST and/or WT), where crw denotes "cross-react with"
+    aln_ET_MT = [aln_2a(aligner, a, b) for (a, b) in zip(df['ET_pep'], df['MT_pep'])]
+    aln_ET_ST = [aln_2a(aligner, a, b) for (a, b) in zip(df['ET_pep'], df['ST_pep'])]
+    aln_ET_WT = [aln_2a(aligner, a, b) for (a, b) in zip(df['ET_pep'], df['WT_pep'])]
+    aln_MT_ST = [aln_2a(aligner, a, b) for (a, b) in zip(df['MT_pep'], df['ST_pep'])]
+    aln_MT_WT = [aln_2a(aligner, a, b) for (a, b) in zip(df['MT_pep'], df['WT_pep'])]
+    
+    # This info should be concordant with the one from PepTrace
+    df['ET_MT_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_ET_MT]
+    df['ET_ST_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_ET_ST]
+    df['ET_WT_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_ET_WT]
+    df['MT_ST_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_MT_ST]
+    df['MT_WT_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_MT_WT]
+    df['ET_MT_hamDist'] = [x[2] for x in aln_ET_MT]
+    df['ET_ST_hamDist'] = [x[2] for x in aln_ET_ST]
+    df['ET_WT_hamDist'] = [x[2] for x in aln_ET_WT]
+    df['MT_ST_hamDist'] = [x[2] for x in aln_MT_ST]
+    df['MT_WT_hamDist'] = [x[2] for x in aln_MT_WT]
+    df['ET_MT_bitDist'] = [x[3] for x in aln_ET_MT]
+    df['ET_ST_bitDist'] = [x[3] for x in aln_ET_ST]
+    df['ET_WT_bitDist'] = [x[3] for x in aln_ET_WT]
+    df['MT_ST_bitDist'] = [x[3] for x in aln_MT_ST]
+    df['MT_WT_bitDist'] = [x[3] for x in aln_MT_WT]
+    
+    #df['ET_MT_hamdist'] = [x[0] for x in best_mtpep_dflist]
+    #df['ET_ST_hamdist'] = [hamming_dist(a,b) for (a,b) in zip(df['ET_pep'], df['ST_pep'])]
+    #df['ET_WT_hamdist'] = [hamming_dist(a,b) for (a,b) in zip(df['ET_pep'], df['WT_pep'])]
+    #df['MT_ST_hamdist'] = [x[0] for x in best_stpep_dflist]
+    #df['MT_WT_hamdist'] = [x[0] for x in best_wtpep_dflist]
 
     #df['MT_BindAff'] = best_mtpep_dflist #mtpep_aff_dflist
     #df['WT_BindAff'] = #wtpep_aff_dflist
-    blosum62 = substitution_matrices.load("BLOSUM62")
-    df['ET_MT_bitdist'] = [(alnscore_penalty(mtpep, etpep, blosum62) * 0.5) for (mtpep, etpep) in zip(df['MT_pep'], df['ET_pep'])]  # bit_dist_dflist
-    df['Quantification'] = etpep_tpm_dflist
+    # blosum62 = substitution_matrices.load("BLOSUM62")
+    # df['ET_MT_bitdist'] = [(alnscore_penalty(mtpep, etpep, blosum62) * 0.5) for (mtpep, etpep) in zip(df['MT_pep'], df['ET_pep'])]  # bit_dist_dflist    
     df['PepTrace'] = mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist
     df['HLA_type'] = df['MHC']
     # df['BindAff'] = df['Aff(nM)'].astype(float)
@@ -428,15 +531,31 @@ def main():
     parser.add_argument('-o', '--out-tsv-file',   help = F'''output TSV file with the following columns: {', '.join(OUT_HEADER)}''', required = True)
     parser.add_argument('-a', '--binding-affinity-thres', help = F'binding affinity threshold in nanoMolar above which the peptide-MHC is filtered out '
             F'(higher nanoMolar value means lower binding affinity)', required = True, type = float)
-    parser.add_argument('-l', '--bind-levels', help = F'comma-separated tokens describing bind levels '
-            F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB,NB')
+    #parser.add_argument('-l', '--bind-levels', help = F'comma-separated tokens describing bind levels '
+    #        F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB,NB')
+    parser.add_argument('-l', '--lengths', help = F'comma-separated tokens describing peptide lengths. '
+            F'(same as the ones used by netMHCpan series)', required = False, default = '8,9,10,11,12')
     
     args = parser.parse_args()
+    peplens = [int(x) for x in args.lengths.split(',')]
     
-    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file) 
-    df1 = netmhcpan_result_to_df(args.netmhcpan_file, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup)
+    blosum62 = substitution_matrices.load("BLOSUM62")
+    aligner = Align.PairwiseAligner()
+    aligner.mode = 'global'
+    #aligner.match_score = 2
+    #aligner.mismatch_score = -1
+    aligner.open_gap_score = -11
+    aligner.extend_gap_score = -1
+    aligner.target_end_gap_score = 0.0 # first is in second
+    aligner.query_end_gap_score = -(2**10) # first is in second
+    #aligner.query_end_gap_score = 0.0
+    aligner.substitution_matrix = blosum62
+    
+    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file, aligner)
+    df1 = netmhcpan_result_to_df(args.netmhcpan_file, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner)
     df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) 
-            & (df1['BindLevel'].isin(args.bind_levels.split(',')))
+            #& (df1['BindLevel'].isin(args.bind_levels.split(',')))
+            & (df1['ET_pep'].str.len().isin(peplens))
             & (df1['MT_pep'] != df1['WT_pep']) 
             & (df1['ET_pep'] != df1['WT_pep'])]
     df3 = df2.drop_duplicates(subset=['HLA_type','ET_pep'])
