@@ -642,7 +642,7 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         call_with_infolog(remote_receive2)
         call_with_infolog(remote_gzip)
 
-all_vars_netmhcpan_filtered_tsv = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
+all_vars_netmhcpan_filtered_tsv = F'{prioritization_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
 #rule PeptideMHC_binding_affinity_filter:
 #    input: all_vars_peptide_faa, all_vars_netmhcpan_txt
 #    output: all_vars_netmhc_filtered_tsv
