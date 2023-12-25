@@ -231,7 +231,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
                 for peplen in [7,8,9,10,11,12,13]:
                     for beg in range(len(et_fpep)):
                         end = beg + peplen
-                        if end >= len(et_fpep): continue
+                        if end > len(et_fpep): continue
                         et_pep = et_fpep[beg:end]
                         
                         mt_pep = st_pep = wt_pep = ''
