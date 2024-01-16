@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 import scipy
 
-#from Bio import pairwise2
-#from Bio.SubsMat import MatrixInfo as matlist
 from Bio import Align
 from Bio.Align import substitution_matrices
 
@@ -88,12 +86,12 @@ def build_pMHC2stab(netmhcstabpan_file):
         'pos', 'HLA', 'peptide', 'Identity', 'Pred', 'Thalf(h)', 
         '%Rank_Stab', '1-log50k', 'Aff(nM)', '%Rank_aff', 'Combined', 'Combined_%rank', 'BindLevel']
     with open(netmhcstabpan_file) as file:
-        for line in file:
+        for lineno, line in enumerate(file):
             if not line.startswith(' '): continue
             # print(line)
             toks = line.strip().split()
             if toks[0] in ['Pos', 'pos']:
-                assert inheader == None or inheader == toks
+                assert inheader == None or inheader == toks, F'Line ( {line.strip()} ) is invalid at lineno {lineno}. '
                 inheader = toks
                 assert len(inheader) == 13, F'The header-line {line} is invalid.'
             else:
@@ -125,7 +123,7 @@ def getR(neo_seq, iedb_seqs, aligner):
 
 def getiedbseq(iedb_path):
     iedb_seq = []
-    with open(iedb_path, 'r') as fin: #'/data8t_2/zzt/antigen.garnish/iedb.fasta'
+    with open(iedb_path, 'r') as fin: # from /data8t_2/zzt/antigen.garnish/iedb.fasta (antigen.garnish data file)
         for t, seq in SimpleFastaParser(fin):
             iedb_seq.append(seq)
     return iedb_seq
@@ -218,7 +216,7 @@ def main():
     
     args = parser.parse_args()
     paramset = args
-    print(paramset)
+    logging.info(paramset)
     
     if not isna(args.truth_file):
         def norm_hla(h): return h.astype(str).str.replace('*', '', regex=False).str.replace('HLA-', '', regex=False).str.replace(':', '', regex=False).str.strip()
@@ -234,25 +232,16 @@ def main():
         keptdata = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
         keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + norm_hla(keptdata['HLA_type'])
         
-        # paramset.snvindel_location_param -= np.mean(origdata['Offset'])
-        #data1, _ = datarank(keptdata, '', paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
-        
         data1 = dropcols(keptdata)
         data1 = data1.sort_values(['%Rank_EL', 'MT_BindAff'])
 
-        #print(origdata['peptideMHC'])
-        #print(keptdata['peptideMHC'])
         combdata1 = pd.merge(origdata, data1, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
-        #combdata = pd.merge(origdata, data1, how = 'left', left_on = 'MT_pep', right_on = 'MT_pep')
-        #combdata["Rank"] = combdata["Probability"].rank(method="first", ascending=False)
         combdata1.to_csv(args.output_file + '.validation' , header=1, sep='\t', index=0, na_rep = 'NA')
         
         data2 = data1.drop_duplicates(subset=['MT_pep'], keep='first', inplace=False)
         combdata2 = pd.merge(origdata, data2, how='left', left_on='MT_pep', right_on='MT_pep')
         combdata1.to_csv(args.output_file + '.peptide-validation' , header=1, sep='\t', index=0, na_rep = 'NA')
         
-        # combdata['ET_BindAff'] = combdata['MT_BindAff']
-        # data1, _ = datarank(combdata, args.output_file + '.validation.reranked', paramset, drop_cols = ['ET_BindAff'], passflag = args.passflag)
         exit(0)
     
     def openif(fname): return (open(fname) if fname else [])
@@ -275,7 +264,7 @@ def main():
     if fusion_file: fusion_file.close()
     if splicing_file: splicing_file.close() 
 
-    candidate_file = open(args.input_file) # open(F'{args.input_directory}/{prefix}_candidate_pmhc.tsv')
+    candidate_file = open(args.input_file)
     reader = csv.reader(candidate_file, delimiter='\t')
     fields=next(reader)
     fields.append("Foreignness")
@@ -288,7 +277,6 @@ def main():
     fields.append("SourceAlterationDetail")
     fields.append('IsFrameshift')
     data_raw = []
-    data_exist = [] # save existing hla, mutant_type peptide
     agre_exist = []
     et_pep_idx = fields.index('ET_pep')
     wt_pep_idx = fields.index('WT_pep')
@@ -309,7 +297,7 @@ def main():
         line_info_string = ""
         is_frameshift = False
         identity = line[identity_idx]
-        if ((identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL', 'FSV'] or identity.strip().split('_')[0].startswith("INDEL"))) and dna_snvindel and rna_snvindel:
+        if dna_snvindel and rna_snvindel and ((identity.strip().split('_')[0] in ["SNV", 'INS', 'DEL', 'INDEL', 'FSV'] or identity.strip().split('_')[0].startswith("INDEL"))):
             fastaID = identity.strip().split('_')[1]
             selected_snvindel = (rna_snvindel if (fastaID[0] == 'R') else dna_snvindel)
             line_num = int(fastaID[1:])
@@ -330,7 +318,6 @@ def main():
                             dna_varqual = max((dna_varqual, varqual))
                             dna_ref_depth = max((dna_ref_depth, varRD))
                             dna_alt_depth = max((dna_alt_depth, varAD))
-                    #line_info_string += 'DNAseqVariantQuality${}'.format(max_varqual)
                 if rnaseq_small_variants_file:
                     for vcfrecord in rnaseq_small_variants_file.fetch(chrom, int(pos) - 6, int(pos) + 6):
                         vepvar, varqual, varRD, varAD = var_vcf2vep(vcfrecord)
@@ -344,7 +331,7 @@ def main():
                     line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
             else:
                 continue
-        elif (identity.strip().split('_')[0]=="FUS") and fusion:
+        elif fusion and (identity.strip().split('_')[0]=="FUS"):
             line_str = identity.strip().split('_')[1]
             if not line_str.startswith('R'): 
                 logging.warning(F'The record {identity} cannot be processed and is therefore skipped. ')
@@ -358,7 +345,7 @@ def main():
                                     "FUSION_MODEL","FUSION_CDS","FUSION_TRANSL","PFAM_LEFT","PFAM_RIGHT"]
                 for i in range(0, len(ele),1):
                     line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
-        elif (identity.strip().split('_')[0]=="SP") and splicing:
+        elif splicing and (identity.strip().split('_')[0]=="SP"):
             line_str = identity.strip().split('_')[1]
             if not line_str.startswith('R'): 
                 logging.warning(F'The record {identity} cannot be processed and is therefore skipped. ')
@@ -422,18 +409,11 @@ def main():
     data.Agretopicity = data.Agretopicity.astype(str).replace(NA_VALS, np.nan).astype(float)
     data.Quantification = data.Quantification.astype(float)
     
-    # are_highly_abundant is not used because we have too little positive data
-    # are_highly_abundant = ((data.MT_BindAff <= 34/10.0) & (data.BindStab >= 1.4*10.0) & (data.Quantification >= 1.0*10))
-    # keptdata = data[(data.Quantification >= tumor_RNA_TPM_threshold) & ((~data.is_frameshift) | are_highly_abundant) & (data.Agretopicity > -1)]
     col2last(data, 'PepTrace')
     keptdata = data
-    #keptdata.to_csv(F'{args.output_file}.debug')
     
     keptdata1 = keptdata[keptdata['ET_pep']==keptdata['MT_pep']]
     keptdata2 = dropcols(keptdata1)
-
-    #data1, _ = datarank(keptdata1, args.output_file, paramset, drop_cols = ['ET_pep', 'ET_BindAff', 'BIT_DIST'], passflag = args.passflag)
-    #data, _ = datarank(keptdata, args.output_file + '.expansion', paramset, passflag = args.passflag)
     
     keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=1, index=0, na_rep='NA')
     keptdata2.to_csv(args.output_file,               sep='\t', header=1, index=0, na_rep='NA')
