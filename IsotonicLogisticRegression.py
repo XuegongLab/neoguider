@@ -18,13 +18,19 @@ from sklearn.model_selection import KFold
 
 class IsotonicLogisticRegression:
     
-    def __init__(self, pseudocount=0.5, penalty=None, n_splits=5, random_state=1, cccv_n_jobs=-1, **kwargs):
-        """ Initialize """ 
+    def __init__(self, excluded_cols = [], pseudocount=0.5, penalty=None, n_splits=5, random_state=1, cccv_n_jobs=-1, **kwargs):
+        """ Initialize """
         self.X0 = None
         self.X1 = None
+        self.raw_log_odds = []
+        self.ixs = []
         self.irs = []
         self.ivs = []
+        self.ixs2 = []
+        self.irs2 = []
+        self.ivs2 = []
         self.logORX = None
+        self.excluded_cols = excluded_cols
         self.logr = LogisticRegression(penalty=penalty, **kwargs)
         self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
                 cv=KFold(n_splits=n_splits, shuffle=True, random_state=random_state), n_jobs=cccv_n_jobs, ensemble=True)
@@ -45,6 +51,26 @@ class IsotonicLogisticRegression:
             ir = self.irs[i]
             isor_info.append([ir.X_min_, ir.X_max_, ir.X_thresholds_, ir.y_thresholds_, ir.f_, ir.increasing_])
         return [logr_info, isor_info]
+    
+    def _split(self, X, is_already_splitted = False):
+        X1 = np.array(X)
+        if not is_already_splitted:
+            excluded_cols = set(self.excluded_cols)
+            ex_colidxs = []            
+            for colidx in range(X1.shape[1]):
+                if colidx in self.excluded_cols:
+                    ex_colidxs.append(i)
+            if hasattr(X, 'columns'):
+                for colidx, colname in enumerate(X.columns):
+                    if colname in self.excluded_cols:
+                        ex_colidxs.append(colidx)
+            self.ex_colidxs = sorted(list(set(ex_colidxs)))
+        ex_colidxs = self.ex_colidxs
+        in_colidxs = [colidx for colidx in range(X1.shape[1]) if (not colidx in ex_colidxs)]
+        if hasattr(X, 'iloc'):
+            return X.iloc[:,in_colidxs], X.iloc[:,ex_colidxs]
+        else:
+            return X[:,in_colidxs], X[:,ex_colidxs]
     
     def _center(self, x, y, epsilon = 1e-6):
         """ Implement the centering step of the centered isotonic regression at https://arxiv.org/pdf/1701.05964.pdf """
@@ -121,13 +147,19 @@ class IsotonicLogisticRegression:
         """ scikit-learn fit
             is_centered : using centered isotonic regression or not
         """
-        X = np.array(X1)
+        inX, exX = self._split(X1)
+        X = np.array(inX)
         y = np.array(y1)
         self._assert_input(X, y)
         X0 = self.X0 = X[y==0,:]
         X1 = self.X1 = X[y==1,:]
-        irs = self.irs = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
-        irv = self.ivs = [None for _ in range(X.shape[1])]
+        raw_log_odds = self.raw_log_odds = [None for _ in range(X.shape[1])]
+        ixs  = self.ixs  = [None for _ in range(X.shape[1])]
+        irs  = self.irs  = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+        ivs  = self.ivs  = [None for _ in range(X.shape[1])]
+        ixs2 = self.ixs2 = [None for _ in range(X.shape[1])]
+        irs2 = self.irs2 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+        ivs2 = self.ivs2 = [None for _ in range(X.shape[1])]
         for colidx in range(X.shape[1]):
             landmark_x_vals = [-1e99] + sorted(list(set(X1[:,colidx]))) + [1e99]
             idxto0s = [[] for _ in range(len(landmark_x_vals))]
@@ -188,86 +220,103 @@ class IsotonicLogisticRegression:
                     ( ( (sumup(idxto1s[i])                   ) / (num1s) ) / 
                       ( (sumup(idxto0s[i]) + self.pseudocount) / (num0s + self.pseudocount * num1s / sumup(idxto1s[i])) ) )
                     for i in idxs]
-            self.ivs[colidx] = self.irs[colidx].fit(fitted_x_vals, np.log(raw_1to0_oddsratios), sample_weight = idxto1sum2)
-            FV_W_LOR_x1_x0_list = list(zip(fitted_x_vals, idxto1sum2, np.log(raw_1to0_oddsratios), self.ivs[colidx].predict(fitted_x_vals),
+            self.raw_log_odds[colidx] = np.log(raw_1to0_oddsratios)
+            self.ixs[colidx] = fitted_x_vals
+            self.ivs[colidx] = self.irs[colidx].fit_transform(fitted_x_vals, np.log(raw_1to0_oddsratios), sample_weight = idxto1sum2)
+            FV_W_LOR_x1_x0_list = list(zip(fitted_x_vals, idxto1sum2, np.log(raw_1to0_oddsratios), self.irs[colidx].predict(fitted_x_vals),
                    [sumup(idxto1s[i]) for i in idxs], [sumup(idxto0s[i]) for i in idxs]))
             logging.debug(F'colidx={colidx} : len(FV_W_obsLOR_expLOR_x1_x0_list)={len(FV_W_LOR_x1_x0_list)}')
             for fv_record in FV_W_LOR_x1_x0_list:
                 vs = '\t'.join(F'{v:.4G}'.rjust(10) for v in fv_record)
                 logging.debug(F'  fv_rec = {vs}')
             if is_centered:
-                x2, y2 = self._center(fitted_x_vals, self.ivs[colidx].predict(fitted_x_vals)) # fitted_x_vals instead of x1
-                self.ivs[colidx] = self.irs[colidx].fit(x2, y2)
+                x2, y2 = self._center(fitted_x_vals, self.irs[colidx].predict(fitted_x_vals)) # fitted_x_vals instead of x1
+                self.ixs2[colidx] = x2
+                self.ivs2[colidx] = self.irs2[colidx].fit_transform(x2, y2)
             
-        self.logORX = np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
+        self.logORX = self._transform(X) # np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
         logging.debug(self.logORX)
-        self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
-                cv=KFold(n_splits=min([sum(y), 5]), shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
-        self.cccv.fit(self.logORX, y)
-        self.logr.fit(self.logORX, y, **kwargs)
+        #self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
+        #        cv=KFold(n_splits=min([sum(y), 5]), shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
+        #self.cccv.fit(self.logORX, y)
+        self.logr.fit(np.hstack([self.logORX, exX]), y, **kwargs)
         return self
+    
+    def get_density_estimated_log_odds(self):
+        return self.raw_log_odds
+    def get_isotonic_X(self):
+        return self.ixs
+    def get_isotonic_log_odds(self):
+        return self.ivs
+    def get_centered_isotonic_X(self):
+        return self.ixs2
+    def get_centered_isotonic_log_odds(self):
+        return self.ivs2
 
+    def _transform(self, X):
+        return np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
+    
     def transform(self, X1):
         """ scikit-learn transform """
         X = np.array(X1)
-        return        np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
+        return self._transform(X)
 
     def fit_transform(self, X1, y1):
         """ scikit-learn fit_transform """
         self.fit(X1, y1)
         return self.transform(X1)
     
+    def _extract_features(self, X1):
+        inX, exX = self._split(X1, True)
+        test_orX = self.transform(inX) # np.array([self.irs[colidx].predict(X[:,colidx]) for colidx in range(X.shape[1])]).transpose()
+        return np.hstack([test_orX, exX])
+    
     def predict(self, X1):
         """ scikit-learn predict using logistic regression built on top of isotonic scaler """
-        irs = self.irs
-        X = np.array(X1)
-        test_orX    = np.array([irs[colidx].predict(X[:,colidx]) for colidx in range(X.shape[1])]).transpose()
-        return self.logr.predict(test_orX)
+        allfeatures = self._extract_features(X1)
+        return self.logr.predict(allfeatures)
         #return self.cccv.predict(test_orX)
 
     def predict_proba(self, X1):
         """ scikit-learn predict_proba using logistic regression built on top of isotonic scaler """
-        irs = self.irs
-        X = np.array(X1)
-        test_orX    = np.array([irs[colidx].predict(X[:,colidx]) for colidx in range(X.shape[1])]).transpose()
-        return self.logr.predict_proba(test_orX)
+        allfeatures = self._extract_features(X1)
+        return self.logr.predict_proba(allfeatures)
         #return self.cccv.predict_proba(test_orX)
-        #logOR = [sum(vals) for vals in test_orX]
-        #ret = 1.0 / (1.0 + np.exp(-np.array(logOR)))
-        #return [(1-x, x) for x in ret]
     
-    def get_ivs():
-        return self.ivs
+    def get_ivs(): return self.ivs
 
 def test_fit_and_predict_proba():
+    import pandas as pd
+    
     pp = pprint.PrettyPrinter(indent=4)
     logging.basicConfig(format='test_fit_and_predict_proba %(asctime)s - %(message)s', level=logging.DEBUG)
     X = np.array([
-        [ 1, 10],
-        [ 3, 30],
-        [ 5, 60],
-        [ 7,100],
-        [ 9,150],
-        [11,210],
-        [13,280],
-        [15,360],
-        [17,450],
-        [19,550]
+        [ 1,  10, 0],
+        [ 3,  30, 0],
+        [ 5,  60, 0],
+        [ 7, 100, 0],
+        [ 9, 150, 0],
+        [11, 210, 0],
+        [13, 280, 0],
+        [15, 360, 0],
+        [17, 450, 0],
+        [19, 550, 0]
     ])
+    X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,1,1,0,0,0,0,0])
-    ilr = IsotonicLogisticRegression()
+    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'])
     ilr.fit(X, y)
     Xtest = np.array([
-        [0,0],
-        [0,999],
-        [6,0],
-        [6,999],
-        [99,0],
-        [99,999],
-        [5,30],
-        [5,40],
-        [5,50],
-        [5,60]
+        [0,    0, 0],
+        [0,  999, 0],
+        [6,    0, 0],
+        [6,  999, 0],
+        [99,   0, 0],
+        [99, 999, 0],
+        [5,   30, 0],
+        [5,   40, 0],
+        [5,   50, 0],
+        [5,   60, 0]
     ])
     testres = np.concatenate([Xtest, ilr.predict_proba(Xtest)], axis=1)
     print(F'test_X_probas=\n{testres}')
