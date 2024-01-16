@@ -144,15 +144,15 @@ rna_snvindel_info_file = F'{info_dir}/{RNA_PREFIX}_snv_indel.annotation.tsv'
 fusion_info_file = F'{info_dir}/{PREFIX}_fusion.tsv'
 splicing_info_file = F'{info_dir}/{PREFIX}_splicing.tsv' # TODO: check if it makese sense to add_detail_info to TCR-unaware prioritization
 
-neoheadhunter_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_neoheadhunter.tsv'
-pmhc_as_input_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_pmhc_as_input.tsv' # prioritization from pMHC candidate summary info
+reads_as_input_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_prioritization_with_reads_as_input.tsv' # prioritization from the reads of sequencing data
+pmhcs_as_input_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_prioritization_with_pmhcs_as_input.tsv' # prioritization from the pMHC summary info
 
 tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity_with_detail.tsv'
 
-final_pipeline_out = F'{RES}/{PREFIX}_final_neoheadhunter_neoantigens.tsv'
+final_pipeline_out = F'{RES}/{PREFIX}_final_neoepitope_candidates.tsv'
 
 rule all:
-    input: neoheadhunter_prioritization_tsv, tcr_specificity_result, final_pipeline_out
+    input: reads_as_input_prioritization_tsv, tcr_specificity_result, final_pipeline_out
 
 # Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
 #   https://github.com/FRED-2/OptiType/issues/125
@@ -335,7 +335,7 @@ rule RNA_splicing_peptide_generation:
     run:
         shell(
         'mkdir -p {info_dir} '
-        ' && python {script_basedir}/software/ASNEO/neoheadhunter_ASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l {peplens} -p {PREFIX} -t 1.0 '
+        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l {peplens} -p {PREFIX} -t 1.0 '
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {peptide_dir}/{PREFIX}_splicing.fasta'
         )
@@ -533,15 +533,16 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {script_basedir}/fasta_partition.py {inputfile} {user}@{address}:/tmp/{outdir}/'
         # remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_filt_thres} -H {hla_string}
-        remote_exe = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'
-        remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1} {outdir}'
+        remote_exe = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'        
         remote_gzip = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} gzip --fast /tmp/{outputfile1} || true'
+        remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1}.gz {outdir}' 
         call_with_infolog(remote_rmdir)
         call_with_infolog(remote_mkdir)
         call_with_infolog(remote_send)
-        remote_exe_retcode = call_with_infolog(remote_exe)
-        call_with_infolog(remote_receive1)
+        remote_exe_retcode = call_with_infolog(remote_exe)        
         call_with_infolog(remote_gzip)
+        call_with_infolog(remote_receive1)
+        call_with_infolog(F'gzip -d {outputfile1}.gz')
 
 all_neo_peptide_faa    = F'{RES}/{PREFIX}_neo_peps.fasta'
 if 'all_neo_peptide_faa' in config: all_neo_peptide_faa = config['all_neo_peptide_faa']
@@ -557,7 +558,7 @@ rule Peptide_preprocessing:
     threads: 1
     run:
         shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
-            ' | python {script_basedir}/neoexpansion.py --nbits 1.0 > {dna_snvindel_neopeptide_faa}.expansion')
+            ' | python {script_basedir}/neoexpansion.py --nbits 0.75 > {dna_snvindel_neopeptide_faa}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_faa}.expansion ' # '{dna_snvindel_wt_peptide_faa} '
             ' {rna_snvindel_neopeptide_faa}           ' # '{rna_snvindel_wt_peptide_faa} '
@@ -678,7 +679,7 @@ prioritization_thres_params = ' '.join([x.strip() for x in F'''
 '''.strip().split()])
 prioritization_function_params = ''
 
-logging.debug(F'neoheadhunter_prioritization_tsv = {neoheadhunter_prioritization_tsv} (from {prioritization_dir})')
+logging.debug(F'reads_as_input_prioritization_tsv = {reads_as_input_prioritization_tsv} (from {prioritization_dir})')
 
 ruleorder: Prioritization_with_all_TCRs > Prioritization_with_all_TCRs_with_minimal_varinfo
 
@@ -686,63 +687,63 @@ rule Prioritization_with_all_TCRs:
     input: iedb_path, all_vars_netmhcpan_txt, all_vars_netmhcstabpan_txt, # all_vars_bindstab_filtered_tsv, # dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf,
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
         # splicing_info_file   
-    output: neoheadhunter_prioritization_tsv, final_pipeline_out
+    output: reads_as_input_prioritization_tsv, final_pipeline_out
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhcpan_filtered_tsv} '
               '-a {binding_affinity_filt_thres} -l {final_peplens}')
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
-            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} ' #' --passflag 0x0 '
+            F' -o {reads_as_input_prioritization_tsv} -t {alteration_type} ' #' --passflag 0x0 '
             #F' {prioritization_thres_params}'
             F''' {prioritization_function_params.replace('_', '-')}''')
         else:
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
-            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
+            F' -o {reads_as_input_prioritization_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
             #F' {prioritization_thres_params}'
             F''' {prioritization_function_params.replace('_', '-')}''')
-        call_with_infolog(F'cp {neoheadhunter_prioritization_tsv} {final_pipeline_out}')
+        call_with_infolog(F'cp {reads_as_input_prioritization_tsv} {final_pipeline_out}')
 
 ### rules that were not run by default
 
 rule Prioritization_with_all_TCRs_with_minimal_varinfo:
     input: iedb_path, all_vars_netmhcpan_txt, all_vars_netmhcstabpan_txt # all_vars_bindstab_filtered_tsv 
-    output: pmhc_as_input_prioritization_tsv
+    output: pmhcs_as_input_prioritization_tsv
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhcpan_filtered_tsv} '
               '-a {binding_affinity_filt_thres} -l {final_peplens}')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type} '
+            F' -o {pmhcs_as_input_prioritization_tsv} -t {alteration_type} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
-neoheadhunter_validation_out=F'{neoheadhunter_prioritization_tsv}.validation'
-pmhc_as_input_validation_out=F'{pmhc_as_input_prioritization_tsv}.validation'
-neoheadhunter_pep_valida_out=F'{neoheadhunter_prioritization_tsv}.peptide-validation'
-pmhc_as_input_pep_valida_out=F'{pmhc_as_input_prioritization_tsv}.peptide-validation'
+reads_as_input_validation_out=F'{reads_as_input_prioritization_tsv}.validation'
+pmhcs_as_input_validation_out=F'{pmhcs_as_input_prioritization_tsv}.validation'
+reads_as_input_pep_valida_out=F'{reads_as_input_prioritization_tsv}.peptide-validation'
+pmhcs_as_input_pep_valida_out=F'{pmhcs_as_input_prioritization_tsv}.peptide-validation'
 
 ###   validation rules
 
 rule Prioritization_with_all_TCRs_validation:
-    input: neoheadhunter_prioritization_tsv
-    output: neoheadhunter_validation_out, neoheadhunter_pep_valida_out
+    input: reads_as_input_prioritization_tsv
+    output: reads_as_input_validation_out, reads_as_input_pep_valida_out
     run:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {neoheadhunter_prioritization_tsv} -t {alteration_type}'
+            F' -o {reads_as_input_prioritization_tsv} -t {alteration_type}'
             #F' {prioritization_thres_params} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
 rule Prioritization_with_all_TCRs_with_minimal_varinfo_validation:
-    input: pmhc_as_input_prioritization_tsv
-    output: pmhc_as_input_validation_out, pmhc_as_input_pep_valida_out
+    input: pmhcs_as_input_prioritization_tsv
+    output: pmhcs_as_input_validation_out, pmhcs_as_input_pep_valida_out
     run:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {pmhc_as_input_prioritization_tsv} -t {alteration_type}'
+            F' -o {pmhcs_as_input_prioritization_tsv} -t {alteration_type}'
             #F' {prioritization_thres_params} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
