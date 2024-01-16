@@ -1,4 +1,4 @@
-import math, os, sys
+import argparse, math, os, sys
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/../')
 from IsotonicLogisticRegression import IsotonicLogisticRegression
 
@@ -27,6 +27,11 @@ params = {#'legend.fontsize': 18,
           #'font.serif'       : 'Times' # "Times New Roman", # or "Times"          
          }
 matplotlib.rcParams.update(params)
+
+
+parser = argparse.ArgumentParser('Plot an example data transformation made by the isotonic feature normalizer to show the key idea behind this normalizer. ')
+parser.add_argument('-o', '--output', help=F'Output PDF file', default='/tmp/key-idea-for-iso-feature-normalizer.pdf')
+args = parser.parse_args()
 
 ilr = IsotonicLogisticRegression()
 # x0 = np.exp(scipy.stats.norm.rvs(size = 10000))
@@ -77,5 +82,5 @@ axes[1].set_ylabel('Log odds')
 
 fig.supxlabel('Raw feature $f$') # ('(e.g., peptide-MHC binding stability)')
 
-plt.savefig("key_idea.pdf", format="pdf", bbox_inches="tight")
+plt.savefig(args.output, format="pdf", bbox_inches="tight")
 
