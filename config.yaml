@@ -26,8 +26,8 @@ tumor_vaf: 0.1
 normal_vaf: 0.05
 tumor_normal_var_qual : 63 # # Equivalent to tlod=6.3 in Mutect2
 
-# peplens : '8,9,10,11,12'
-peplens : '8,9,10,11'
+peplens : '8,9,10,11,12'
+# kept_peplens : '8,9,10,11' # that finally remain after filtering
 
 binding_affinity_filt_thres: 1e9 # 693.00 # 693=21*11*3
 binding_affinity_hard_thres: 1e9 # 231.00 # 21*11
