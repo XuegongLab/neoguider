@@ -151,7 +151,7 @@ def process_WT(hdr_pep_list):
         #    if 2 == len(tok.split('=')):
         #        key, val = tok.split('=')
         #        if key == 'WT': wt2hlas[val].add() # [val].append(pep) # append((len(toks[0]), toks[0], hdr, pep))
-        wt2hlas[wtpep].add(hla)
+        if wtpep: wt2hlas[wtpep].add(hla)
     wildpeps = sorted(list(wt2hlas.keys()))
     for i, wildpep in enumerate(wildpeps):
         if isna(wildpep):
@@ -171,7 +171,7 @@ def main():
     #pp.pprint(MatrixInfo.blosum62)
     parser = argparse.ArgumentParser(description = 'Experimental work (please do not use output sequences with MAX_BIT_DIST>0 for now). ',
             formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-b', '--nbits', type = float, help = 'hamming distance by the number of bits. If this param is set, then do not expand by --reference', default = 1.0)
+    parser.add_argument('-b', '--nbits', type = float, help = 'max hamming distance by the number of bits. If this param is set, then do not expand by --reference', default = 0.75)
     parser.add_argument('-c', '--ncores', type = int, help = 'number of processes to use for computation. ', default = 8)
     parser.add_argument('-r', '--reference', type = str, help = 'reference proteome fasta to blast against to match neo-peptides with self-peptides. If this param is set, then do not expand by --nbits. ', default = '')
     parser.add_argument('-t', '--tmp', type = str, help = 'temporary file path. ', default = '')
