@@ -1,4 +1,5 @@
 species: 'Homo_sapiens' # will support Mus_musculus in the future
+hetero_nbits: 0.75      # will be part of future work
 
 ### Section 1: required input and output: one set-up per sample (dot (.) means NotAvailable)
 

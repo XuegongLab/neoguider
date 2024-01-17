@@ -570,7 +570,7 @@ if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)): #tumor_spec_peptide
 homologous_peptide_fasta = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 #if not isna(config.get('homologous_peptide_fasta', NA_REP)): homologous_peptide_fasta = config['homologous_peptide_fasta']
 
-hetero_nbits = config.get('hetero_nbits', 1.25)
+hetero_nbits = config.get('hetero_nbits', 0.75)
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_fasta, # dna_snvindel_wt_peptide_fasta,
            rna_snvindel_neopeptide_fasta, # rna_snvindel_wt_peptide_fasta,
