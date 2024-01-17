@@ -14,6 +14,11 @@ d = {'Cys': 'C', 'Asp': 'D', 'Ser': 'S', 'Gln': 'Q', 'Lys': 'K',
 
 def seq2str(s): return str(s)
 
+def limsubstr(s, beg, end):
+    beg2 = max((beg, 0))
+    end2 = min((end, len(s)))
+    return s[beg2:end2]
+
 def shorten(x):
     if len(x) % 3 != 0: 
         # print(x)
@@ -351,14 +356,14 @@ for i in range(len(trans_name)):
             wt_head=F'>SNV_{molecule_type}'+ str(output_line_num[i]) + F"_A"
             mt_head=F'>SNV_{molecule_type}'+ str(output_line_num[i]) + F"_B TPM="+str(tpm_num[i]) + F' WT={wt_pep} MT={mt_pep}'
             if pro_change_pos<=10:
-                wt_pep=ref_amino_acid_seq[0:21]
-                mt_pep=ref_amino_acid_seq[0:pro_change_pos-1]+alt_amino_acid[i]+ref_amino_acid_seq[pro_change_pos:pro_change_pos+21]
+                wt_pep=limsubstr(ref_amino_acid_seq,0,21)
+                mt_pep=limsubstr(ref_amino_acid_seq,0,pro_change_pos-1)+alt_amino_acid[i]+limsubstr(ref_amino_acid_seq,pro_change_pos,pro_change_pos+21)
             elif pro_change_pos>10 and len(ref_amino_acid_seq)-pro_change_pos<=10:
-                wt_pep=ref_amino_acid_seq[len(ref_amino_acid_seq)-21:len(ref_amino_acid_seq)]
-                mt_pep=ref_amino_acid_seq[len(ref_amino_acid_seq)-21:pro_change_pos-1]+alt_amino_acid[i]+ref_amino_acid_seq[pro_change_pos:len(ref_amino_acid_seq)]
+                wt_pep=limsubstr(ref_amino_acid_seq,len(ref_amino_acid_seq)-21,len(ref_amino_acid_seq))
+                mt_pep=limsubstr(ref_amino_acid_seq,len(ref_amino_acid_seq)-21,pro_change_pos-1)+alt_amino_acid[i]+limsubstr(ref_amino_acid_seq,pro_change_pos,len(ref_amino_acid_seq))
             else:
-                wt_pep=ref_amino_acid_seq[pro_change_pos-11:pro_change_pos+10]
-                mt_pep=ref_amino_acid_seq[pro_change_pos-11:pro_change_pos-1]+alt_amino_acid[i]+ref_amino_acid_seq[pro_change_pos:pro_change_pos+10]
+                wt_pep=limsubstr(ref_amino_acid_seq,pro_change_pos-11,pro_change_pos+10)
+                mt_pep=limsubstr(ref_amino_acid_seq,pro_change_pos-11,pro_change_pos-1)+alt_amino_acid[i]+limsubstr(ref_amino_acid_seq,pro_change_pos,pro_change_pos+10)
             head_comment = F'WT={wt_pep} MT={mt_pep} TPM={tpm_num[i]}'
             wt_head = F'>SNV_{molecule_type}{output_line_num[i]}_A {head_comment}'
             mt_head = F'>SNV_{molecule_type}{output_line_num[i]}_B {head_comment}'
@@ -417,40 +422,40 @@ for i in range(len(trans_name)):
                 first_ten_aa=seq[protein_start-11:protein_start-1]
             if consequence[i] == "frameshift_variant":
                 if (len(from_base)>len(to_base)) or (to_base=="-"): # the frameshift is due to deletion
-                    dna_seq = seq2str(ref_fasta[chr][start_pos-frame_shift_num:start_pos]) + seq2str(ref_fasta[chr][end_pos:start_pos+length-frame_shift_num])
+                    dna_seq = seq2str(limsubstr(ref_fasta[chr],start_pos-frame_shift_num,start_pos)) + seq2str(limsubstr(ref_fasta[chr],end_pos,start_pos+length-frame_shift_num))
                     aa_seq = translate(dna_seq)
                 elif (len(from_base)<len(to_base)) or (from_base=="-"): # the frameshift is due to insertion       
-                    dna_seq = seq2str(ref_fasta[chr][start_pos-frame_shift_num:start_pos]) + to_base + seq2str(ref_fasta[chr][start_pos:start_pos+length-frame_shift_num])
+                    dna_seq = seq2str(limsubstr(ref_fasta[chr],start_pos-frame_shift_num,start_pos)) + to_base + seq2str(limsubstr(ref_fasta[chr],start_pos,start_pos+length-frame_shift_num))
                     aa_seq = translate(dna_seq)
                 else:
                     print("[WARNING] Possibly wrong output consequence: {} {}:{} {}->{}".format(trans_name[i], chr, start_pos, from_base, to_base))
                     continue
                 mt_pep=first_ten_aa+aa_seq
-                wt_pep=seq[protein_start-11:protein_start-11+len(mt_pep)]
+                wt_pep=limsubstr(seq,protein_start-11,protein_start-11+len(mt_pep))
                 if variation[i] == 'chr12_62775391_-/T': print('chr12_62775391_-/T ->  {} (frame_shift_num = {})'.format(aa_seq, frame_shift_num))
             elif consequence[i] == "FRAME_SHIFT_INS":
-                dna_seq = seq2str(ref_fasta[chr][start_pos-frame_shift_num:start_pos]) + to_base + seq2str(ref_fasta[chr][start_pos:start_pos+length-frame_shift_num])
+                dna_seq = seq2str(limsubstr(ref_fasta[chr],start_pos-frame_shift_num,start_pos)) + to_base + seq2str(limsubstr(ref_fasta[chr],start_pos,start_pos+length-frame_shift_num))
                 aa_seq = translate(dna_seq)
                 mt_pep=first_ten_aa+aa_seq
-                wt_pep=seq[protein_start-11:protein_start-11+len(mt_pep)]
+                wt_pep=limsubstr(seq,protein_start-11,protein_start-11+len(mt_pep))
             elif consequence[i] == "FRAME_SHIFT_DEL":
-                dna_seq = seq2str(ref_fasta[chr][start_pos-frame_shift_num:start_pos]) + to_base + seq2str(ref_fasta[chr][start_pos:start_pos+length-frame_shift_num])
+                dna_seq = seq2str(limsubstr(ref_fasta[chr],start_pos-frame_shift_num,start_pos)) + to_base + seq2str(limsubstr(ref_fasta[chr],start_pos,start_pos+length-frame_shift_num))
                 aa_seq = translate(dna_seq)
                 mt_pep=first_ten_aa+aa_seq
-                wt_pep=seq[protein_start-11:protein_start-11+len(mt_pep)]
+                wt_pep=limsubstr(seq,protein_start-11,protein_start-11+len(mt_pep))
             elif ("inframe_insertion" in consequence[i]) or (consequence[i] == "IN_FRAME_INS"):
-                mt_pep=first_ten_aa+alt_amino_acid[i]+seq[protein_start:protein_start+10]
-                wt_pep=seq[protein_start-10:protein_start-10+len(mt_pep)]
+                mt_pep=first_ten_aa+alt_amino_acid[i]+limsubstr(seq,protein_start,protein_start+10)
+                wt_pep=limsubstr(seq,protein_start-10,protein_start-10+len(mt_pep))
             elif ("inframe_deletion" in consequence[i]) or (consequence[i] == "IN_FRAME_DEL"):
                 protein_end=protein_start+len(alt_amino_acid[i])
                 if (alt_amino_acid[i]=="-"):
-                    mt_pep=first_ten_aa+seq[protein_end:protein_end+10]
+                    mt_pep=first_ten_aa+limsubstr(seq,protein_end,protein_end+10)
                 else:
-                    mt_pep=first_ten_aa+alt_amino_acid[i]+seq[protein_end:protein_end+10]
-                wt_pep=seq[protein_start-10:protein_start-10+len(mt_pep)]
+                    mt_pep=first_ten_aa+alt_amino_acid[i]+limsubstr(seq,protein_end,protein_end+10)
+                wt_pep=limsubstr(seq,protein_start-10,protein_start-10+len(mt_pep))
             
             else:
-                print("[WARNING] Wrong Consequence!")
+                print("[WARNING] Wrong Consequence: {}!".format(consequence[i]))
                 break
             head_comment = F'VariantType={head_id} VariantMoleculeType={molecule_type} VariantLineNo={output_line_num[i]} VLN2={i} TPM={tpm_num[i]} MT={mt_pep} WT={wt_pep} SourceData={software} SourcePatient={prefix}'
             wt_head = F'>{head_id}_{molecule_type}{output_line_num[i]}_A {head_comment} IsHelperPeptide=1 IsComputedFromWildTypeLocus=1'
