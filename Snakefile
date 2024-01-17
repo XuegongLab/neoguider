@@ -1,4 +1,4 @@
-import csv, datetime, json, logging, multiprocessing, os, subprocess
+import csv, datetime, json, logging, multiprocessing, os, shutil, subprocess
 
 script_start_datetime = datetime.datetime.now()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
@@ -31,10 +31,10 @@ normal_vaf = config['normal_vaf']
 tumor_normal_var_qual = config['tumor_normal_var_qual']
 
 prep_peplens = config['prep_peplens']
-peplen_list = sorted(int(x) for x in prep_peplens.split(','))
-assert peplen_list
-peplen_list = list(range(peplen_list[0] - 1, peplen_list[-1] + 1 + 1)) # [peplen_list[0] - 1] + peplen_list + [peplen_list[-1] + 1]
-pre2_peplens = ','.join(F'{peplen}' for peplen in peplen_list)
+#peplen_list = sorted(int(x) for x in prep_peplens.split(','))
+#assert peplen_list
+#peplen_list = list(range(peplen_list[0] - 1, peplen_list[-1] + 1 + 1)) # [peplen_list[0] - 1] + peplen_list + [peplen_list[-1] + 1]
+#prep_peplens = ','.join(F'{peplen}' for peplen in peplen_list)
 
 binding_affinity_filt_thres = config['binding_affinity_filt_thres']
 #binding_affinity_hard_thres = config['binding_affinity_hard_thres']
@@ -112,14 +112,20 @@ def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
     return subprocess.call(cmd, shell = in_shell)
-def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile'):
-    logging.info(F'Trying to create the dummy placeholder files {files}')
+def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile', extension='.DummyPlaceholder', is_refresh_allowed=False):
+    logging.info(F'Trying to file-copy from {origfile} to {files} with extension="{extension}" and is_refresh_allowed={is_refresh_allowed}')
     for file in files:
-        if config.get('refresh_placeholders', 0) == 1 or not os.path.exists(file):
+        if (config.get('refresh_files', 0) == 1 and is_refresh_allowed) or not os.path.exists(file):
             if os.path.exists(file): call_with_infolog(F'rm {file}')
             logging.info(F'Making directory of the file {file}')
             os.makedirs(os.path.dirname(file), exist_ok=True)
-            call_with_infolog(F'cp {origfile} {file} && touch {file} && touch {file}.DummyPlaceholder')
+            try:
+                shutil.copy2(origfile, file)
+                if extension: call_with_infolog(F'touch {file}{extension}')
+            except shutil.SameFileError as err:
+                logging.warning(err)
+            if config.get('refresh_files', 0) == 1 and is_refresh_allowed:
+                call_with_infolog(F'touch {file}')
 
 IS_ANY_TUMOR_SEQ_DATA_AS_INPUT = ((not isna(DNA_TUMOR_FQ1))  or (not isna(RNA_TUMOR_FQ1)))
 DNA_TUMOR_ISPE  = (not isna(DNA_TUMOR_FQ2))
@@ -151,10 +157,20 @@ features_extracted_from_pmhcs_tsv = F'{prioritization_dir}/{PREFIX}_features_fro
 
 tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity_with_detail.tsv'
 
-final_pipeline_out = F'{RES}/{PREFIX}_final_neoepitope_candidates.tsv'
+#final_pipeline_out = F'{RES}/{PREFIX}_final_neoepitope_candidates.tsv'
+pipeline_out_from_reads = F'{RES}/{PREFIX}_prioritization_from_reads.tsv'
+pipeline_out_from_pmhcs = F'{RES}/{PREFIX}_prioritization_from_pmhcs.tsv'
 
+if   IS_ANY_TUMOR_SEQ_DATA_AS_INPUT      : pipeline_out_final = pipeline_out_from_reads
+elif 'tumor_spec_peptide_fasta' in config: pipeline_out_final = pipeline_out_from_pmhcs
+else:
+    logging.critical('Either dna_tumor_fq1, rna_tumor_fq1 or tumor_spec_peptide_fasta must be specified in the config. ')
+    exit(-1)
 rule all:
-    input: final_pipeline_out #, tcr_specificity_result
+    input: pipeline_out_final
+
+#rule all:
+#    input: final_pipeline_out #, tcr_specificity_result
 
 # Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
 #   https://github.com/FRED-2/OptiType/issues/125
@@ -479,6 +495,7 @@ rule RNA_SmallVariant_peptide_generation:
 # example return value: ['HLA-A02:01']
 def retrieve_hla_alleles():
     if 'comma_sep_hla_list' in config: return config['comma_sep_hla_list'].split(',')
+    if not os.path.exists(hla_out): return []
     ret = []
     with open(F'{hla_out}') as file:
         reader = csv.reader(file, delimiter='\t')
@@ -491,13 +508,13 @@ def retrieve_hla_alleles():
 
 #def run_netMHCpan(args):
 #    hla_str, infaa = args
-#    return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l {pre2_peplens} -BA > {infaa}.netMHCpan-result')
+#    return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l {prep_peplens} -BA > {infaa}.netMHCpan-result')
 
 def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_string):
     call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true')
     call_with_infolog(F'mkdir -p {outtsv}.tmpdir/')
     call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
-    cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_string} -l {pre2_peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_string}.netMHCpan-result'
+    cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_string} -l {prep_peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_string}.netMHCpan-result'
             # for hla_str in hla_strs
             for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
     with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
@@ -505,12 +522,12 @@ def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_string):
     # Each netmhcpan process uses much less than 100% CPU, so we can spawn many more processes
     call_with_infolog(F'cat {outtsv}.tmpdir/tmp.sh | parallel -j {netmhc_ncores}'
         F' && find {outtsv}.tmpdir/ -iname "SPLITTED.*.netMHCpan-result" | xargs cat > {outtsv}')
-    
+
 def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
     #call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true')
     #call_with_infolog(F'mkdir -p {outtsv}.tmpdir/')
     #call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
-    #cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l {pre2_peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
+    #cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l {prep_peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
     #        for hla_str in hla_strs for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
     #with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
     #    for cmd in cmds: shfile.write(cmd + '\n')
@@ -527,10 +544,10 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
     outputfile1 = outtsv
     
     if netmhcstabpan_cmd == path:
-        run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores} --peplens {pre2_peplens}'
+        run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores} --peplens {prep_peplens}'
         call_with_infolog(run_calculation)
     else:
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -c {netmhc_ncores} --peplens {pre2_peplens}'
+        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -c {netmhc_ncores} --peplens {prep_peplens}'
         remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
         remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {script_basedir}/fasta_partition.py {inputfile} {user}@{address}:/tmp/{outdir}/'
@@ -547,10 +564,13 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         call_with_infolog(F'gzip -d {outputfile1}.gz')
 
 tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
-if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)): tumor_spec_peptide_fasta = config['tumor_spec_peptide_fasta']
+if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)): #tumor_spec_peptide_fasta = config['tumor_spec_peptide_fasta'] 
+    make_dummy_files([tumor_spec_peptide_fasta], origfile=config['tumor_spec_peptide_fasta'], extension='.copied', is_refresh_allowed=True)
+    
 homologous_peptide_fasta = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
-if not isna(config.get('homologous_peptide_fasta', NA_REP)): homologous_peptide_fasta = config['homologous_peptide_fasta']
+#if not isna(config.get('homologous_peptide_fasta', NA_REP)): homologous_peptide_fasta = config['homologous_peptide_fasta']
 
+hetero_nbits = config.get('hetero_nbits', 1.25)
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_fasta, # dna_snvindel_wt_peptide_fasta,
            rna_snvindel_neopeptide_fasta, # rna_snvindel_wt_peptide_fasta,
@@ -559,13 +579,16 @@ rule Peptide_preprocessing:
     output: tumor_spec_peptide_fasta
     threads: 1
     run:
+        comma_sep_hla_str = ','.join(retrieve_hla_alleles())
         shell('cat {dna_snvindel_neopeptide_fasta} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
-            ' | python {script_basedir}/neoexpansion.py --nbits 0.75 > {dna_snvindel_neopeptide_fasta}.expansion')
+            ' | python {script_basedir}/neoexpansion.py --nbits {hetero_nbits} > {dna_snvindel_neopeptide_fasta}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_fasta}.expansion ' # '{dna_snvindel_wt_peptide_fasta} '
             ' {rna_snvindel_neopeptide_fasta}           ' # '{rna_snvindel_wt_peptide_fasta} '
             ' {fusion_neopeptide_fasta} {splicing_neopeptide_fasta} '
-            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} > {tumor_spec_peptide_fasta}')
+            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
+            ' | python {script_basedir}/fasta_addkey.py --key HLA --val "{comma_sep_hla_str}" '
+            ' > {tumor_spec_peptide_fasta}')
 
 rule Peptide_processing:
     input: tumor_spec_peptide_fasta
@@ -685,7 +708,7 @@ prioritization_function_params = ''
 
 logging.debug(F'features_extracted_from_reads_tsv = {features_extracted_from_reads_tsv} (from {prioritization_dir})')
 
-ruleorder: PrioPrep_with_all_TCRs_from_reads > PrioPrep_with_all_TCRs_from_pMHCs
+#ruleorder: PrioPrep_with_all_TCRs_from_reads > PrioPrep_with_all_TCRs_from_pMHCs
 
 rule PrioPrep_with_all_TCRs_from_reads:
     input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt, # homologous_bindstab_filtered_tsv, # dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf,
@@ -729,20 +752,28 @@ rule Model_training:
     run:
         shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens 8,9,10,11,12 --train {traindata_tsv}')
 
-features_tsv = ''
-if   IS_ANY_TUMOR_SEQ_DATA_AS_INPUT   : features_tsv = features_extracted_from_reads_tsv
-elif 'tumor_spec_peptide_fasta' in config: features_tsv = features_extracted_from_pmhcs_tsv
-else:
-    logging.critical('Either dna_tumor_fq1, rna_tumor_fq1 or tumor_spec_peptide_fasta must be specified in the config. ')
-    exit(-1)
-rule Prioritization_with_all_TCRs:
-    input: features_tsv, trained_model
-    output: final_pipeline_out
-    run:
-        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_tsv} --suffix prediction')
-        shell('cp {features_tsv}.prediction {final_pipeline_out}')
+#features_tsv = ''
+#if   IS_ANY_TUMOR_SEQ_DATA_AS_INPUT   : features_tsv = features_extracted_from_reads_tsv
+#elif 'tumor_spec_peptide_fasta' in config: features_tsv = features_extracted_from_pmhcs_tsv
+#else:
+#    logging.critical('Either dna_tumor_fq1, rna_tumor_fq1 or tumor_spec_peptide_fasta must be specified in the config. ')
+#    exit(-1)
 
-### validation rules
+rule Prioritization_with_all_TCRs_from_reads:
+    input: features_extracted_from_reads_tsv, trained_model
+    output: pipeline_out_from_reads
+    run:
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_reads_tsv} --suffix prediction')
+        shell('cp {features_extracted_from_reads_tsv}.prediction {pipeline_out_from_reads}')
+
+rule Prioritization_with_all_TCRs_from_pmhcs:
+    input: features_extracted_from_pmhcs_tsv, trained_model
+    output: pipeline_out_from_pmhcs
+    run:
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_pmhcs_tsv} --suffix prediction')
+        shell('cp {features_extracted_from_pmhcs_tsv}.prediction {pipeline_out_from_pmhcs}')
+
+### validation rules to construct ground truth that can be subsequently used for machine learning
 
 reads_as_input_validation_out=F'{features_extracted_from_reads_tsv}.validation'
 pmhcs_as_input_validation_out=F'{features_extracted_from_pmhcs_tsv}.validation'
