@@ -30,24 +30,24 @@ tumor_vaf = config['tumor_vaf']
 normal_vaf = config['normal_vaf']
 tumor_normal_var_qual = config['tumor_normal_var_qual']
 
-final_peplens = config['peplens']
-peplen_list = sorted(int(x) for x in final_peplens.split(','))
+prep_peplens = config['prep_peplens']
+peplen_list = sorted(int(x) for x in prep_peplens.split(','))
 assert peplen_list
-peplen_list = [peplen_list[0] - 1] + peplen_list + [peplen_list[0] + 1]
-peplens = ','.join(F'{peplen}' for peplen in peplen_list)
+peplen_list = list(range(peplen_list[0] - 1, peplen_list[-1] + 1 + 1)) # [peplen_list[0] - 1] + peplen_list + [peplen_list[-1] + 1]
+pre2_peplens = ','.join(F'{peplen}' for peplen in peplen_list)
 
 binding_affinity_filt_thres = config['binding_affinity_filt_thres']
-binding_affinity_hard_thres = config['binding_affinity_hard_thres']
-binding_affinity_soft_thres = config['binding_affinity_soft_thres']
+#binding_affinity_hard_thres = config['binding_affinity_hard_thres']
+#binding_affinity_soft_thres = config['binding_affinity_soft_thres']
 
 binding_stability_filt_thres = config['binding_stability_filt_thres']
-binding_stability_hard_thres = config['binding_stability_hard_thres']
-binding_stability_soft_thres = config['binding_stability_soft_thres']
+#binding_stability_hard_thres = config['binding_stability_hard_thres']
+#binding_stability_soft_thres = config['binding_stability_soft_thres']
 
 tumor_abundance_filt_thres = config['tumor_abundance_filt_thres']
-tumor_abundance_hard_thres = config['tumor_abundance_hard_thres']
-tumor_abundance_soft_thres = config['tumor_abundance_soft_thres']
-tumor_abundance_recognition_thres = config['tumor_abundance_recognition_thres']
+#tumor_abundance_hard_thres = config['tumor_abundance_hard_thres']
+#tumor_abundance_soft_thres = config['tumor_abundance_soft_thres']
+#tumor_abundance_recognition_thres = config['tumor_abundance_recognition_thres']
 
 agretopicity_thres = config['agretopicity_thres']
 foreignness_thres = config['foreignness_thres']
@@ -107,6 +107,7 @@ OPTITYPE_CONDA_ENV = 'optitype_env'
 OPTITYPE_CONFIG = f"{script_basedir}/software/optitype.config.ini"
 OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
+NA_REP = ''
 def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 def call_with_infolog(cmd, in_shell = True):
     logging.info(cmd)
@@ -120,6 +121,7 @@ def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile
             os.makedirs(os.path.dirname(file), exist_ok=True)
             call_with_infolog(F'cp {origfile} {file} && touch {file} && touch {file}.DummyPlaceholder')
 
+IS_ANY_TUMOR_SEQ_DATA_AS_INPUT = ((not isna(DNA_TUMOR_FQ1))  or (not isna(RNA_TUMOR_FQ1)))
 DNA_TUMOR_ISPE  = (not isna(DNA_TUMOR_FQ2))
 DNA_NORMAL_ISPE = (not isna(DNA_NORMAL_FQ2))
 RNA_TUMOR_ISPE  = (not isna(RNA_TUMOR_FQ2))
@@ -144,15 +146,15 @@ rna_snvindel_info_file = F'{info_dir}/{RNA_PREFIX}_snv_indel.annotation.tsv'
 fusion_info_file = F'{info_dir}/{PREFIX}_fusion.tsv'
 splicing_info_file = F'{info_dir}/{PREFIX}_splicing.tsv' # TODO: check if it makese sense to add_detail_info to TCR-unaware prioritization
 
-reads_as_input_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_prioritization_with_reads_as_input.tsv' # prioritization from the reads of sequencing data
-pmhcs_as_input_prioritization_tsv = F'{prioritization_dir}/{PREFIX}_prioritization_with_pmhcs_as_input.tsv' # prioritization from the pMHC summary info
+features_extracted_from_reads_tsv = F'{prioritization_dir}/{PREFIX}_features_from_reads.tsv' # prioritization from the reads of sequencing data
+features_extracted_from_pmhcs_tsv = F'{prioritization_dir}/{PREFIX}_features_from_pmhcs.tsv' # prioritization from the pMHC summary info
 
 tcr_specificity_result = F'{prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity_with_detail.tsv'
 
 final_pipeline_out = F'{RES}/{PREFIX}_final_neoepitope_candidates.tsv'
 
 rule all:
-    input: reads_as_input_prioritization_tsv, tcr_specificity_result, final_pipeline_out
+    input: final_pipeline_out #, tcr_specificity_result
 
 # Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
 #   https://github.com/FRED-2/OptiType/issues/125
@@ -253,13 +255,13 @@ rule RNA_tumor_fusion_detection:
         else:
             shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         
-fusion_neopeptide_faa = F'{peptide_dir}/{PREFIX}_fusion.fasta'
-if isRNAskipped: make_dummy_files([fusion_neopeptide_faa, fusion_info_file])
+fusion_neopeptide_fasta = F'{peptide_dir}/{PREFIX}_fusion.fasta'
+if isRNAskipped: make_dummy_files([fusion_neopeptide_fasta, fusion_info_file])
 rule RNA_fusion_peptide_generation:
     input:
         starfusion_res, outf_rna_quantification
     output:
-        fusion_neopeptide_faa, fusion_info_file
+        fusion_neopeptide_fasta, fusion_info_file
     run:
         shell(
         'python {script_basedir}/parse_star_fusion.py -i {starfusion_res}'
@@ -308,8 +310,8 @@ rule RNA_postprocessing:
    
 asneo_out = F'{RES}/splicing/{PREFIX}_rna_tumor_splicing_asneo_out'
 asneo_sjo = F'{asneo_out}/SJ.out.tab'
-splicing_neopeptide_faa=F'{peptide_dir}/{PREFIX}_splicing.fasta'
-if isRNAskipped: make_dummy_files([splicing_neopeptide_faa])
+splicing_neopeptide_fasta=F'{peptide_dir}/{PREFIX}_splicing.fasta'
+if isRNAskipped: make_dummy_files([splicing_neopeptide_fasta])
 rule RNA_tumor_splicing_alignment:
     output: rna_t_spl_bam, rna_t_spl_bai, asneo_sjo 
     resources: mem_mb = star_mem_mb
@@ -329,13 +331,13 @@ rule RNA_tumor_splicing_alignment:
 
 rule RNA_splicing_peptide_generation:
     input: rna_quant=outf_rna_quantification, sj=asneo_sjo # starfusion_sjo may also work (we didn't test this)
-    output: splicing_neopeptide_faa 
+    output: splicing_neopeptide_fasta 
     resources: mem_mb = 20000 # performance measured by Xiaofei Zhao
     threads: 1
     run:
         shell(
         'mkdir -p {info_dir} '
-        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l {peplens} -p {PREFIX} -t 1.0 '
+        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l {pre2_peplens} -p {PREFIX} -t 1.0 '
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {peptide_dir}/{PREFIX}_splicing.fasta'
         )
@@ -428,16 +430,16 @@ rule DNA_SmallVariant_effect_prediction:
         --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {dna_vcf} --output_file {dna_variant_effect}'''
 
-dna_snvindel_neopeptide_faa = F'{peptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
-# dna_snvindel_wt_peptide_faa = F'{peptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
+dna_snvindel_neopeptide_fasta = F'{peptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
+# dna_snvindel_wt_peptide_fasta = F'{peptide_dir}/{DNA_PREFIX}_snv_indel_wt.fasta'
 rule DNA_SmallVariant_peptide_generation:
     input: dna_variant_effect, outf_rna_quantification
-    output: dna_snvindel_neopeptide_faa, # dna_snvindel_wt_peptide_faa, 
+    output: dna_snvindel_neopeptide_fasta, # dna_snvindel_wt_peptide_fasta, 
         dna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {peptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {DNA_PREFIX} --molecule_type=D -t -1        
         cp {dna_variant_effect} {dna_snvindel_info_file}'''
-# cp {peptide_dir}/{DNA_PREFIX}_tmp_fasta/{DNA_PREFIX}_snv_indel_wt.fasta {dna_snvindel_wt_peptide_faa}
+# cp {peptide_dir}/{DNA_PREFIX}_tmp_fasta/{DNA_PREFIX}_snv_indel_wt.fasta {dna_snvindel_wt_peptide_fasta}
 
 # end-of-DNA-vep-mainline
 # start-of-RNA-vep-sideline-for-rescue
@@ -458,19 +460,19 @@ rule RNA_SmallVariant_effect_prediction:
         --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf} --output_file {rna_variant_effect}'''
         # --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf}.isecdir/0001.vcf.gz --output_file {rna_variant_effect}
-rna_snvindel_neopeptide_faa = F'{peptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
-# rna_snvindel_wt_peptide_faa = F'{peptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
-if isRNAskipped: make_dummy_files([rna_snvindel_neopeptide_faa, 
-        # rna_snvindel_wt_peptide_faa, 
+rna_snvindel_neopeptide_fasta = F'{peptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
+# rna_snvindel_wt_peptide_fasta = F'{peptide_dir}/{RNA_PREFIX}_snv_indel_wt.fasta'
+if isRNAskipped: make_dummy_files([rna_snvindel_neopeptide_fasta, 
+        # rna_snvindel_wt_peptide_fasta, 
         rna_snvindel_info_file])
 rule RNA_SmallVariant_peptide_generation:
     input: rna_variant_effect, outf_rna_quantification
-    output: rna_snvindel_neopeptide_faa, # rna_snvindel_wt_peptide_faa, 
+    output: rna_snvindel_neopeptide_fasta, # rna_snvindel_wt_peptide_fasta, 
         rna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {peptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {RNA_PREFIX} --molecule_type=R -t -1        
         cp {rna_variant_effect} {rna_snvindel_info_file}'''
-# cp {peptide_dir}/{RNA_PREFIX}_tmp_fasta/{RNA_PREFIX}_snv_indel_wt.fasta {rna_snvindel_wt_peptide_faa}
+# cp {peptide_dir}/{RNA_PREFIX}_tmp_fasta/{RNA_PREFIX}_snv_indel_wt.fasta {rna_snvindel_wt_peptide_fasta}
 
 # end-of-RNA-vep-sideline-for-rescue
 
@@ -489,13 +491,13 @@ def retrieve_hla_alleles():
 
 #def run_netMHCpan(args):
 #    hla_str, infaa = args
-#    return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l {peplens} -BA > {infaa}.netMHCpan-result')
+#    return call_with_infolog(F'{netmhcpan_cmd} -f {infaa} -a {hla_str} -l {pre2_peplens} -BA > {infaa}.netMHCpan-result')
 
 def peptide_to_pmhc_binding_affinity(infaa, outtsv, hla_string):
     call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true')
     call_with_infolog(F'mkdir -p {outtsv}.tmpdir/')
     call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
-    cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_string} -l {peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_string}.netMHCpan-result'
+    cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_string} -l {pre2_peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_string}.netMHCpan-result'
             # for hla_str in hla_strs
             for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
     with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
@@ -508,7 +510,7 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
     #call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true')
     #call_with_infolog(F'mkdir -p {outtsv}.tmpdir/')
     #call_with_infolog(F'''cat {infaa} | awk '{{print $1}}' |  split -l 20 - {outtsv}.tmpdir/SPLITTED.''')
-    #cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l {peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
+    #cmds = [F'{netmhcpan_cmd} -f {outtsv}.tmpdir/{faafile} -a {hla_str} -l {pre2_peplens} -BA > {outtsv}.tmpdir/{faafile}.{hla_str}.netMHCpan-result'
     #        for hla_str in hla_strs for faafile in os.listdir(F'{outtsv}.tmpdir/') if faafile.startswith('SPLITTED.')]
     #with open(F'{outtsv}.tmpdir/tmp.sh', 'w') as shfile:
     #    for cmd in cmds: shfile.write(cmd + '\n')
@@ -544,58 +546,58 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         call_with_infolog(remote_receive1)
         call_with_infolog(F'gzip -d {outputfile1}.gz')
 
-all_neo_peptide_faa    = F'{RES}/{PREFIX}_neo_peps.fasta'
-if 'all_neo_peptide_faa' in config: all_neo_peptide_faa = config['all_neo_peptide_faa']
-all_vars_peptide_faa   = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
-if 'all_vars_peptide_faa' in config: all_vars_peptide_faa = config['all_vars_peptide_faa']
+tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
+if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)): tumor_spec_peptide_fasta = config['tumor_spec_peptide_fasta']
+homologous_peptide_fasta = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
+if not isna(config.get('homologous_peptide_fasta', NA_REP)): homologous_peptide_fasta = config['homologous_peptide_fasta']
 
 rule Peptide_preprocessing:
-    input: dna_snvindel_neopeptide_faa, # dna_snvindel_wt_peptide_faa,
-           rna_snvindel_neopeptide_faa, # rna_snvindel_wt_peptide_faa,
-           fusion_neopeptide_faa, splicing_neopeptide_faa,
-           hla_out # required for Peptide_processing but still listed here because all_neo_peptide_faa that has pre-filled HLA key-value pairs in its FASTA header can be used as input to Peptide_processing
-    output: all_neo_peptide_faa
+    input: dna_snvindel_neopeptide_fasta, # dna_snvindel_wt_peptide_fasta,
+           rna_snvindel_neopeptide_fasta, # rna_snvindel_wt_peptide_fasta,
+           fusion_neopeptide_fasta, splicing_neopeptide_fasta,
+           hla_out # required for Peptide_processing but still listed here because tumor_spec_peptide_fasta that has pre-filled HLA key-value pairs in its FASTA header can be used as input to Peptide_processing
+    output: tumor_spec_peptide_fasta
     threads: 1
     run:
-        shell('cat {dna_snvindel_neopeptide_faa} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
-            ' | python {script_basedir}/neoexpansion.py --nbits 0.75 > {dna_snvindel_neopeptide_faa}.expansion')
+        shell('cat {dna_snvindel_neopeptide_fasta} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
+            ' | python {script_basedir}/neoexpansion.py --nbits 0.75 > {dna_snvindel_neopeptide_fasta}.expansion')
         shell('cat'
-            ' {dna_snvindel_neopeptide_faa}.expansion ' # '{dna_snvindel_wt_peptide_faa} '
-            ' {rna_snvindel_neopeptide_faa}           ' # '{rna_snvindel_wt_peptide_faa} '
-            ' {fusion_neopeptide_faa} {splicing_neopeptide_faa} '
-            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} > {all_neo_peptide_faa}')
+            ' {dna_snvindel_neopeptide_fasta}.expansion ' # '{dna_snvindel_wt_peptide_fasta} '
+            ' {rna_snvindel_neopeptide_fasta}           ' # '{rna_snvindel_wt_peptide_fasta} '
+            ' {fusion_neopeptide_fasta} {splicing_neopeptide_fasta} '
+            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} > {tumor_spec_peptide_fasta}')
 
 rule Peptide_processing:
-    input: all_neo_peptide_faa
-    output: all_vars_peptide_faa
+    input: tumor_spec_peptide_fasta
+    output: homologous_peptide_fasta
     threads: workflow.cores
     run:
         comma_sep_hla_str = ','.join(retrieve_hla_alleles())
-        shell('cat {all_neo_peptide_faa} '
+        shell('cat {tumor_spec_peptide_fasta} '
             ' | python {script_basedir}/fasta_addkey.py --key HLA --val "{comma_sep_hla_str}" '
-            ' | python {script_basedir}/neoexpansion.py --reference {PEP_REF} --tmp {all_vars_peptide_faa}.tmp > {all_vars_peptide_faa}')
+            ' | python {script_basedir}/neoexpansion.py --reference {PEP_REF} --tmp {homologous_peptide_fasta}.tmp > {homologous_peptide_fasta}')
 
-all_vars_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
+homologous_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
 rule PeptideMHC_binding_affinity_prediction:
-    input: all_vars_peptide_faa #, hla_out
-    output: all_vars_netmhcpan_txt
+    input: homologous_peptide_fasta #, hla_out
+    output: homologous_netmhcpan_txt
     threads: netmhc_nthreads # 12
     run:
-        shell(F'cat {all_vars_peptide_faa} | python {script_basedir}/fasta_partition.py --key HLA --out {all_vars_peptide_faa}')
-        all_vars_peptide_faa_summary = F'{all_vars_peptide_faa}.partition/mapping.json'
-        with open(all_vars_peptide_faa_summary) as jsonfile: hla2faa = json.load(jsonfile)
-        all_vars_peptide_faa_partdir = os.path.dirname(os.path.realpath(all_vars_peptide_faa_summary))
+        shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta}')
+        homologous_peptide_fasta_summary = F'{homologous_peptide_fasta}.partition/mapping.json'
+        with open(homologous_peptide_fasta_summary) as jsonfile: hla2faa = json.load(jsonfile)
+        homologous_peptide_fasta_partdir = os.path.dirname(os.path.realpath(homologous_peptide_fasta_summary))
         for hla_str, faa in sorted(hla2faa.items()):
-            peptide_to_pmhc_binding_affinity(F'{all_vars_peptide_faa_partdir}/{faa}', F'{all_vars_peptide_faa_partdir}/{faa}.netmhcpan.txt', hla_str)
-        shell(F'cat {all_vars_peptide_faa_partdir}/*.netmhcpan.txt > {all_vars_netmhcpan_txt}')
+            peptide_to_pmhc_binding_affinity(F'{homologous_peptide_fasta_partdir}/{faa}', F'{homologous_peptide_fasta_partdir}/{faa}.netmhcpan.txt', hla_str)
+        shell(F'cat {homologous_peptide_fasta_partdir}/*.netmhcpan.txt > {homologous_netmhcpan_txt}')
 
-all_vars_netmhcstabpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcstabpan.txt'
+homologous_netmhcstabpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcstabpan.txt'
 rule PeptideMHC_binding_stability_prediction:
-    input: all_vars_peptide_faa #, hla_out
-    output: all_vars_netmhcstabpan_txt
+    input: homologous_peptide_fasta #, hla_out
+    output: homologous_netmhcstabpan_txt
     threads: netmhc_nthreads # 12
     run:
-        peptide_to_pmhc_binding_stability(all_vars_peptide_faa, all_vars_netmhcstabpan_txt, retrieve_hla_alleles())
+        peptide_to_pmhc_binding_stability(homologous_peptide_fasta, homologous_netmhcstabpan_txt, retrieve_hla_alleles())
 
 try:
     from urllib.parse import urlparse
@@ -643,29 +645,30 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
         call_with_infolog(remote_receive2)
         call_with_infolog(remote_gzip)
 
-all_vars_netmhcpan_filtered_tsv = F'{prioritization_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
+homologous_netmhcpan_filtered_tsv = F'{prioritization_dir}/{PREFIX}_all_peps.netmhcpan_filtered.tsv'
 #rule PeptideMHC_binding_affinity_filter:
-#    input: all_vars_peptide_faa, all_vars_netmhcpan_txt
-#    output: all_vars_netmhc_filtered_tsv
+#    input: homologous_peptide_fasta, homologous_netmhcpan_txt
+#    output: homologous_netmhc_filtered_tsv
 #    shell: 
-#        'python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
+#        'python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhc_filtered_tsv} '
 #        '-a {binding_affinity_filt_thres} -l SB,WB'
 
-all_vars_bindstab_raw_txt = F'{pmhc_dir}/{PREFIX}_bindstab_raw.txt'
-all_vars_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.tsv'
+homologous_bindstab_raw_txt = F'{pmhc_dir}/{PREFIX}_bindstab_raw.txt'
+homologous_bindstab_filtered_tsv = F'{pmhc_dir}/{PREFIX}_candidate_pmhc.tsv'
 
 #rule disabled_PeptideMHC_binding_stability_prediction:
-#    input: all_vars_peptide_faa, all_vars_netmhcpan_txt
-#    # all_vars_netmhc_filtered_tsv
-#    output: all_vars_bindstab_raw_txt, all_vars_bindstab_filtered_tsv
+#    input: homologous_peptide_fasta, homologous_netmhcpan_txt
+#    # homologous_netmhc_filtered_tsv
+#    output: homologous_bindstab_raw_txt, homologous_bindstab_filtered_tsv
 #    run: 
 #        bindstab_filter_py = F'{script_basedir}/bindstab_filter.py'
-#        shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhc_filtered_tsv} '
-#              '-a {binding_affinity_filt_thres} -l {final_peplens}')
-#        run_netMHCstabpan(bindstab_filter_py, F'{all_vars_netmhc_filtered_tsv}', F'{pmhc_dir}')
+#        shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhc_filtered_tsv} '
+#              '-a {binding_affinity_filt_thres} -l {prep_peplens}')
+#        run_netMHCstabpan(bindstab_filter_py, F'{homologous_netmhc_filtered_tsv}', F'{pmhc_dir}')
 
 iedb_path = F'{script_basedir}/database/iedb.fasta' # '/mnt/d/code/neohunter/NeoHunter/database/iedb.fasta'
-prioritization_thres_params = ' '.join([x.strip() for x in F'''
+
+"""prioritization_thres_params = ' '.join([x.strip() for x in F'''
 --binding-affinity-hard-thres {binding_affinity_hard_thres}
 --binding-affinity-soft-thres {binding_affinity_soft_thres}
 --binding-stability-hard-thres {binding_stability_hard_thres}
@@ -676,78 +679,97 @@ prioritization_thres_params = ' '.join([x.strip() for x in F'''
 --agretopicity-thres {agretopicity_thres}
 --foreignness-thres {foreignness_thres}
 --alteration-type {alteration_type}
-'''.strip().split()])
+'''.strip().split()])"""
+
 prioritization_function_params = ''
 
-logging.debug(F'reads_as_input_prioritization_tsv = {reads_as_input_prioritization_tsv} (from {prioritization_dir})')
+logging.debug(F'features_extracted_from_reads_tsv = {features_extracted_from_reads_tsv} (from {prioritization_dir})')
 
-ruleorder: Prioritization_with_all_TCRs > Prioritization_with_all_TCRs_with_minimal_varinfo
+ruleorder: PrioPrep_with_all_TCRs_from_reads > PrioPrep_with_all_TCRs_from_pMHCs
 
-rule Prioritization_with_all_TCRs:
-    input: iedb_path, all_vars_netmhcpan_txt, all_vars_netmhcstabpan_txt, # all_vars_bindstab_filtered_tsv, # dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf,
+rule PrioPrep_with_all_TCRs_from_reads:
+    input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt, # homologous_bindstab_filtered_tsv, # dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf,
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
         # splicing_info_file   
-    output: reads_as_input_prioritization_tsv, final_pipeline_out
+    output: features_extracted_from_reads_tsv #, final_pipeline_out
     run:
-        shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l {final_peplens}')
+        shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
+              '-a {binding_affinity_filt_thres} -l {prep_peplens}')
         if variantcaller == 'mutect2':
-            call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
+            call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
-            F' -o {reads_as_input_prioritization_tsv} -t {alteration_type} ' #' --passflag 0x0 '
-            #F' {prioritization_thres_params}'
+            F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' #' --passflag 0x0 '
             F''' {prioritization_function_params.replace('_', '-')}''')
         else:
-            call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
+            call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
-            F' -o {reads_as_input_prioritization_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
+            F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
-            #F' {prioritization_thres_params}'
             F''' {prioritization_function_params.replace('_', '-')}''')
-        call_with_infolog(F'cp {reads_as_input_prioritization_tsv} {final_pipeline_out}')
 
-### rules that were not run by default
-
-rule Prioritization_with_all_TCRs_with_minimal_varinfo:
-    input: iedb_path, all_vars_netmhcpan_txt, all_vars_netmhcstabpan_txt # all_vars_bindstab_filtered_tsv 
-    output: pmhcs_as_input_prioritization_tsv
+rule PrioPrep_with_all_TCRs_from_pMHCs:
+    input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt # homologous_bindstab_filtered_tsv 
+    output: features_extracted_from_pmhcs_tsv
     run:
-        shell('python {script_basedir}/parse_netmhcpan.py -f {all_vars_peptide_faa} -n {all_vars_netmhcpan_txt} -o {all_vars_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l {final_peplens}')
-        call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {all_vars_netmhcstabpan_txt} -i {all_vars_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' -o {pmhcs_as_input_prioritization_tsv} -t {alteration_type} '
+        shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
+              '-a {binding_affinity_filt_thres} -l {prep_peplens}')
+        call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
+            F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
-reads_as_input_validation_out=F'{reads_as_input_prioritization_tsv}.validation'
-pmhcs_as_input_validation_out=F'{pmhcs_as_input_prioritization_tsv}.validation'
-reads_as_input_pep_valida_out=F'{reads_as_input_prioritization_tsv}.peptide-validation'
-pmhcs_as_input_pep_valida_out=F'{pmhcs_as_input_prioritization_tsv}.peptide-validation'
+# This directory contains files generated by Validation_with_all_TCRs_from_pMHCs on data posted at https://figshare.com/s/147e67dde683fb769908 
+# (cited by https://doi.org/10.1016/j.immuni.2023.09.002)
+traindata_tsv = F'{script_basedir}/model/MullerNCItrain_.train-data.min.tsv'
+trained_model = F'{script_basedir}/model/MullerNCItrain_.peplen_train_8to12.pickle'
+kept_peplens = config.get('kept_peplens', prep_peplens)
 
-###   validation rules
+rule Model_training:
+    input: traindata_tsv
+    output: trained_model
+    run:
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens 8,9,10,11,12 --train {traindata_tsv}')
 
-rule Prioritization_with_all_TCRs_validation:
-    input: reads_as_input_prioritization_tsv
+features_tsv = ''
+if   IS_ANY_TUMOR_SEQ_DATA_AS_INPUT   : features_tsv = features_extracted_from_reads_tsv
+elif 'tumor_spec_peptide_fasta' in config: features_tsv = features_extracted_from_pmhcs_tsv
+else:
+    logging.critical('Either dna_tumor_fq1, rna_tumor_fq1 or tumor_spec_peptide_fasta must be specified in the config. ')
+    exit(-1)
+rule Prioritization_with_all_TCRs:
+    input: features_tsv, trained_model
+    output: final_pipeline_out
+    run:
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_tsv} --suffix prediction')
+        shell('cp {features_tsv}.prediction {final_pipeline_out}')
+
+### validation rules
+
+reads_as_input_validation_out=F'{features_extracted_from_reads_tsv}.validation'
+pmhcs_as_input_validation_out=F'{features_extracted_from_pmhcs_tsv}.validation'
+reads_as_input_pep_valida_out=F'{features_extracted_from_reads_tsv}.peptide-validation'
+pmhcs_as_input_pep_valida_out=F'{features_extracted_from_pmhcs_tsv}.peptide-validation'
+
+rule Validation_with_all_TCRs_from_reads:
+    input: features_extracted_from_reads_tsv
     output: reads_as_input_validation_out, reads_as_input_pep_valida_out
     run:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {reads_as_input_prioritization_tsv} -t {alteration_type}'
-            #F' {prioritization_thres_params} '
+            F' -o {features_extracted_from_reads_tsv} -t {alteration_type}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
-rule Prioritization_with_all_TCRs_with_minimal_varinfo_validation:
-    input: pmhcs_as_input_prioritization_tsv
+rule Validation_with_all_TCRs_from_pMHCs:
+    input: features_extracted_from_pmhcs_tsv
     output: pmhcs_as_input_validation_out, pmhcs_as_input_pep_valida_out
     run:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {pmhcs_as_input_prioritization_tsv} -t {alteration_type}'
-            #F' {prioritization_thres_params} '
+            F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
-### auxiliary prioritization steps
+### auxiliary prioritization rules
 
 mixcr_output_dir = F'{prioritization_dir}/{PREFIX}_mixcr_output'
 mixcr_output_pref = F'{mixcr_output_dir}/{PREFIX}'
@@ -767,21 +789,21 @@ rule TCR_clonotype_detection:
 tcr_specificity_software = 'ERGO'
 ergo2_score = F'{prioritization_dir}/{PREFIX}_tcr_specificity_score.csv'
 rule PeptideMHC_TCR_interaction_prediction:
-    input: all_vars_bindstab_filtered_tsv, mixcr_output_done_flag
+    input: homologous_bindstab_filtered_tsv, mixcr_output_done_flag
     output: ergo2_score
     threads: ergo2_nthreads # 12
     shell: '''
-        python {script_basedir}/rank_software_input.py -m {mixcr_output_pref} -n {all_vars_bindstab_filtered_tsv} -o {prioritization_dir} -t {tcr_specificity_software} -p {PREFIX}
+        python {script_basedir}/rank_software_input.py -m {mixcr_output_pref} -n {homologous_bindstab_filtered_tsv} -o {prioritization_dir} -t {tcr_specificity_software} -p {PREFIX}
         cd {ERGO_EXE_DIR}
         python {ERGO_PATH} mcpas {prioritization_dir}/{PREFIX}_cdr_ergo.csv {ergo2_score}
         '''
 rule Prioritization_with_each_TCR:
-    input: all_vars_bindstab_filtered_tsv, ergo2_score
+    input: homologous_bindstab_filtered_tsv, ergo2_score
     output: tcr_specificity_result
     threads: 1   
     shell: '''
         cd {script_basedir}
-        python {script_basedir}/parse_rank_software.py -i {ergo2_score} -n {all_vars_bindstab_filtered_tsv} -o {prioritization_dir}/ -t {tcr_specificity_software} -p {PREFIX}
+        python {script_basedir}/parse_rank_software.py -i {ergo2_score} -n {homologous_bindstab_filtered_tsv} -o {prioritization_dir}/ -t {tcr_specificity_software} -p {PREFIX}
         python {script_basedir}/add_detail_info.py -i {prioritization_dir}/{PREFIX}_neoantigen_rank_tcr_specificity.tsv -o {prioritization_dir}/ -p {PREFIX}
     '''
 
