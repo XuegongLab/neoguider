@@ -26,23 +26,14 @@ netmhcstabpan_cmd: 'ssh://zxf@101.6.41.78:50022/data8t_4/zxf/software/netMHCstab
 tumor_depth: 5
 tumor_vaf: 0.1
 normal_vaf: 0.05
-tumor_normal_var_qual : 63 # # Equivalent to tlod=6.3 in Mutect2
+tumor_normal_var_qual: 63 # # Equivalent to tlod=6.3 in Mutect2
 
-prep_peplens : '8,9,10,11,12' # for preprocessing
-kept_peplens : '8,9,10,11' # that finally remain after prioritization by the learned predictor
+prep_peplens: '8,9,10,11,12' # for preprocessing # the netmhcpan series cannot handle any peptide consisting of less than 8 or more than 12 amino acids
+kept_peplens: '8,9,10,11' # that finally remain after prioritization by the learned predictor
 
 binding_affinity_filt_thres: 1e9 # 693.00 # 693=21*11*3
-# binding_affinity_hard_thres: 1e9 # 231.00 # 21*11
-# binding_affinity_soft_thres: 1e9 #21.00 # 21 instead of 34 is used because newer version of netMHCpan generates lower affinities
-
 binding_stability_filt_thres: -1 # 0.1300 # 0.0500 # 0.13/3 rounded up
-# binding_stability_hard_thres: -1 # 0.1300 # 1.4/11 rounded up
-# binding_stability_soft_thres: -1 # 1.400
-
 tumor_abundance_filt_thres: -1 # 1.000 # 0.3300  # 1/3 rounded
-# tumor_abundance_hard_thres: -1 # 1.000 # 11.0 / 11
-# tumor_abundance_soft_thres: -1 # 11.00
-# tumor_abundance_recognition_thres: -1 # 33.00
 
 agretopicity_thres: 1e9 # 0.100
 foreignness_thres: -1 # 1.00e-16
