@@ -33,7 +33,10 @@ def main():
         print (USAGE)
         sys.exit(2)
 
-    snv_indel_file = open(output_folder+"../info/"+prefix+"_DNA_snv_indel.annotation.tsv")
+    if os.path.exists(output_folder+"../info/"+prefix+"_DNA_snv_indel.annotation.tsv")
+        snv_indel_file = open(output_folder+"../info/"+prefix+"_DNA_snv_indel.annotation.tsv")
+    else:
+        snv_indel_file = []
     if os.path.exists(output_folder+"../info/"+prefix+"_fusion.tsv"):
         fusion_file = open(output_folder+"../info/"+prefix+"_fusion.tsv")
     else:
@@ -60,7 +63,7 @@ def main():
     for line in reader:        
         identity = line[identity_index]
         line_info_string = ""
-        if (identity.strip().split('_')[0] in ["SNV", "INS", "DEL", "INDEL"]):
+        if snv_indel and (identity.strip().split('_')[0] in ["SNV", "INS", "DEL", "INDEL"]):
             fastaID = identity.strip().split('_')[1]
             if fastaID[0] != 'D' : continue
             line_num = int(fastaID[1:])
@@ -77,7 +80,7 @@ def main():
                     line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
             else:
                 continue
-        elif (identity.strip().split('_')[0]=="FUS"):
+        elif fusion and (identity.strip().split('_')[0]=="FUS"):
             line_num = int(identity.strip().split('_')[1])
             fusion_line = fusion[line_num-1]
             ele = fusion_line.strip().split('\t')
@@ -87,7 +90,7 @@ def main():
                                 "FUSION_MODEL","FUSION_CDS","FUSION_TRANSL","PFAM_LEFT","PFAM_RIGHT"]
             for i in range(0, len(ele),1):
                 line_info_string+=annotation_info[i]+"$"+ele[i]+"#"
-        elif (identity.strip().split('_')[0]=="SP"):
+        elif splicing and (identity.strip().split('_')[0]=="SP"):
             line_num = int(identity.strip().split('_')[1])
             splicing_line = splicing[line_num-1]
             ele = splicing_line.strip().split('\t')
@@ -106,7 +109,6 @@ def main():
     data=pd.DataFrame(data_raw)
     data.columns=fields
     data.to_csv(output_folder+"/"+prefix+"_neoantigen_rank_tcr_specificity_with_detail.tsv",header=1,sep='\t',index=0)
-
 
 if __name__ == '__main__':
     main()
