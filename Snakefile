@@ -337,7 +337,7 @@ rule RNA_splicing_peptide_generation:
     run:
         shell(
         'mkdir -p {info_dir} '
-        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l {pre2_peplens} -p {PREFIX} -t 1.0 '
+        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t 1.0 '
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {peptide_dir}/{PREFIX}_splicing.fasta'
         )
@@ -527,10 +527,10 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
     outputfile1 = outtsv
     
     if netmhcstabpan_cmd == path:
-        run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores}'
+        run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores} --peplens {pre2_peplens}'
         call_with_infolog(run_calculation)
     else:
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -c {netmhc_ncores}'
+        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -c {netmhc_ncores} --peplens {pre2_peplens}'
         remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
         remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
         remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {script_basedir}/fasta_partition.py {inputfile} {user}@{address}:/tmp/{outdir}/'
