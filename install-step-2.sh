@@ -3,8 +3,8 @@
 rootdir="$(dirname -- "$0";)"
 rootdir="$(cd "$rootdir"; pwd;)"
 
-neoheadhunter=$1 # neoheadhunter env name
-if [ -z "$neoheadhunter" ]; then neoheadhunter=nhh; fi
+neoguider=$1 # neoguider env name
+if [ -z "$neoguider" ]; then neoguider=ng; fi
 
 mkdir -p ${rootdir}/software && pushd ${rootdir}/software 
 
@@ -61,7 +61,7 @@ fi
 
 mkdir -p ${rootdir}/database && pushd ${rootdir}/database
 
-VEP_version=$(conda list --name $neoheadhunter | grep "^ensembl-vep" | awk '{print $2}' | awk -F. '{print $1}') # 109 #"105"
+VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $2}' | awk -F. '{print $1}') # 109 #"105"
 
 wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/variation/vep/homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 tar xvzf homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
