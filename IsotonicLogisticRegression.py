@@ -16,16 +16,24 @@ from sklearn.model_selection import KFold
 # - optimize both the isotonic curve and the logistic curve together so the the overall cross-entropy loss is minimized  (maybe with some EM algorithm)
 # - DONE: better estimate the odds ratios (with the centered isotonic regression at https://arxiv.org/pdf/1701.05964.pdf)
 
+#logging.basicConfig(level = logging.DEBUG)
+
+def abbrevshow(alist, anum=5):
+    if len(alist) <= anum*2: return [alist]
+    else: return [alist[0:anum], alist[(len(alist)-anum):len(alist)]]
+
 class IsotonicLogisticRegression:
     
-    def __init__(self, excluded_cols = [], pseudocount=0.5, penalty=None, n_splits=5, random_state=1, cccv_n_jobs=-1, **kwargs):
+    def __init__(self, excluded_cols = [], pseudocount=1.0, penalty=None, n_splits=5, random_state=1, cccv_n_jobs=-1, **kwargs):
         """ Initialize """
         self.X0 = None
         self.X1 = None
+        self.prevalence_odds = -1
         self.raw_log_odds = []
-        self.ixs = []
-        self.irs = []
-        self.ivs = []
+        self.irs0 = []
+        self.ixs1 = []
+        self.irs1 = []
+        self.ivs1 = []
         self.ixs2 = []
         self.irs2 = []
         self.ivs2 = []
@@ -35,11 +43,11 @@ class IsotonicLogisticRegression:
         self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
                 cv=KFold(n_splits=n_splits, shuffle=True, random_state=random_state), n_jobs=cccv_n_jobs, ensemble=True)
         self.pseudocount = pseudocount
-    
+         
     def get_params(self):
         """ Recursively get the params of this model """
         ret = [self.logORX, self.logr.get_params()]
-        for ir in self.irs: ret.append(ir.get_params())
+        for ir in self.irs0: ret.append(ir.get_params())
         return ret
     
     def get_info(self):
@@ -47,8 +55,8 @@ class IsotonicLogisticRegression:
         logr = self.logr
         logr_info = [logr.classes_, logr.coef_, logr.intercept_, logr.n_features_in_, logr.n_iter_]
         isor_info = []
-        for i in range(len(self.irs)):
-            ir = self.irs[i]
+        for i in range(len(self.irs0)):
+            ir = self.irs0[i]
             isor_info.append([ir.X_min_, ir.X_max_, ir.X_thresholds_, ir.y_thresholds_, ir.f_, ir.increasing_])
         return [logr_info, isor_info]
     
@@ -107,7 +115,7 @@ class IsotonicLogisticRegression:
         assert X1.shape[0] > 1, 'At least two positive examples should be provided'
         assert X1.shape[0] < X0.shape[0], 'The number of positive examples should be less than the number of negative examples'
 
-    def encode(self, X1, y1, prior_func='constant', prior_strength=2):
+    def encode(self, X1, y1, prior_func='constant', prior_strength=1):
         """
             X1: categorical features
             y1: binary response
@@ -147,6 +155,11 @@ class IsotonicLogisticRegression:
         """ scikit-learn fit
             is_centered : using centered isotonic regression or not
         """
+        # The triangular kernel has unbound mean value, so it is not used
+        def triangular_kernel(val, mid, lo, hi): return max((0, ((val-lo) / (mid-lo) if (val < mid) else (hi-val) / (hi-mid))))
+        def heaviside_rectangular_kernel(val, mid, lo, hi): return (1 if (lo < val and val < hi) else (0.5 if (val == lo or val == hi) else 0))
+        mykernel = triangular_kernel    
+
         inX, exX = self._split(X1)
         X = np.array(inX)
         y = np.array(y1)
@@ -154,13 +167,142 @@ class IsotonicLogisticRegression:
         X0 = self.X0 = X[y==0,:]
         X1 = self.X1 = X[y==1,:]
         raw_log_odds = self.raw_log_odds = [None for _ in range(X.shape[1])]
-        ixs  = self.ixs  = [None for _ in range(X.shape[1])]
-        irs  = self.irs  = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
-        ivs  = self.ivs  = [None for _ in range(X.shape[1])]
+        irs0 = self.irs0 = [None for _ in range(X.shape[1])]
+        ixs1 = self.ixs1 = [None for _ in range(X.shape[1])]
+        irs1 = self.irs1 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+        ivs1 = self.ivs1 = [None for _ in range(X.shape[1])]
         ixs2 = self.ixs2 = [None for _ in range(X.shape[1])]
         irs2 = self.irs2 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
         ivs2 = self.ivs2 = [None for _ in range(X.shape[1])]
+        self.prevalence_odds = (len(X1) / float(len(X0)))
         for colidx in range(X.shape[1]):
+            ''' # This code, which uses prefix sum, is supposed to be faster than the code using binary search in terms of big-O (n versus nlogn) if there is no duplicated values
+                # but there is such a big constant in it that it is probably not worth it (especially if duplicated values have to be handled, resulting in nlogn running time anyway). 
+                # also the sorted built-in function is nlogn, so the overall runntime time cannot be changed
+            xysorted = sorted(zip(X[:,colidx], y))
+            x0_previdx_arr = np.zeros(len(y) + 2)
+            x1_previdx_arr = np.zeros(len(y) + 2)
+            x0_nextidx_arr = np.zeros(len(y) + 2)
+            x1_nextidx_arr = np.zeros(len(y) + 2)
+            x0_previdx_arr[0] = x0_previdx_arr[-1] = x0_nextidx_arr[0] = x0_nextidx_arr[-1] = -1
+            x1_previdx_arr[0] = x1_previdx_arr[-1] = x1_nextidx_arr[0] = x1_nextidx_arr[-1] = -1
+            x0count_prefixsum = np.zeros(len(y) + 2)
+            y0count_prefixsum = np.zeros(len(y) + 2)            
+            x0_previdx = x1_previdx = 0
+            for i, (xi, yi) in enumerate([-1e100, 0.5] + xysorted + [1e100, 0.5]):
+                if i == 0: continue
+                if i == len(xysorted) + 1: continue
+                x0_previdx_arr[i] = x0_previdx
+                x1_previdx_arr[i] = x1_previdx
+                x0count_prefixsum[i] = x0count_prefixsum[i-1] #if i > 0 else 0
+                x0count_prefixsum[i] = x0count_prefixsum[i-1] #if i > 0 else 0
+                if yi == 0:
+                    for j in range(x0_previdx-1, i, 1):
+                        if j>=0: x0_nextidx[j] = i
+                    x0_previdx = i
+                    x0count_prefixsum[i] += 1
+                if yi == 1: 
+                    for j in range(x1_previdx-1, i, 1):
+                        if j >=0: x1_nextidx[j] = i
+                    x1_previdx = i
+                    x1count_prefixsum[i] += 1
+            x0count_prefixsum[-1] = x0count_prefixsum[-2]
+            x1count_prefixsum[-1] = x1count_prefixsum[-2]
+            
+            for i, (xi, yi) in enumerate(xysorted):
+                i += 1
+                if yi == 0 and x1_nextidx_arr[i] - x1_previdx_arr[i] <= x0_nextidx_arr[i] - x0_previdx_arr[i]: # compute prefix sum
+                if yi == 1 and x1_nextidx_arr[i] - x1_previdx_arr[i] >= x0_nextidx_arr[i] - x0_previdx_arr[i]: # compute prefix sum
+                # compared prefix sum
+            '''
+            
+            # Each estimated odds is approx inv-gamma distributed with alpha=2 and beta=1, https://en.wikipedia.org/wiki/Inverse-gamma_distribution
+            xyarr = sorted((xi, yi) for (xi, yi) in zip(X[:,colidx], y))
+            x0_arr = np.array([-1e100] + [xi for (xi, yi) in xyarr if yi == 0] + [1e100])
+            x1_arr = np.array([-1e100] + [xi for (xi, yi) in xyarr if yi == 1] + [1e100])
+            windows = []
+            
+            for xi, yi in xyarr:
+                prev_winlen = len(windows)
+                # assert yi == 0 or yi == 1
+                x0lo_idx1 = bisect.bisect_left (x0_arr, xi) - 1
+                x0lo = x0_arr[x0lo_idx1]
+                x0hi_idx1 = bisect.bisect_right(x0_arr, xi)
+                x0hi = x0_arr[x0hi_idx1]
+                x1lo_idx1 = bisect.bisect_left (x1_arr, xi) - 1
+                #print(F'bisect_left({x1_arr}, {xi}) + 1 == {x1lo_idx1}')
+                x1lo = x1_arr[x1lo_idx1]
+                x1hi_idx1 = bisect.bisect_right(x1_arr, xi)
+                x1hi = x1_arr[x1hi_idx1]
+                assert (x0lo < xi)
+                assert x0_arr[x0lo_idx1+1] >= xi
+                assert (x0hi > xi)
+                assert x0_arr[x0hi_idx1-1] <= xi
+                assert (x1lo < xi)
+                assert x1_arr[x1lo_idx1+1] >= xi
+                assert (x1hi > xi)
+                x1_arr[x1hi_idx1-1] <= xi
+                if 0 == yi and x0lo <= x1lo and x1hi <= x0hi:
+                    x1lo_idx2 = bisect.bisect_left (x1_arr, x0lo)
+                    x1hi_idx2 = bisect.bisect_right(x1_arr, x0hi) - 1
+                    if (x1hi_idx2 - x1lo_idx2) >= (x0hi_idx1 - x0lo_idx1):
+                        x0vals = x0_arr[x0lo_idx1:(x0hi_idx1+1)]
+                        x1vals = x1_arr[x1lo_idx2:(x1hi_idx2+1)]
+                        x0kernels = [mykernel(val, xi, x0lo, x0hi) for val in x0vals]
+                        x1kernels = [mykernel(val, xi, x0lo, x0hi) for val in x1vals]
+                        x0pcw = sum([heaviside_rectangular_kernel(val, xi, x0lo, x0hi) for val in x0vals])
+                        x1pcw = sum([heaviside_rectangular_kernel(val, xi, x0lo, x0hi) for val in x1vals])
+                        if min([len(x0vals), len(x1vals)]) != 3: 
+                              logging.debug(F'y=0 kernel size==3: xi={xi} yi={yi} x0lo={x1lo} x0hi={x0hi} x0vals={abbrevshow(x0vals)} x1vals={abbrevshow(x1vals)}')
+                        else: logging.debug(F'y=0 kernel size!=3: xi={xi} yi={yi} x0lo={x1lo} x0hi={x0hi} x0vals={abbrevshow(x0vals)} x1vals={abbrevshow(x1vals)}')
+                        windows.append((xi, yi, x0lo, x0hi, x0vals, x1vals, x0kernels, x1kernels, x0pcw, x1pcw))
+                if 1 == yi and x0lo >= x1lo and x1hi >= x0hi:
+                    x0lo_idx2 = bisect.bisect_left (x0_arr, x1lo)
+                    x0hi_idx2 = bisect.bisect_right(x0_arr, x1hi) - 1
+                    if (x0hi_idx2 - x0lo_idx2) >= (x1hi_idx1 - x1lo_idx1):
+                        x0vals = x0_arr[x0lo_idx2:(x0hi_idx2+1)]
+                        x1vals = x1_arr[x1lo_idx1:(x1hi_idx1+1)]                    
+                        x0kernels = [mykernel(val, xi, x1lo, x1hi) for val in x0vals]
+                        x1kernels = [mykernel(val, xi, x1lo, x1hi) for val in x1vals]
+                        x0pcw = sum([heaviside_rectangular_kernel(val, xi, x1lo, x1hi) for val in x0vals])
+                        x1pcw = sum([heaviside_rectangular_kernel(val, xi, x1lo, x1hi) for val in x1vals])
+                        if min([len(x0vals), len(x1vals)]) != 3:
+                            logging.debug(F'y=1 kernel size==3: xi={xi} yi={yi} x1lo={x1lo} x1hi={x1hi} x0vals={abbrevshow(x0vals)} x1vals={abbrevshow(x1vals)}')
+                        else:
+                            logging.debug(F'y=1 kernel size!=3: xi={xi} yi={yi} x1lo={x1lo} x1hi={x1hi} x0vals={abbrevshow(x0vals)} x1vals={abbrevshow(x1vals)}')
+                        if sum(x0kernels) <= 0 or sum(x1kernels) <= 0:
+                            logging.warning(F'For the {colidx}-th feature, '
+                                    F'the feature value xi={xi} (with yi={yi} x1lo={x1lo} x1hi={x1hi} x0vals={abbrevshow(x0vals)} x1vals={abbrevshow(x1vals)}) '
+                                    F'has estimated densities of {sum(x1kernels)} and {sum(x0kernels)} for positive and negative examples, respectively '
+                                    F'(WARNING_ZERO_VALUED_DENSITY). ')
+                        windows.append((xi, yi, x1lo, x1hi, x0vals, x1vals, x0kernels, x1kernels, x0pcw, x1pcw))
+                if len(windows) == prev_winlen:
+                    if 1 == yi: logging.debug(F'y=1 kernel skipped: x1val={xi} range1=({x1lo}, {x1hi}) range0=({x0lo}, {x0hi})')
+            if not windows:
+                logging.warning(F'Failed to perform kernel density estimation '
+                        F'because there is no majority label to the left-or-right part of the window at every feature value. ')
+                fitted_x_vals = np.array([np.mean([x for (x,y) in xyarr])])
+                raw_1to0_oddsratios = np.array([self.prevalence_odds]) # np.array([sum(y for (x,y) in xyarr) / len(xyarr)])
+                sample_weight = np.array([1])
+            else:
+                #if self.prevalence_odds < 1:
+                #    positive_pseudocount = self.pseudocount * self.prevalence_odds
+                #    negative_pseudocount = self.pseudocount
+                #else:
+                #    positive_pseudocount = self.pseudocount
+                #    negative_pseudocount = self.pseudocount / self.prevalence_odds
+                #positive_pseudocount = self.pseudocount / (1 + self.prevalence_odds) * self.prevalence_odds
+                #negative_pseudocount = self.pseudocount / (1 + self.prevalence_odds) * 1
+
+                fitted_x_vals = np.array([w[0] for w in windows])
+                raw_1to0_oddsratios = np.array([
+                        ((sum(w[7]) + self.pseudocount*w[9]/(w[8]+w[9])) / (sum(w[6]) + self.pseudocount*w[8]/(w[8]+w[9])))
+                        for w in windows])
+                #sample_weight = np.array([min((len(w[7]), len(w[6]))) for w in windows])
+                #logging.warning(F'sample_weight={collections.Counter(sample_weight)}' )
+                sample_weight = np.array([1] * len(windows))
+            '''
+            This part cannot handle the situation with 
             landmark_x_vals = [-1e99] + sorted(list(set(X1[:,colidx]))) + [1e99]
             idxto0s = [[] for _ in range(len(landmark_x_vals))]
             idxto1s = [[] for _ in range(len(landmark_x_vals))]
@@ -187,6 +329,18 @@ class IsotonicLogisticRegression:
             idxto0sum = [ sumup(idxto0s[i]) for i in range(len(landmark_x_vals)) ]
             idxto1sum = [ sumup(idxto1s[i]) for i in range(len(landmark_x_vals)) ]
             idxs = [ i for i in range(len(landmark_x_vals)) if (idxto0sum[i] > 0.5 and idxto1sum[i] > 0.5) ]
+            idxto0sum2 = [idxto0sum[i] for i in idxs]
+            num0s = sum(idxto0sum2)
+            idxto1sum2 = [idxto1sum[i] for i in idxs]
+            num1s = sum(idxto1sum2)
+            fitted_x_vals = [landmark_x_vals[i] for i in idxs]
+            raw_1to0_oddsratios = [
+                    ( ( (sumup(idxto1s[i])                   ) / (num1s) ) / 
+                      ( (sumup(idxto0s[i]) + self.pseudocount) / (num0s + self.pseudocount * num1s / sumup(idxto1s[i])) ) )
+                    for i in idxs]
+
+            '''
+            
             '''
             # This part cannot handle duplicated feature values of positive examples
             x0 = sorted(X0[:,colidx])
@@ -210,30 +364,22 @@ class IsotonicLogisticRegression:
             logging.debug(F'colidx={colidx} : x1to0s={x1to0s}')
             raw_1to0_oddsratios = [(1.0 / len(x1)) / (float(sumup(xs) + self.pseudocount) / (len(x0) + self.pseudocount * len(x1))) for xs in x1to0s]
             fitted_x_vals = x1
+            sample_weight = idxto1sum2
             '''
-            idxto0sum2 = [idxto0sum[i] for i in idxs]
-            num0s = sum(idxto0sum2)
-            idxto1sum2 = [idxto1sum[i] for i in idxs]
-            num1s = sum(idxto1sum2)
-            fitted_x_vals = [landmark_x_vals[i] for i in idxs]
-            raw_1to0_oddsratios = [
-                    ( ( (sumup(idxto1s[i])                   ) / (num1s) ) / 
-                      ( (sumup(idxto0s[i]) + self.pseudocount) / (num0s + self.pseudocount * num1s / sumup(idxto1s[i])) ) )
-                    for i in idxs]
-            self.raw_log_odds[colidx] = np.log(raw_1to0_oddsratios)
-            self.ixs[colidx] = fitted_x_vals
-            self.ivs[colidx] = self.irs[colidx].fit_transform(fitted_x_vals, np.log(raw_1to0_oddsratios), sample_weight = idxto1sum2)
-            FV_W_LOR_x1_x0_list = list(zip(fitted_x_vals, idxto1sum2, np.log(raw_1to0_oddsratios), self.irs[colidx].predict(fitted_x_vals),
-                   [sumup(idxto1s[i]) for i in idxs], [sumup(idxto0s[i]) for i in idxs]))
-            logging.debug(F'colidx={colidx} : len(FV_W_obsLOR_expLOR_x1_x0_list)={len(FV_W_LOR_x1_x0_list)}')
-            for fv_record in FV_W_LOR_x1_x0_list:
-                vs = '\t'.join(F'{v:.4G}'.rjust(10) for v in fv_record)
-                logging.debug(F'  fv_rec = {vs}')
+            # central_log_odds = avg_log_odds = np.mean(self.raw_log_odds[colidx])
+             #assert not math.isnan(avg_log_odds)
+            raw_log_odds = np.log(raw_1to0_oddsratios)
+            central_log_odds = np.log(self.prevalence_odds)
+            relative_log_odds = raw_log_odds - central_log_odds
+            self.raw_log_odds[colidx] = raw_log_odds
+            self.ixs1[colidx] = fitted_x_vals
+            self.ivs1[colidx] = 1*central_log_odds + self.irs1[colidx].fit_transform(fitted_x_vals, relative_log_odds, sample_weight = sample_weight)
+            self.irs0[colidx] = self.irs1[colidx]
             if is_centered:
-                x2, y2 = self._center(fitted_x_vals, self.irs[colidx].predict(fitted_x_vals)) # fitted_x_vals instead of x1
+                x2, y2 = self._center(fitted_x_vals, self.irs1[colidx].predict(fitted_x_vals)) # fitted_x_vals instead of x1
                 self.ixs2[colidx] = x2
-                self.ivs2[colidx] = self.irs2[colidx].fit_transform(x2, y2)
-            
+                self.ivs2[colidx] = 1*central_log_odds + self.irs2[colidx].fit_transform(x2, y2)
+                self.irs0[colidx] = self.irs2[colidx]
         self.logORX = self._transform(X) # np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
         logging.debug(self.logORX)
         #self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', 
@@ -242,19 +388,21 @@ class IsotonicLogisticRegression:
         self.logr.fit(np.hstack([self.logORX, exX]), y, **kwargs)
         return self
     
+    def get_odds_offset(self):
+        return self.prevalence_odds
     def get_density_estimated_log_odds(self):
-        return self.raw_log_odds
+        return  self.raw_log_odds
     def get_isotonic_X(self):
-        return self.ixs
+        return self.ixs1
     def get_isotonic_log_odds(self):
-        return self.ivs
+        return self.ivs1
     def get_centered_isotonic_X(self):
         return self.ixs2
     def get_centered_isotonic_log_odds(self):
         return self.ivs2
 
     def _transform(self, X):
-        return np.array([self.irs[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
+        return np.array([self.irs0[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
     
     def transform(self, X1):
         """ scikit-learn transform """
@@ -300,10 +448,15 @@ def test_fit_and_predict_proba():
         [13, 280, 0],
         [15, 360, 0],
         [17, 450, 0],
-        [19, 550, 0]
+        [19, 550, 0],
+        [21, 660, 0],
+        [23, 780, 0],
+        [25, 910, 0],
+        [27,1050, 0],
+        [29,1300, 0],
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
-    y = np.array([1,1,0,1,1,0,0,0,0,0])
+    y = np.array([1,1,0,1,1,0,0,0,0,0,1,0,0,0,0])
     ilr = IsotonicLogisticRegression(excluded_cols = ['col3'])
     ilr.fit(X, y)
     Xtest = np.array([
