@@ -1,4 +1,4 @@
-import argparse, math, os, sys
+import argparse, json ,math, os, pprint, sys
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/../')
 from IsotonicLogisticRegression import IsotonicLogisticRegression
 
@@ -13,9 +13,13 @@ from matplotlib import pyplot as plt
 
 parser = argparse.ArgumentParser('Plot an example data transformation made by the isotonic feature normalizer to show the key idea behind this normalizer. ')
 parser.add_argument('-o', '--output', help=F'Output PDF file', default='/tmp/key-idea-for-iso-feature-normalizer.pdf')
-parser.add_argument('-s', '--seed', help=F'NumPy random-number generator seed', type=int, default=0)
+parser.add_argument('-s', '--seed',   help=F'NumPy random-number generator seed', type=int, default=0)
+parser.add_argument('--libname',      help=F'Libname', default='IsotonicLogisticRegression')
 
 args = parser.parse_args()
+
+modulename = __import__(args.libname)
+ilr = modulename.IsotonicLogisticRegression()
 
 np.random.seed(args.seed)
 
@@ -40,7 +44,7 @@ params = {#'legend.fontsize': 18,
 matplotlib.rcParams.update(params)
 
 
-ilr = IsotonicLogisticRegression()
+#ilr = IsotonicLogisticRegression()
 # x0 = np.exp(scipy.stats.norm.rvs(size = 10000))
 
 def mylog(x): return x # return -np.log(x) / np.log(10)
@@ -123,4 +127,11 @@ axes[1].grid(linestyle='dotted')
 fig.supxlabel('Raw feature $f$') # ('(e.g., peptide-MHC binding stability)')
 
 plt.savefig(args.output, format="pdf", bbox_inches="tight")
+with open(args.output + '.txt', 'w') as txtout:
+    # pp = pprint.PrettyPrinter(indent=2, stream=(txtout))
+    json.dump({
+        'KDE_log_odds': list(raw_log_odds),
+        'ISO_log_odds': list(iso_log_odds),
+        'CIR_log_odds': list(cir_log_odds),
+    }, txtout, indent=2)
 
