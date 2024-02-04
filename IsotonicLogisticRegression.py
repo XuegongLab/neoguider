@@ -112,6 +112,7 @@ class IsotonicLogisticRegression:
         assert X1.shape[0] > 1, 'At least two positive examples should be provided'
         assert X1.shape[0] < X0.shape[0], 'The number of positive examples should be less than the number of negative examples'
 
+    ''' Note: sklearn.preprocessing.TargetEncoder.fit_transform (which uses cross-fitting) is supposed to perform better than encode and encode1d '''
     def encode(self, X1, y1, prior_func='constant', prior_strength=1, random_state=42):
         """
             X1: categorical features
@@ -134,15 +135,7 @@ class IsotonicLogisticRegression:
             elements = sorted(np.unique(X[:,colidx]))
             x0counter = collections.Counter(sorted(X0[:,colidx]))
             x1counter = collections.Counter(sorted(X1[:,colidx]))
-            x0counter2 = {}
-            x1counter2 = {}
-            for ele in elements:
-                total_x_count = (x0counter[ele] + x1counter[ele])
-                noisy_x0count = scipy.stats.binom.rvs(n=total_x_count, p=x0counter[ele]/total_x_count, random_state=running_rand)
-                noisy_x1count = total_x_count - noisy_x0count
-                x0counter2[ele] = int(noisy_x0count)
-                x1counter2[ele] = int(noisy_x1count)
-            ele2or = {ele : ((x1counter2[ele] + prior_w) / (x0counter2[ele] + prior_w / baseratio)) for ele in elements}
+            ele2or = {ele : ((x1counter[ele] + prior_w) / (x0counter[ele] + prior_w / baseratio)) for ele in elements}
             ret.append([(np.log(ele2or[ele]) - logbase) for ele in X[:,colidx]])
         return np.array(ret).transpose()
     
