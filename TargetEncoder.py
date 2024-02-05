@@ -66,12 +66,8 @@ class TargetEncoder:
         ret = []
         for colidx in range(X.shape[1]):
             x0counter, x1counter = self.colidxto01counter[colidx]
-            binom_rvs = [
-                scipy.stats.binom.rvs(
-                    n=n_training_examples,
-                    p=float(x1counter[k]+ppc)/(x0counter[k]+x1counter[k]+ppc+npc),
-                    random_state=running_rand
-                ) for k in X[:,colidx]]
+            ps = [float(x1counter[k]+ppc)/(x0counter[k]+x1counter[k]+ppc+npc) for k in X[:,colidx]]
+            binom_rvs = scipy.stats.binom.rvs(n=n_training_examples, p=ps, random_state=running_rand)
             targets = [(rv/float(n_training_examples)) for rv in binom_rvs]
             ret.append(targets)
         return np.array(ret).transpose()
