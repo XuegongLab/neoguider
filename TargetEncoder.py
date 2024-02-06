@@ -6,14 +6,15 @@ import scipy
 
 class TargetEncoder:
     
-    def __init__(self, excluded_cols = [], pseudocount=0.5):
+    def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0):
         """ Initialize """
         self.pseudocount = pseudocount
-        
+        self.random_state = random_state
         self.n_neg_training_examples = -1
         self.n_pos_training_examples = -1
         self.colidxto01counter = None
-
+    def set_random_state(self, random_state):
+        self.random_state = random_state
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
         else: return [alist[0:anum], alist[(len(alist)-anum):len(alist)]]
@@ -28,14 +29,14 @@ class TargetEncoder:
         assert X1.shape[0] < X0.shape[0], 'The number of positive examples should be less than the number of negative examples'
     
     ''' Note: this method (which uses resampling) is supposed to outperform sklearn.preprocessing.TargetEncoder.fit_transform (which uses cross-fitting)'''
-    def fit_transform(self, X1, y1, random_state=0):
+    def fit_transform(self, X1, y1, is_training=True):
         """
             X1: categorical features
             y1: binary response
             return: numerically encoded features using the WOE (weight of evidence) encoding (https://letsdatascience.com/target-encoding/) with resampling
         """
         self.fit(X1, y1)
-        return self.transform(X1, random_state=random_state)
+        return self.transform(X1, is_training=is_training)
 
     def fit(self, X1, y1):
         X = np.array(X1)
@@ -45,7 +46,7 @@ class TargetEncoder:
         X1 = self.X1 = X[y==1,:]
         baseratio = (float(len(X1)) / float(len(X0)))
         logbase = np.log(baseratio)
-        prior_w = self.pseudocount       
+        prior_w = self.pseudocount
         self.n_neg_training_examples = X0.shape[0]
         self.n_pos_training_examples = X1.shape[0]
         self.colidxto01counter = []
@@ -56,10 +57,10 @@ class TargetEncoder:
             self.colidxto01counter.append((x0counter, x1counter))
         return self
 
-    def transform(self, X1, random_state=0):
+    def transform(self, X1, is_training=False):
         X = np.array(X1)
-        assert X.shape[1] == len(self.colidxto01counter)
-        running_rand = np.random.default_rng(random_state)
+        assert X.shape[1] == len(self.colidxto01counter), F'{X} and {colidxto01counter} have different number of features ({X.shape[1]} != {len(self.colidxto01counter)})'
+        running_rand = np.random.default_rng(self.random_state)
         npc = self.pseudocount * self.n_neg_training_examples / self.n_pos_training_examples
         ppc = self.pseudocount
         n_training_examples = (self.n_neg_training_examples+self.n_pos_training_examples)
@@ -67,8 +68,11 @@ class TargetEncoder:
         for colidx in range(X.shape[1]):
             x0counter, x1counter = self.colidxto01counter[colidx]
             ps = [float(x1counter[k]+ppc)/(x0counter[k]+x1counter[k]+ppc+npc) for k in X[:,colidx]]
-            binom_rvs = scipy.stats.binom.rvs(n=n_training_examples, p=ps, random_state=running_rand)
-            targets = [(rv/float(n_training_examples)) for rv in binom_rvs]
+            if is_training:
+                binom_rvs = scipy.stats.binom.rvs(n=n_training_examples, p=ps, random_state=running_rand)
+                targets = [(rv/float(n_training_examples)) for rv in binom_rvs]
+            else:
+                targets = ps
             ret.append(targets)
         return np.array(ret).transpose()
     
@@ -89,9 +93,10 @@ def test_1():
     ])
     y = np.array([1,1,0,1,1,0,0,0,0,0])
     encoder = TargetEncoder()
-    X2 = encoder.fit_transform(X, y, random_state=17)
+    X2 = encoder.fit_transform(X, y)
     logging.info(F'Encoded={X2}')
-    X3 = encoder.fit_transform(X, y, random_state=997)
+    encoder.set_random_state(997)
+    X3 = encoder.fit_transform(X, y)
     logging.info(F'Encoded={X3}')
 
 if __name__ == '__main__':
