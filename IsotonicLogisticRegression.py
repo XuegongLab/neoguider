@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 
 class IsotonicLogisticRegression:
     
-    def __init__(self, excluded_cols = [], pseudocount=0.5, **kwargs):
+    def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0, **kwargs):
         """ Initialize """
         self.X0 = None
         self.X1 = None
@@ -36,11 +36,12 @@ class IsotonicLogisticRegression:
         # self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', cv=KFold(n_splits=n_splits, shuffle=True, random_state=random_state), n_jobs=cccv_n_jobs, ensemble=True)
         # We tested calibration and confirmed that LogisticRegression is already well-calibrated, which is as expected from theory.
         self.pseudocount = pseudocount
-    
+        self.random_state = random_state
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
         else: return [alist[0:anum], alist[(len(alist)-anum):len(alist)]]
-         
+    def set_random_state(self, random_state):
+        self.random_state = random_state
     def get_params(self):
         """ Recursively get the params of this model """
         ret = [self.logORX, self.logr.get_params()]
@@ -73,9 +74,9 @@ class IsotonicLogisticRegression:
         ex_colidxs = self.ex_colidxs
         in_colidxs = [colidx for colidx in range(X1.shape[1]) if (not colidx in ex_colidxs)]
         if hasattr(X, 'iloc'):
-            return X.iloc[:,in_colidxs], X.iloc[:,ex_colidxs]
+            return X.iloc[:,in_colidxs], X.iloc[:,ex_colidxs], in_colidxs, ex_colidxs
         else:
-            return X[:,in_colidxs], X[:,ex_colidxs]
+            return X[:,in_colidxs], X[:,ex_colidxs], in_colidxs, ex_colidxs
     
     def _center(self, x, y, epsilon = 1e-6):
         """ Implement the centering step of the centered isotonic regression at https://arxiv.org/pdf/1701.05964.pdf """
@@ -112,9 +113,30 @@ class IsotonicLogisticRegression:
         assert X1.shape[0] > 1, 'At least two positive examples should be provided'
         assert X1.shape[0] < X0.shape[0], 'The number of positive examples should be less than the number of negative examples'
     
-    def total_order(self, xs, ys, random_state=0):
+    def ensure_total_order(self, xs):
+        xsetlist1 = sorted(set(xs))
+        if len(xsetlist1) <= 1: return [x for x in xs]
         ret = []
-        local_rand = random.Random(random_state)
+        local_rand = random.Random(self.random_state)
+        zs = list(range(len(xs)))
+        shuf_ret = local_rand.shuffle(zs)
+        assert shuf_ret == None        
+        xsetlist = [xsetlist1[0] - (xsetlist1[1]-xsetlist1[0])] + xsetlist1 + [xsetlist1[-1] + (xsetlist1[-1]-xsetlist1[-2])]
+        x2prev = {}
+        x2next = {}
+        for i,x in enumerate(xsetlist):
+            if i == 0 or i == len(xsetlist) - 1: continue
+            x2prev[x] = xsetlist[i-1]
+            x2next[x] = xsetlist[i+1]
+        for x, z in zip(xs, zs):
+            lower = (x2prev[x] + x) / 2.0
+            upper = (x2next[x] + x) / 2.0
+            ret.append(lower + (upper - lower) * (z+0.5) / len(xs))
+        return ret
+    '''
+    def total_order(self, xs, ys):
+        ret = []
+        local_rand = random.Random(self.random_state)
         zs = list(range(len(xs)))
         shuf_ret = local_rand.shuffle(zs)
         assert shuf_ret == None
@@ -125,15 +147,19 @@ class IsotonicLogisticRegression:
             while xsetlist[xsetlist_idx] < x: xsetlist_idx += 1
             assert xsetlist[xsetlist_idx] == x
             
+            xmid = xsetlist[xsetlist_idx]
             xlower = (xsetlist[xsetlist_idx-1] if (xsetlist_idx-1 >= 0)            
                     else xsetlist[ 0] - (xsetlist[ 1] - xsetlist[ 0]))
-            
+            xlo2 = (xlower + xmid)/2.0
             xupper = (xsetlist[xsetlist_idx+1] if (xsetlist_idx+1 < len(xsetlist)) 
                     else xsetlist[-1] + (xsetlist[-1] - xsetlist[-2]))
+            xup2 = (xupper + xmid)/2.0
             
-            xnew = xlower + ((xupper - xlower) * z + 0.5) / len(xzylist)
+            assert z + 0.5 < len(xzylist)
+            xnew = xlo2 + (xup2 - xlo2) * (z + 0.5) / len(xzylist)
             ret.append((xnew, y))
         return ret
+    '''
     def partition(self, xyarr):
         contigs = []
         prev_y = None
@@ -147,14 +173,14 @@ class IsotonicLogisticRegression:
         contigs.append(contig)
         return contigs
         
-    def fit(self, X1, y1, is_centered=True, random_state=0, **kwargs):
+    def fit(self, X1, y1, is_centered=True, is_training=True, **kwargs):
         """ scikit-learn fit
             is_centered : using centered isotonic regression or not
         """
         #def triangular_kernel(val, mid, lo, hi): return max((0, ((val-lo) / (mid-lo) if (val < mid) else (hi-val) / (hi-mid))))
         #def heaviside_rectangular_kernel(val, mid, lo, hi): return (1 if (lo < val and val < hi) else (0.5 if (val == lo or val == hi) else 0))
         def powermean(arr, p=1): return 1.0/len(arr) * (sum(ele**p for ele in arr))**p
-        inX, exX = self._split(X1)
+        inX, exX, inIdxs, exIdxs = self._split(X1)
         X = np.array(inX)
         y = np.array(y1)
         self._assert_input(X, y)
@@ -171,7 +197,8 @@ class IsotonicLogisticRegression:
         self.prevalence_odds = (len(X1) / float(len(X0)))
         for colidx in range(X.shape[1]):
             x = X[:,colidx]
-            xylist = (self.total_order(x, y, random_state) if (len(set(x)) > 1) else zip(x,y))
+            x2 = self.ensure_total_order(x)
+            xylist = sorted(zip(x2,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
             xylistlist = self.partition(xylist)
             xcenters = []
             xodds = []
@@ -192,7 +219,7 @@ class IsotonicLogisticRegression:
                 #if len(curr_xylist) * 2 < (prev_len + next_len):
                 #    odds = len(curr_xylist) / powermean((prev_len, next_len))
                 #else:
-                odds = (powermean((len(curr_xylist), powermean((pre2_len, nex2_len)))) + self.pseudocount) / (powermean((prev_len, next_len)) + self.pseudocount)
+                odds = (powermean((len(curr_xylist), powermean((pre2_len, nex2_len)))) + 0*self.pseudocount) / (powermean((prev_len, next_len)) + 0*self.pseudocount)
                 xcenters.append(xcenter)
                 xodds.append((odds) if (ylabel == 1) else (1/odds))
                 prev_ylabel = ylabel
@@ -208,7 +235,7 @@ class IsotonicLogisticRegression:
                 self.ixs2[colidx] = x2
                 self.ivs2[colidx] = 1*center_log_odds + self.irs2[colidx].fit_transform(x2, y2)
                 self.irs0[colidx] = self.irs2[colidx]
-        log_ratios = self._transform(X)
+        log_ratios = self._transform(X, is_training)
         self.logr.fit(np.hstack([log_ratios, exX]), y, **kwargs)
         return self
     
@@ -226,33 +253,45 @@ class IsotonicLogisticRegression:
         return self.ixs2
     def get_centered_isotonic_log_odds(self):
         return self.ivs2
-
-    def _transform(self, X):
-        return np.array([self.irs0[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
+        
+    def _transform(self, X, is_training):
+        if is_training:
+            XT = np.array([self.ensure_total_order(X[:,colidx]) for colidx in range(X.shape[1])])
+        else:
+            XT = np.array([(X[:,colidx]) for colidx in range(X.shape[1])])
+        return np.array([self.irs0[colidx].predict(xT) for colidx,xT in enumerate(XT)]).transpose()
+        #return np.array([self.irs0[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
     
-    def transform(self, X1):
+    def transform(self, X1, is_training = False):
         """ scikit-learn transform """
         X = np.array(X1)
-        return self._transform(X)
-
-    def fit_transform(self, X1, y1):
+        inX, exX, inIdxs, exIdxs = self._split(X, True)
+        test_orX = self._transform(inX, is_training)
+        X2 = np.zeros((X.shape[0], X.shape[1]))
+        X2[:,inIdxs] = test_orX
+        X2[:,exIdxs] = exX
+        return X2
+    
+    def fit_transform(self, X1, y1, is_training=True):
         """ scikit-learn fit_transform """
         self.fit(X1, y1)
-        return self.transform(X1)
+        return self.transform(X1, is_training)
     
-    def _extract_features(self, X1):
-        inX, exX = self._split(X1, True)
-        test_orX = self.transform(inX)
+    def _extract_features(self, X):
+        inX, exX, inIdxs, exIdxs = self._split(X, True)
+        test_orX = self._transform(inX, False)
         return np.hstack([test_orX, exX])
     
     def predict(self, X1):
         """ scikit-learn predict using logistic regression built on top of isotonic scaler """
-        allfeatures = self._extract_features(X1)
+        X = np.array(X1)
+        allfeatures = self._extract_features(X)
         return self.logr.predict(allfeatures)
 
     def predict_proba(self, X1):
         """ scikit-learn predict_proba using logistic regression built on top of isotonic scaler """
-        allfeatures = self._extract_features(X1)
+        X = np.array(X1)
+        allfeatures = self._extract_features(X)
         return self.logr.predict_proba(allfeatures)
 
 def test_fit_and_predict_proba():
@@ -298,6 +337,45 @@ def test_fit_and_predict_proba():
     pp.pprint(ilr.get_info())
     pp.pprint(np.hstack((X,y[:,None])))
 
+def test_fit_and_predict_with_dups():
+    import pandas as pd
+    
+    pp = pprint.PrettyPrinter(indent=4)
+    logging.basicConfig(format='test_fit_and_predict_with_dups %(asctime)s - %(message)s', level=logging.DEBUG)
+    X = np.array([
+        [ 0,  10, 0],
+        [ 0,  30, 0],
+        [ 0,  60, 0],
+        [ 0, 100, 0],
+        [ 0, 150, 0],
+
+        [ 1, 210, 0],
+        [ 1, 280, 0],
+        [ 1, 360, 0],
+        [ 1, 450, 0],
+        [ 1, 550, 0],
+            
+        [ 2, 660, 0],
+        [ 2, 780, 0],
+        [ 2, 910, 0],
+        [ 2,1050, 0],
+        [ 2,1300, 0],
+
+        [ 2,1300, 0],
+    ])
+    X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
+    y = np.array([1,1,0,0,1, 0,0,1,0,1, 0,0,1,0,0, 0])
+    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'])
+    ilr.set_random_state(42+0)
+    X2 = ilr.fit_transform(X, y)
+    X3 = ilr.transform(X)
+    ilr.set_random_state(42+1)
+    x2 = ilr.ensure_total_order(X.iloc[:,0])
+    ordered_xs = list(zip(X.iloc[:,0],x2))
+    print(F'train_ordered_X={ordered_xs}')
+    print(F'train_transformed_X=\n{X2}')
+    print(F'test_transformed_X=\n{X3}')
+
 if __name__ == '__main__':
     test_fit_and_predict_proba()
-
+    test_fit_and_predict_with_dups()
