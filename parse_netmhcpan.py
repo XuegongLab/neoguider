@@ -17,6 +17,8 @@ from Bio.Align import substitution_matrices
 # from Bio.SubsMat import MatrixInfo
 
 # import edlib
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
 BIG_INT = 2**30
 NA_REP = 'N/A'
 #NAN_REP = 'nan' # https://en.wikipedia.org/wiki/NaN#Display
@@ -137,7 +139,7 @@ def threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep):
         wt_aln_str = '-' * len(et_fpep) # ret3
     return (wt_aln_str, mt_aln_str, et_aln_str)
 
-def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
+def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, binding_affinity_thres, peplens):
     """ This function assumes that there is a one-to-one correspondence between peptide and RNA transcript in fasta_filename. """
     blosum62 = aligner.substitution_matrix
     
@@ -153,8 +155,15 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
     fpep_to_fid_list = collections.defaultdict(list)
     fid_to_seqs = {}
     
+    etpep_to_min_aff = {}
+    for (etpep, mhc), aff in sorted(etpep_mhc_to_aff.items()):
+        if aff < etpep_to_min_aff.get(etpep, float('inf')):
+            etpep_to_min_aff[etpep] = aff
+    
     with open(fasta_filename) as file:
-        for line in file:
+        for lineno, line in enumerate(file):
+            if lineno & (lineno+1) == 0:
+                logging.info(F'{fasta_filename}:start_parsing_line:lineno={lineno}')
             line = line.strip()
             if line.startswith('>'):
                 fid = line.split()[0][1:]
@@ -201,7 +210,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
                 fpep_to_fid_list[et_fpep].append(fid)
                 
                 if is_helper_peptide: continue # INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX (NUM_INFO_INDEXES)
-                
+                                
                 assert len(et_fpep) == len(mt_fpep), F'len({et_fpep}) == len({mt_fpep}) failed'
                 assert len(et_fpep) > 3
                 #aln = pairwise2.align.globalxx(wt_fpep, mt_fpep) # format_alignment
@@ -233,7 +242,8 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner):
                         end = beg + peplen
                         if end > len(et_fpep): continue
                         et_pep = et_fpep[beg:end]
-                        
+                        if etpep_to_min_aff.get(et_pep, -float('inf')) > binding_affinity_thres: continue
+                        if len(et_pep) not in peplens: continue
                         mt_pep = st_pep = wt_pep = ''
                         if mt_fpep != '':
                             et_mt_pep1_aln, et_mt_pep2_aln, et_mt_hamdist, et_mt_scoredist = aln_2(aligner, et_pep, mt_fpep)
@@ -328,19 +338,14 @@ OUT_HEADER = ['HLA_type',
     'Core', 'Of', 'Gp', 'Gl', 'Ip', 'Il', 'Icore', 'Score_EL', '%Rank_EL', 'Score_BA', '%Rank_BA',
     'PepTrace']
 
-def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner): 
-    # https://stackoverflow.com/questions/35514214/create-nested-dictionary-on-the-fly-in-python
-    def fix(f): return lambda *args, **kwargs: f(fix(f), *args, **kwargs)
-    etpep_to_mtpep_list_dic, mtpep_to_stpep_list_dic, mtpep_to_wtpep_list_dic = et2mt_mt2wt_2tup_pep2pep
-    etpep_to_fpep_list, mtpep_to_fpep_list, stpep_to_fpep_list, wtpep_to_fpep_list = et_mt_wt_3tup_pep2fpep
-    fpep_to_fid_list, fid2finfo = fpep2fid_fid2finfo_3tup
-    #pep_to_fpep_list, fpep_to_fid_list, fid_to_tpm = pep_fpep_fid_tpm_dic_3tup 
+def netmhcpan_result_to_df(infilename):
     inheader = None
     rows = []
     with open(infilename) as file:
-        for line in file:
+        for lineno, line in enumerate(file):
+            if lineno & (lineno+1) == 0:
+                logging.info(F'{infilename}:start_parsing_line:lineno={lineno},line=({line})')
             if not line.startswith(' '): continue
-            # print(line)
             toks = line.strip().split()
             if toks[0] == 'Pos': 
                 assert inheader == None or inheader == toks
@@ -352,9 +357,23 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
                 if len(toks) == (len(inheader) + 1): row = toks[0:(len(inheader) - 1)] + [toks[(len(inheader))]]
                 row[2] = pep_norm(row[2])
                 rows.append(row)
-    print(F'File={infilename} inheader={inheader}')
+    logging.info(F'File={infilename} inheader={inheader}')
     df = pd.DataFrame(rows, columns = inheader)
     df.columns = df.columns.str.replace('HLA', 'MHC')
+    etpep_mhc_to_aff = {}
+    for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
+        etpep_mhc_to_aff[(etpep, mhc)] = float(aff)
+        # etpep_to_mhc_to_aff[etpep][mhc] = float(aff)
+    return df, etpep_mhc_to_aff
+
+def netmhcpan_df_in2out(df, etpep_mhc_to_aff, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner): 
+    # https://stackoverflow.com/questions/35514214/create-nested-dictionary-on-the-fly-in-python
+    def fix(f): return lambda *args, **kwargs: f(fix(f), *args, **kwargs)
+    etpep_to_mtpep_list_dic, mtpep_to_stpep_list_dic, mtpep_to_wtpep_list_dic = et2mt_mt2wt_2tup_pep2pep
+    etpep_to_fpep_list, mtpep_to_fpep_list, stpep_to_fpep_list, wtpep_to_fpep_list = et_mt_wt_3tup_pep2fpep
+    fpep_to_fid_list, fid2finfo = fpep2fid_fid2finfo_3tup
+    #pep_to_fpep_list, fpep_to_fid_list, fid_to_tpm = pep_fpep_fid_tpm_dic_3tup 
+    
     mtpep_wtpep_fpep_fid_tpm_ddic_json_dflist = []
     #mtpep_pipesep_dflist = []
     #wtpep_pipesep_dflist = []
@@ -362,7 +381,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
     best_stpep_dflist = []
     best_wtpep_dflist = []
     etpep_tpm_dflist = []
-    etpep_mhc_to_aff = {}
+    #etpep_mhc_to_aff = {}
     # etpep_to_mhc_to_aff = collections.defaultdict(dict)
     #def fid_convert(fid, type1 = 'R', type2 = 'D'):
     #    ts = fid.split('_')
@@ -375,11 +394,10 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         return len(ts) >= 2 and ts[1].startswith(moltype)
     
     # def fid_to_dna_rna_equiv_fid(fid): return fid.replace('SNV_R','SNV_D').replace('INS_R', 'INS_D').replace('DEL_R', 'DEL_D').replace('FSV_R', 'FSV_D')
-    for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
-        etpep_mhc_to_aff[(etpep, mhc)] = float(aff)
-        # etpep_to_mhc_to_aff[etpep][mhc] = float(aff)
     df = df.loc[df['Peptide'].isin(set(etpep_to_mtpep_list_dic.keys())),:]
-    for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
+    for rowno, (identity, etpep, mhc, aff) in enumerate(zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)'])):
+        if rowno & (rowno+1) == 0:
+            logging.info(F'start_parsing_table:rowno={rowno},nrows=({len(df)})')
         aff = float(aff)
         fids = set(fid for (_, _, mtpep, _, _) in etpep_to_mtpep_list_dic[etpep] for (fpep) in mtpep_to_fpep_list[mtpep] for fid in fpep_to_fid_list[fpep])
         # fids = set()
@@ -447,6 +465,7 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
         best_mtpep_dflist.append(best_mtpep_key)
         best_stpep_dflist.append(best_stpep_key)
         best_wtpep_dflist.append(best_wtpep_key)
+    logging.info(F'end_parsing_table')
     #wtpep_aff_dflist = []
     #mtpep_aff_dflist = []
     '''
@@ -484,12 +503,14 @@ def netmhcpan_result_to_df(infilename, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_p
     
     def aln_2a(aligner, a, b): return (('', '', BIG_INT, BIG_INT) if (pd.isna(a) or pd.isna(b) or isna(a) or isna(b)) else aln_2(aligner, a, b))
     # ET crw MT, MT crw (ST and/or WT), where crw denotes "cross-react with"
+    logging.info(F'start_aln_2a\'s')
     aln_ET_MT = [aln_2a(aligner, a, b) for (a, b) in zip(df['ET_pep'], df['MT_pep'])]
     aln_ET_ST = [aln_2a(aligner, a, b) for (a, b) in zip(df['ET_pep'], df['ST_pep'])]
     aln_ET_WT = [aln_2a(aligner, a, b) for (a, b) in zip(df['ET_pep'], df['WT_pep'])]
     aln_MT_ST = [aln_2a(aligner, a, b) for (a, b) in zip(df['MT_pep'], df['ST_pep'])]
     aln_MT_WT = [aln_2a(aligner, a, b) for (a, b) in zip(df['MT_pep'], df['WT_pep'])]
-    
+    logging.info(F'end_aln_2a\'s')
+
     # This info should be concordant with the one from PepTrace
     df['ET_MT_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_ET_MT]
     df['ET_ST_pairAln'] = [(x[0] + '/' + x[1]) for x in aln_ET_ST]
@@ -552,8 +573,10 @@ def main():
     #aligner.query_end_gap_score = 0.0
     aligner.substitution_matrix = blosum62
     
-    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file, aligner)
-    df1 = netmhcpan_result_to_df(args.netmhcpan_file, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner)
+    df0, etpep_mhc_to_aff = netmhcpan_result_to_df(args.netmhcpan_file)
+    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file, aligner, etpep_mhc_to_aff, args.binding_affinity_thres, peplens)
+    logging.info(F'Finished build_pep_ID_to_seq_info_TPM_dic')
+    df1 = netmhcpan_df_in2out(df0, etpep_mhc_to_aff, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner)
     df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) 
             #& (df1['BindLevel'].isin(args.bind_levels.split(',')))
             & (df1['ET_pep'].str.len().isin(peplens))
