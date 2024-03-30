@@ -39,6 +39,8 @@ $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
 #   https://stackoverflow.com/questions/74836151/nothing-provides-cuda-needed-by-tensorflow-2-10-0-cuda112py310he87a039-0 
 #   to solve this error (namely, export CONDA_OVERRIDE_CUDA="11.8" && export CONDA_CUDA_OVERRIDE="11.8").
 
+$conda update numexpr # fix warning from pandas
+
 conda run -n $neoguider pip install sj2psi # for ASNEO.py
 
 # > First work-around for https://github.com/FRED-2/OptiType/issues/125 : use podman to run OptiType

@@ -369,7 +369,7 @@ def main():
         for infile in args.train:
             df = pd.read_csv(infile, sep='\t')
             df, are_in_cum = compute_are_in_cum(df)
-            dfs.append(df)
+            if len(df) > 0: dfs.append(df)
             logger.info(F'Finished reading {infile}')
         big_train_df = pd.concat(dfs)
         big_train_df['VALIDATED'] = big_train_df['VALIDATED'].astype(int)
