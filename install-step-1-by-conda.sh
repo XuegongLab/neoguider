@@ -28,7 +28,7 @@ conda create -y -n $neoguider
 #   ERGO-II requires pytorch-lightning=0.8, but we will change a few lines of source code in ERGO-II
 #     in the next installation step to make it work with higher versions of pytorch-lightning
 #   podman can be used to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
-$conda install -y -n $neoguider python=3.10 xlrd \
+$conda install -y -n $neoguider python=3.10 xlrd openpyxl \
     gcc openjdk parallel perl podman sshpass tcsh \
     perl-carp-assert psutil pyyaml requests-cache zlib \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
