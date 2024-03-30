@@ -149,7 +149,10 @@ gene_exp_tpm = gene_exp['tpm'].to_list()
 
 for line in open(human_peptide,'r'):
     if line.startswith(">"):
-        transcript_name = line.strip().split(' ')[4][11:26]
+        #transcript_name = line.strip().split(' ')[4][11:26]
+        transcript_name_1 = line.strip().split(' ')[4]
+        assert transcript_name_1.startswith('transcript:')
+        transcript_name = transcript_name_1.split(':')[1].split('.')[0]
         transcript_aa[transcript_name] = '' 
     else:
         transcript_aa[transcript_name] += line.replace('\n','')
