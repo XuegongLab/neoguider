@@ -792,7 +792,7 @@ rule Prioritization_with_all_TCRs_from_reads:
         shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_reads_tsv} --suffix prediction')
         shell('cp {features_extracted_from_reads_tsv}.prediction {pipeline_out_from_reads}')
 
-rule Prioritization_with_all_TCRs_from_pmhcs:
+rule Prioritization_with_all_TCRs_from_pMHCs:
     input: features_extracted_from_pmhcs_tsv, trained_model
     output: pipeline_out_from_pmhcs
     run:
