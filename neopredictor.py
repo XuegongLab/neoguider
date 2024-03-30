@@ -184,39 +184,37 @@ def patientwise_predict(tuple_arg):
         return -1
     
     df1, are_in_cum = compute_are_in_cum(df1)
-    evalres3 = {}
-    evaldict = defaultdict(list)
-    for i, (pipeline_name, pipeline) in enumerate(zip(pipeline_names, pipelines)):
-        if i != 0 and not ('method' in baseline.split(',')): continue        
-        pipedf = df1.copy()
-        if len(pipedf) > 50*1000: logger.info(F'pipe={pipeline_name:30} {(i+1):3}/{len(pipelines)} {infile}')
-        y = pipeline.predict_proba(pipedf.loc[:, listof_features[0]])
-        pipedf['PredictedProbWithOtherMethod'] = [v[1] for v in y]
-        pipedf['Rank'] = pipedf['PredictedProbWithOtherMethod'].rank(method='first', ascending=False)
-        pipedf['Rank'] = pipedf['Rank'].fillna(BIG_INT)
-        pipedf = pipedf.sort_values('Rank')
-        pipedf = pipedf.astype({"Rank":int})
-        pipedf['ML_pipeline'] = pipeline_name
-        other_pred = F'{outpref}.other_method_{(i+1):03d}.baseline'
-        #pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA')
-        pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=1, index=0, na_rep='NA', compression='gzip')
+    if ('method' in baseline.split(',')):
+        evalres3 = {}
+        evaldict = defaultdict(list)
+        for i, (pipeline_name, pipeline) in enumerate(zip(pipeline_names, pipelines)):        
+            pipedf = df1.copy()
+            if len(pipedf) > 50*1000: logger.info(F'pipe={pipeline_name:30} {(i+1):3}/{len(pipelines)} {infile}')
+            y = pipeline.predict_proba(pipedf.loc[:, listof_features[0]])
+            pipedf['PredictedProbWithOtherMethod'] = [v[1] for v in y]
+            pipedf['Rank'] = pipedf['PredictedProbWithOtherMethod'].rank(method='first', ascending=False)
+            pipedf['Rank'] = pipedf['Rank'].fillna(BIG_INT)
+            pipedf = pipedf.sort_values('Rank')
+            pipedf = pipedf.astype({"Rank":int})
+            pipedf['ML_pipeline'] = pipeline_name
+            other_pred = F'{outpref}.other_method_{(i+1):03d}.baseline'
+            #pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA')
+            pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=1, index=0, na_rep='NA', compression='gzip')
 
-        if 'VALIDATED' in pipedf.columns:
-            evalres = assess_top20_top50_top100_ttif_fr_auprc(pipedf)
-            evalres2 = evalres._asdict()
-            evalres3[pipeline_name] = evalres2
-            
-            transform_name, ml_model_name = pipeline_name.split('/')
-            evaldict['infile'].append(infile)
-            evaldict['feature_transform'].append(transform_name)
-            evaldict['ML_model_name'].append(ml_model_name)
-            for k, v in copy.deepcopy(evalres._asdict()).items():
-                evaldict[k].append(v)
-        del pipedf
-    if evalres3:
+            if 'VALIDATED' in pipedf.columns:
+                evalres = assess_top20_top50_top100_ttif_fr_auprc(pipedf)
+                evalres2 = evalres._asdict()
+                evalres3[pipeline_name] = evalres2
+                
+                transform_name, ml_model_name = pipeline_name.split('/')
+                evaldict['infile'].append(infile)
+                evaldict['feature_transform'].append(transform_name)
+                evaldict['ML_model_name'].append(ml_model_name)
+                for k, v in copy.deepcopy(evalres._asdict()).items():
+                    evaldict[k].append(v)
+            del pipedf
         with open(outpref + '.methods.performance', 'w') as file:
             json.dump(evalres3, file, indent=2)
-    if evaldict:
         with open(outpref + '.methods.performance.tsv', 'w') as file:
             eval_df = pd.DataFrame.from_dict(evaldict)
             eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA')
@@ -275,28 +273,28 @@ def patientwise_predict(tuple_arg):
     df['0_RankEL_100th'] = rank100_EL
     '''
     for i, (features, ilr) in enumerate(zip(listof_features, ilrs)):
-        if i != 0 and not ('feature' in baseline.split(',')): continue
-        y = ilr.predict_proba(df[features])
-        if i != 0:
-            df[F'PredictedProbWithOtherFeatureSet_{i}'] = [v[1] for v in y]
-            continue
-        df['PredictedProbability'] = [v[1] for v in y]
-        df['Rank'] = df['PredictedProbability'].rank(method='first', ascending=False)
-        df['Rank'] = df['Rank'].fillna(BIG_INT)
-        df = df.sort_values('Rank')
-        df = df.astype({"Rank":int})
-        _, are_in_cum = compute_are_in_cum(df)
-        if 'VALIDATED' in df.columns: 
-            VALID_N_TESTED = sum(are_in_cum)
-            VALID_CUMSUM = np.cumsum(df['VALIDATED'] * are_in_cum)
-        else:
-            VALID_N_TESTED = -1
-            VALID_CUMSUM = -1
-        PROBA_CUMSUM = np.cumsum(df['PredictedProbability'] * are_in_cum)
-        # df['BindAff_LessThan100_NUM'] = sum(np.where(df['MT_BindAff'] < 100, 1, 0) * are_in_cum) / sum(are_in_cum)
-        # df['RankEL_LT0.5_VALFRAC'] = sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)
-        # df['RankEL_LT2.0_VALFRAC'] = sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)
-        df = df.assign(VALID_N_TESTED=VALID_N_TESTED, VALID_CUMSUM=VALID_CUMSUM, PROBA_CUMSUM=PROBA_CUMSUM, ML_pipeline='default_ML_pipe')
+        if i == 0 or ('feature' in baseline.split(',')):
+            y = ilr.predict_proba(df[features])
+            if i != 0:
+                df[F'PredictedProbWithOtherFeatureSet_{i}'] = [v[1] for v in y]
+            else:
+                df['PredictedProbability'] = [v[1] for v in y]
+                df['Rank'] = df['PredictedProbability'].rank(method='first', ascending=False)
+                df['Rank'] = df['Rank'].fillna(BIG_INT)
+                df = df.sort_values('Rank')
+                df = df.astype({"Rank":int})
+                _, are_in_cum = compute_are_in_cum(df)
+                if 'VALIDATED' in df.columns: 
+                    VALID_N_TESTED = sum(are_in_cum)
+                    VALID_CUMSUM = np.cumsum(df['VALIDATED'] * are_in_cum)
+                else:
+                    VALID_N_TESTED = -1
+                    VALID_CUMSUM = -1
+                PROBA_CUMSUM = np.cumsum(df['PredictedProbability'] * are_in_cum)
+                # df['BindAff_LessThan100_NUM'] = sum(np.where(df['MT_BindAff'] < 100, 1, 0) * are_in_cum) / sum(are_in_cum)
+                # df['RankEL_LT0.5_VALFRAC'] = sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)
+                # df['RankEL_LT2.0_VALFRAC'] = sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)
+                df = df.assign(VALID_N_TESTED=VALID_N_TESTED, VALID_CUMSUM=VALID_CUMSUM, PROBA_CUMSUM=PROBA_CUMSUM, ML_pipeline='default_ML_pipe')
     col2last(df, 'SourceAlterationDetail')
     col2last(df, 'PepTrace')
     dropcols(df, ['BindLevel', 'BindAff'])
