@@ -58,15 +58,26 @@ netmhc_nthreads = config['netmhc_nthreads']
 ergo2_nthreads = config['ergo2_nthreads']
 
 ### Section 4: parameters having some default values of relative paths
+
+MIXCR_PATH = config.get('mixcr_path',  F'{script_basedir}/software/mixcr.jar')
+ERGO_EXE_DIR = config.get('ergo_exe_dir', F'{script_basedir}/software/ERGO-II')
+
 HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
 CDNA_REF = config.get('cdna_ref', F'{script_basedir}/database/Homo_sapiens.GRCh37.cdna.all.fa') # .kallisto-idx
 PEP_REF = config.get('pep_ref', F'{script_basedir}/database/Homo_sapiens.GRCh37.pep.all.fa')
 VEP_CACHE = config.get('vep_cache', F'{script_basedir}/database')
 CTAT = config.get('ctat', F'{script_basedir}/database/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/')
-MIXCR_PATH = config.get('mixcr_path',  F'{script_basedir}/software/mixcr.jar')
-ERGO_EXE_DIR = config.get('ergo_exe_dir', F'{script_basedir}/software/ERGO-II')
 ASNEO_REF = config.get('asneo_ref', F'{script_basedir}/database/hg19.fa')          # The {CTAT} REF does not work with ASNEO
 ASNEO_GTF = config.get('asneo_gtf', F'{script_basedir}/database/hg19.refGene.gtf') # The {CTAT} gtf does not work with ASNEO
+
+if config.get('species') == 'Mus_musculus':
+    HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
+    CDNA_REF = config.get('cdna_ref', F'{script_basedir}/database/Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa') # .kallisto-idx
+    PEP_REF = config.get('pep_ref', F'{script_basedir}/database/Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa')
+    VEP_CACHE = config.get('vep_cache', F'{script_basedir}/database')
+    CTAT = config.get('ctat', F'{script_basedir}/database/Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play/ctat_genome_lib_build_dir/')
+    ASNEO_REF = config.get('asneo_ref', F'{script_basedir}/database/mm39.fa')          # The {CTAT} REF does not work with ASNEO
+    ASNEO_GTF = config.get('asneo_gtf', F'{script_basedir}/database/mm39.refGene.gtf') # The {CTAT} gtf does not work with ASNEO
 
 ### Section 5: parameters having some default values depending on other values
 REF = config.get('REF', F'{CTAT}/ref_genome.fa')
@@ -333,8 +344,12 @@ rule RNA_tumor_splicing_alignment:
     resources: mem_mb = star_mem_mb
     threads: star_nthreads
     run: # same as in PMC7425491 except for --sjdbOverhang 100
+        if RNA_TUMOR_ISPE:
+            readFilesInParam=F"{RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2}"
+        else:
+            readFilesInParam=F"{RNA_TUMOR_FQ1}"
         shell(
-        'STAR --genomeDir {REF}.star.idx --readFilesIn {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --runThreadN {star_nthreads} '
+        'STAR --genomeDir {REF}.star.idx --readFilesIn {readFilesInParam} --runThreadN {star_nthreads} '
         ' –-outFilterMultimapScoreRange 1 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --alignIntronMax 500000 –alignMatesGapMax 1000000 '
         ' --sjdbScore 2 --alignSJDBoverhangMin 1 --genomeLoad NoSharedMemory --outFilterMatchNminOverLread 0.33 --outFilterScoreMinOverLread 0.33 '
         ''' --sjdbOverhang 150 --outSAMstrandField intronMotif –sjdbGTFfile {ASNEO_GTF} --outFileNamePrefix {asneo_out}/ --readFilesCommand 'gunzip -c' ''' 
@@ -435,6 +450,17 @@ rule RNA_SmallVariant_detection: # RNA filtering is more stringent
 # start-of-DNA-vep-mainline
 
 dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effect.tsv'
+if config.get('species', '') == 'Homo_sapiens':
+    vep_species = 'homo_sapiens'
+    vep_assembly = 'GRCh37'
+    vep_params = '--polyphen b --shift_hgvs 1 --sift b'
+elif config.get('species', '') == 'Mus_musculus':
+    vep_species = 'mus_musculus_balbcj'
+    vep_assembly = 'BALB_cJ_v1'
+    vep_params = ''
+else:
+    exit(-1)
+
 rule DNA_SmallVariant_effect_prediction:
     input: dna_vcf
     output: dna_variant_effect
@@ -442,8 +468,8 @@ rule DNA_SmallVariant_effect_prediction:
     threads: vep_nthreads
     shell: '''vep --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
         --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_gnomad \
-        --regulatory --force_overwrite --assembly GRCh37 --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
-        --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
+        --regulatory --force_overwrite --assembly {vep_assembly} --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
+        {vep_params} --species {vep_species} \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {dna_vcf} --output_file {dna_variant_effect}'''
 
 dna_snvindel_neopeptide_fasta = F'{peptide_dir}/{DNA_PREFIX}_snv_indel.fasta'
@@ -472,8 +498,8 @@ rule RNA_SmallVariant_effect_prediction:
         #bcftools isec {dna_vcf}.gz {rna_vcf}.gz -Oz -p {rna_vcf}.isecdir/
         vep --no_stats --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --tsl --variant_class \
         --check_existing --total_length --allele_number --no_escape --xref_refseq --flag_pick_allele --offline --pubmed --af --af_1kg --af_gnomad \
-        --regulatory --force_overwrite --assembly GRCh37 --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
-        --polyphen b --shift_hgvs 1 --sift b --species homo_sapiens \
+        --regulatory --force_overwrite --assembly {vep_assembly} --buffer_size 5000 --failed 1 --format vcf --pick_order canonical,tsl,biotype,rank,ccds,length \
+        {vep_params} --species {vep_species} \
         --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf} --output_file {rna_variant_effect}'''
         # --dir {VEP_CACHE} --fasta {REF} --fork {vep_nthreads} --input_file {rna_vcf}.isecdir/0001.vcf.gz --output_file {rna_variant_effect}
 rna_snvindel_neopeptide_fasta = F'{peptide_dir}/{RNA_PREFIX}_snv_indel.fasta'
