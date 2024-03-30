@@ -386,6 +386,8 @@ def main():
         if args.mintrain:
             pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep='\t', header=1, index=0, na_rep='NA')
         big_train_X = big_train_X.round(5)
+        big_train_X = np.array(big_train_X)
+        big_train_y = np.array(big_train_y)        
         if ('method' in args.baseline.split(',')):
             for predictor_name, predictor in PREDICTORS.items():
                 for scaler_name, scaler in SCALERS.items():            
@@ -394,7 +396,7 @@ def main():
                     pipeline_names.append((scaler_name + '/' +  predictor_name))
         map_args = [(pipename, pipe, big_train_X, big_train_y) for (pipename, pipe) in zip(pipeline_names, pipelines)]
         if args.ncores == -2:
-            pipelines = list(map(mapfunc, [(pipename, pipe, big_train_X, big_train_y) for (pipename, pipe) in zip(pipeline_names, pipelines)]))
+            pipelines = list(map(mapfunc, map_args))
         else:
             pipelines = Parallel(n_jobs=args.ncores)(delayed(mapfunc)(arg) for arg in map_args)
         ilrs = []
