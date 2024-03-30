@@ -386,8 +386,8 @@ def main():
         if args.mintrain:
             pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep='\t', header=1, index=0, na_rep='NA')
         big_train_X = big_train_X.round(5)
-        big_train_X = np.array(big_train_X)
-        big_train_y = np.array(big_train_y)        
+        big_train_X = pd.DataFrame(big_train_X)
+        big_train_y = pd.Series(big_train_y)
         if ('method' in args.baseline.split(',')):
             for predictor_name, predictor in PREDICTORS.items():
                 for scaler_name, scaler in SCALERS.items():            
