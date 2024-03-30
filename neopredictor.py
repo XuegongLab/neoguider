@@ -198,8 +198,8 @@ def patientwise_predict(tuple_arg):
         pipedf = pipedf.astype({"Rank":int})
         pipedf['ML_pipeline'] = pipeline_name
         other_pred = F'{outpref}.other_method_{(i+1):03d}.baseline'
-        pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA')
-        pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000', sep='\t', header=1, index=0, na_rep='NA')
+        #pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA')
+        pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=1, index=0, na_rep='NA', compression='gzip')
 
         if 'VALIDATED' in pipedf.columns:
             evalres = assess_top20_top50_top100_ttif_fr_auprc(pipedf)
