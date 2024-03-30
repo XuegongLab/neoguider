@@ -13,7 +13,10 @@ from sklearn.linear_model import LogisticRegression
 
 class IsotonicLogisticRegression:
     
-    def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0, **kwargs):
+    def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0,
+            fit_add_measure_error=None, transform_add_measure_error=None,
+            ft_fit_add_measure_error=None, ft_transform_add_measure_error=None,
+            fit_data_clear=False, **kwargs):
         """ Initialize """
         self.X0 = None
         self.X1 = None
@@ -36,7 +39,14 @@ class IsotonicLogisticRegression:
         # self.cccv = CalibratedClassifierCV(estimator=self.logr, method='isotonic', cv=KFold(n_splits=n_splits, shuffle=True, random_state=random_state), n_jobs=cccv_n_jobs, ensemble=True)
         # We tested calibration and confirmed that LogisticRegression is already well-calibrated, which is as expected from theory.
         self.pseudocount = pseudocount
-        self.random_state = random_state
+        self.random_state = random_state        
+        self.fit_add_measure_error = fit_add_measure_error
+        self.transform_add_measure_error = transform_add_measure_error
+        self.ft_fit_add_measure_error = ft_fit_add_measure_error
+        self.ft_transform_add_measure_error = ft_transform_add_measure_error
+        
+        self.fit_data_clear = fit_data_clear
+
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
         else: return [alist[0:anum], alist[(len(alist)-anum):len(alist)]]
@@ -47,7 +57,19 @@ class IsotonicLogisticRegression:
         ret = [self.logORX, self.logr.get_params()]
         for ir in self.irs0: ret.append(ir.get_params())
         return ret
-    
+    def clear_intermediate_internal_data(self, steps=[0,1,2]):
+        if 0 in steps:
+            self.X0 = None
+            self.X1 = None
+            self.raw_log_odds = []
+        if 1 in steps:
+            self.ixs1 = []
+            self.irs1 = []
+            self.ivs1 = []
+        if 2 in steps:
+            self.ixs2 = []
+            self.irs2 = []
+            self.ivs2 = []
     def get_info(self):
         """ Recursively get the fitted params of this model """
         logr = self.logr
@@ -172,14 +194,22 @@ class IsotonicLogisticRegression:
                 prev_y = y
         contigs.append(contig)
         return contigs
-        
-    def fit(self, X1, y1, is_centered=True, is_training=True, **kwargs):
+    
+    def get_default(self, *args):
+        for arg in args:
+            if arg != None: return arg
+        return None
+
+    def fit(self, X1, y1, is_centered=True, add_measure_error=None, data_clear=None, data_clear_steps=[0,1,2], **kwargs):
         """ scikit-learn fit
             is_centered : using centered isotonic regression or not
         """
         #def triangular_kernel(val, mid, lo, hi): return max((0, ((val-lo) / (mid-lo) if (val < mid) else (hi-val) / (hi-mid))))
         #def heaviside_rectangular_kernel(val, mid, lo, hi): return (1 if (lo < val and val < hi) else (0.5 if (val == lo or val == hi) else 0))
         def powermean(arr, p=1): return 1.0/len(arr) * (sum(ele**p for ele in arr))**p
+        # NOTE: Setting add_measure_error=True may improve the performance of some ML methods. 
+        add_measure_error = self.get_default(add_measure_error, self.fit_add_measure_error, False)
+        data_clear = self.get_default(data_clear, self.fit_data_clear, False)
         inX, exX, inIdxs, exIdxs = self._split(X1)
         X = np.array(inX)
         y = np.array(y1)
@@ -235,8 +265,9 @@ class IsotonicLogisticRegression:
                 self.ixs2[colidx] = x2
                 self.ivs2[colidx] = 1*center_log_odds + self.irs2[colidx].fit_transform(x2, y2)
                 self.irs0[colidx] = self.irs2[colidx]
-        log_ratios = self._transform(X, is_training)
+        log_ratios = self._transform(X, add_measure_error)
         self.logr.fit(np.hstack([log_ratios, exX]), y, **kwargs)
+        if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
         return self
     
     def get_odds_offset(self):
@@ -254,28 +285,34 @@ class IsotonicLogisticRegression:
     def get_centered_isotonic_log_odds(self):
         return self.ivs2
         
-    def _transform(self, X, is_training):
-        if is_training:
+    def _transform(self, X, add_measure_error):
+        if add_measure_error:
             XT = np.array([self.ensure_total_order(X[:,colidx]) for colidx in range(X.shape[1])])
         else:
             XT = np.array([(X[:,colidx]) for colidx in range(X.shape[1])])
         return np.array([self.irs0[colidx].predict(xT) for colidx,xT in enumerate(XT)]).transpose()
         #return np.array([self.irs0[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
     
-    def transform(self, X1, is_training = False):
+    def transform(self, X1, add_measure_error=None):
         """ scikit-learn transform """
+        # NOTE: Setting add_measure_error=True may improve the performance of some ML methods.
+        add_measure_error = self.get_default(add_measure_error, self.transform_add_measure_error, False)
         X = np.array(X1)
         inX, exX, inIdxs, exIdxs = self._split(X, True)
-        test_orX = self._transform(inX, is_training)
+        test_orX = self._transform(inX, add_measure_error)
         X2 = np.zeros((X.shape[0], X.shape[1]))
         X2[:,inIdxs] = test_orX
         X2[:,exIdxs] = exX
         return X2
     
-    def fit_transform(self, X1, y1, is_training=True):
+    def fit_transform(self, X1, y1, fit_add_measure_error=None, transform_add_measure_error=None):
         """ scikit-learn fit_transform """
-        self.fit(X1, y1)
-        return self.transform(X1, is_training)
+        # NOTE: Setting add_measure_error=True may improve the performance of some ML methods 
+        #   such as DecisionTreeClassifier (DT) presumably because DT without regularization tends to overfit.
+        fit_add_measure_error = self.get_default(fit_add_measure_error, self.ft_fit_add_measure_error, False)
+        transform_add_measure_error = self.get_default(transform_add_measure_error, self.ft_transform_add_measure_error, True)
+        self.fit(X1, y1, add_measure_error=fit_add_measure_error)
+        return self.transform(X1, add_measure_error=transform_add_measure_error)
     
     def _extract_features(self, X):
         inX, exX, inIdxs, exIdxs = self._split(X, True)
