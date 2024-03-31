@@ -28,12 +28,16 @@ conda create -y -n $neoguider
 #   ERGO-II requires pytorch-lightning=0.8, but we will change a few lines of source code in ERGO-II
 #     in the next installation step to make it work with higher versions of pytorch-lightning
 #   podman can be used to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
+# Please feel free to modify other version sets as needed. 
 $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
     gcc openjdk parallel perl podman sshpass tcsh \
     perl-carp-assert psutil pyyaml requests-cache zlib \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
-    bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
-    'biopython<=1.79' pybiomart pyfaidx pysam # Currently, edit-distance based on blosum alignment instead of edit-distance based on edlib is used
+    bcftools blast 'bwa=0.7.17' 'ensembl-vep=109.3' 'kallisto=0.48.0' mosdepth 'optitype=1.3.5' samtools snakemake 'star=2.7.8' 'star-fusion=1.12.0' \
+    'biopython<=1.79' pybiomart pyfaidx pysam
+    # bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
+
+# Currently, edit-distance based on blosum alignment instead of edit-distance based on edlib is used
 # note: if you have encountered the error: *** is not installable because it requires __cuda, which is missing on the system,
 #   then you can refer to the work-around at
 #   https://stackoverflow.com/questions/74836151/nothing-provides-cuda-needed-by-tensorflow-2-10-0-cuda112py310he87a039-0 

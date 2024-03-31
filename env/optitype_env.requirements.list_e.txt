@@ -9,7 +9,7 @@ backports.functools_lru_cache=1.6.1=py_0
 backports_abc=0.5=py_1
 blosc=1.21.5=h0f2a231_0
 bzip2=1.0.8=hd590300_5
-c-ares=1.28.0=hd590300_0
+c-ares=1.28.1=hd590300_0
 ca-certificates=2024.2.2=hbcca054_0
 certifi=2019.11.28=py27h8c360ce_1
 cycler=0.10.0=py_2
