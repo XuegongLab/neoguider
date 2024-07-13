@@ -4,7 +4,7 @@ import collections,logging,math,pprint,random
 import numpy as np
 import scipy
 from sklearn.isotonic import IsotonicRegression
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
 # This is some example code for an implementation of the logistic regression with odds ratios estimated by isotonic regressions.
 # In the future, we may:
@@ -16,8 +16,12 @@ class IsotonicLogisticRegression:
     def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0,
             fit_add_measure_error=None, transform_add_measure_error=None,
             ft_fit_add_measure_error=None, ft_transform_add_measure_error=None,
-            fit_data_clear=False, **kwargs):
-        """ Initialize """
+            fit_data_clear=False, 
+            task='classification', **kwargs):
+        """ 
+        Initialize 
+        task: classification (default) or regression
+        """
         self.X0 = None
         self.X1 = None
         self.prevalence_odds = -1
@@ -46,6 +50,9 @@ class IsotonicLogisticRegression:
         self.ft_transform_add_measure_error = ft_transform_add_measure_error
         
         self.fit_data_clear = fit_data_clear
+        self.task = task
+        if task == 'regression':
+            self.logr = LinearRegression(**kwargs)
 
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
@@ -73,7 +80,10 @@ class IsotonicLogisticRegression:
     def get_info(self):
         """ Recursively get the fitted params of this model """
         logr = self.logr
-        logr_info = [logr.classes_, logr.coef_, logr.intercept_, logr.n_features_in_, logr.n_iter_]
+        if self.task == 'regression':
+            logr_info = [logr.coef_, logr.intercept_, logr.n_features_in_]
+        else:
+            logr_info = [logr.classes_, logr.coef_, logr.intercept_, logr.n_features_in_, logr.n_iter_]
         isor_info = []
         for i in range(len(self.irs0)):
             ir = self.irs0[i]
@@ -213,6 +223,37 @@ class IsotonicLogisticRegression:
         inX, exX, inIdxs, exIdxs = self._split(X1)
         X = np.array(inX)
         y = np.array(y1)
+        
+        if self.task == 'regression':
+            raw_log_odds = self.raw_log_odds = [None for _ in range(X.shape[1])]
+            irs0 = self.irs0 = [None for _ in range(X.shape[1])]
+            ixs1 = self.ixs1 = [None for _ in range(X.shape[1])]
+            irs1 = self.irs1 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+            ivs1 = self.ivs1 = [None for _ in range(X.shape[1])]
+            ixs2 = self.ixs2 = [None for _ in range(X.shape[1])]
+            irs2 = self.irs2 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+            ivs2 = self.ivs2 = [None for _ in range(X.shape[1])]
+            for colidx in range(X.shape[1]):
+                x = X[:,colidx]
+                xylist = sorted(zip(x,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
+                #xcenters = []
+                #xodds = []
+                x1 = np.array([x for (x,y) in xylist])
+                y1 = np.array([y for (x,y) in xylist])
+                self.raw_log_odds[colidx] = x1
+                self.ixs1[colidx] = y1
+                self.ivs1[colidx] = self.irs1[colidx].fit_transform(x1, y1)
+                self.irs0[colidx] = self.irs1[colidx]
+                if is_centered:
+                    x2, y2 = self._center(x1, self.irs1[colidx].predict(x1))
+                    self.ixs2[colidx] = x2
+                    self.ivs2[colidx] = self.irs2[colidx].fit_transform(x2, y2)
+                    self.irs0[colidx] = self.irs2[colidx]
+            responses = self._transform(X, add_measure_error)
+            self.logr.fit(np.hstack([responses, exX]), y, **kwargs)
+            if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
+            return self
+        
         self._assert_input(X, y)
         X0 = self.X0 = X[y==0,:]
         X1 = self.X1 = X[y==1,:]
@@ -329,6 +370,9 @@ class IsotonicLogisticRegression:
         """ scikit-learn predict_proba using logistic regression built on top of isotonic scaler """
         X = np.array(X1)
         allfeatures = self._extract_features(X)
+        if self.task == 'regression':
+            ret = self.logr.predict(allfeatures)
+            return np.array([(x,x) for x in ret])
         return self.logr.predict_proba(allfeatures)
 
 def test_fit_and_predict_proba():
