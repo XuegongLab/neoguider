@@ -167,8 +167,8 @@ class IsotonicLogisticRegression:
 
         Returns
         -------
-        increasing_bool : boolean
-            Whether the relationship is increasing or decreasing.
+        -1, 0, or 1 : boolean
+            Whether the relationship is increasing (1), decreasing (-1) or undetermined (0).
 
         Notes
         -----
@@ -186,7 +186,7 @@ class IsotonicLogisticRegression:
         
         # Calculate Spearman rho estimate and set return accordingly.
         rho, _ = spearmanr(x, y)
-        increasing_bool = (1 if rho >= 0 else -1)
+        increasing_int = (1 if rho >= 0 else -1)
 
         # Run Fisher transform to get the rho CI, but handle rho=+/-1
         if rho not in [-1.0, 1.0] and len(x) > 3:
@@ -208,7 +208,7 @@ class IsotonicLogisticRegression:
                 #    "suspect."
                 #)
 
-        return increasing_bool
+        return increasing_int
 
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
@@ -449,6 +449,10 @@ class IsotonicLogisticRegression:
                 self.ivs1[colidx] = self.convex_regressions_1[colidx].fit_transform(x1, y1)
                 self.convex_regressions_0[colidx] = self.convex_regressions_1[colidx]
             else:
+                is_inc_or_dec = self.check_increasing(x1, y1)
+                if is_inc_or_dec == 0: 
+                    colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
+                    warnings.warn(F'The feature {colname} at column index {colidx} does not seem to be useful, you should probably not use this feature. ')
                 self.ivs1[colidx] = 1*center_log_odds + self.irs1[colidx].fit_transform(x1, y1)
                 self.irs0[colidx] = self.irs1[colidx]
             if is_centered:
