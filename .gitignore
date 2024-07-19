@@ -1,5 +1,7 @@
-software
-database
+software/
+database/
+model/
+models/
 figs/*.pdf
 figs/*.pdf.txt
 seafile-ignore.txt
