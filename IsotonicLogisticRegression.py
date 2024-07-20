@@ -5,8 +5,8 @@ import numpy as np
 import scipy
 from scipy.stats import spearmanr
 from sklearn.isotonic import IsotonicRegression
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.neighbors import KernelDensity, KNeighborsRegressor
+from sklearn.linear_model import LinearRegression, Ridge, LogisticRegression
+#from sklearn.neighbors import KernelDensity, KNeighborsRegressor
 
 from sklearn.preprocessing import QuantileTransformer
 
@@ -23,9 +23,9 @@ class ConvexRegression:
         self.irhi = IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip')
     def compute_pivots(self, x, y, random_state=0):
         assert len(x) == len(y)
-        mov_avg_width = int(math.ceil(len(x)**0.5/4.0))
-        regression_width = int(math.ceil(len(x)**0.5/4.0))
-        prediction_width = int(math.ceil(len(x)**0.5/8.0))
+        mov_avg_width = int(math.ceil(len(x)**0.5)) # int(math.ceil(1.06 * sigma * len(x)**(-1.0/5.0))) #int(math.ceil(len(x)**0.5/4.0))
+        regression_width = mov_avg_width  #int(math.ceil(len(x)**0.5/4.0))
+        prediction_width = (regression_width + 1) // 2 # int(math.ceil(len(x)**0.5/8.0))
         #qt = QuantileTransformer(random_state=random_state)
         #x1 = qt.fit_transform([[v] for v in x])
         y1 = moving_average(y, mov_avg_width)
@@ -149,8 +149,9 @@ class IsotonicLogisticRegression:
         self.fit_data_clear = fit_data_clear
         self.task = task
         if task == 'regression':
-            self.logr = LinearRegression(**kwargs)
-        
+            #self.logr = LinearRegression(**kwargs)
+            self.logr = Ridge(**kwargs)
+ 
     def check_increasing(self, x, y):
         """Determine whether y is monotonically correlated with x.
 
