@@ -5,7 +5,7 @@ import numpy as np
 import scipy
 from scipy.stats import spearmanr
 from sklearn.isotonic import IsotonicRegression
-from sklearn.linear_model import LinearRegression, Ridge, LogisticRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 #from sklearn.neighbors import KernelDensity, KNeighborsRegressor
 
 from sklearn.preprocessing import QuantileTransformer
@@ -98,21 +98,25 @@ class IsotonicLogisticRegression:
     
     def __init__(self, 
             excluded_cols = [], 
-            convex_cols=[], 
+            convex_cols=[],
+            task='classification',
+            final_predictor = None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
             pseudocount=0.5, 
             random_state=0,
             fit_add_measure_error=None, 
             transform_add_measure_error=None,
             ft_fit_add_measure_error=None, 
             ft_transform_add_measure_error=None,
-            fit_data_clear=False, 
-            task='classification', 
+            fit_data_clear=False,            
             **kwargs):
         """ 
         Initialize
-        excluded_cols: columns to remain untransformed
-        convex_cols: columns that are subject to convex regression instead of isotonic regression 
-        task: classification (default) or regression
+        @param excluded_cols: columns to remain untransformed
+        @param convex_cols: columns that are subject to convex regression instead of isotonic regression 
+        @param task: classification (default) or regression
+        @param final_predictor: the final predictor to be used afer feature transformations, 
+            defaults to LogisticRegression and LinearRegression with default params for classification and regression, respectively. 
+        @return the initialized instance
         """
         self.X0 = None
         self.X1 = None
@@ -128,7 +132,7 @@ class IsotonicLogisticRegression:
         self.logORX = None
         self.excluded_cols = copy.deepcopy(excluded_cols)
         self.convex_cols = copy.deepcopy(convex_cols)
-        self.logr = LogisticRegression(**kwargs)
+        
         # Probability can be calibrated with:
         # n_splits=5, random_state=1, cccv_n_jobs=-1,
         # sklearn.calibration.CalibratedClassifierCV(estimator=None, *, method='sigmoid', cv=KFold(n_splits=5, shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
@@ -148,9 +152,14 @@ class IsotonicLogisticRegression:
         
         self.fit_data_clear = fit_data_clear
         self.task = task
-        if task == 'regression':
-            #self.logr = LinearRegression(**kwargs)
-            self.logr = Ridge(**kwargs)
+        if final_predictor:
+            self.logr = final_predictor
+        else:
+            if task == 'regression':
+                self.logr = LinearRegression(**kwargs)
+                #self.logr = ElasticNetCV(**kwargs)
+            else:
+                self.logr = LogisticRegression(**kwargs)
  
     def check_increasing(self, x, y):
         """Determine whether y is monotonically correlated with x.
