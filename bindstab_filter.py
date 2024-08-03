@@ -34,9 +34,9 @@ def main(args_input = sys.argv[1:]):
         call_with_infolog('rm -r {}.tmpdir/ || true'.format(outtsv))
         call_with_infolog('mkdir -p {}.tmpdir/'.format(outtsv))
         
-        call_with_infolog('''cat {} | awk '{{print $1}}' |  split -l 20 - {}.tmpdir/SPLITTED.'''.format(infaa, outtsv))
+        call_with_infolog('''cat {} | awk '{{print $1}}' |  split -l 20 - {}.tmpdir/SPLITTED.'''.format(faa, outtsv))
         cmds = ['{} -f {}.tmpdir/{} -a {} -l {} -ia > {}.tmpdir/{}.{}.netMHCstabpan-result'
-                .format(netMHCstabpan_path, outtsv, faafile, hla_str, peplens, outtsv, faafile, hla_str)
+                .format(netMHCstabpan_path, outtsv, faa, hla_str, peplens, outtsv, faafile, hla_str)
                 # for hla_str in hla_strs 
                 for faafile in os.listdir('{}.tmpdir/'.format(outtsv)) if faafile.startswith('SPLITTED.')]
         with open('{}.tmpdir/tmp.sh'.format(outtsv), 'w') as shfile:
