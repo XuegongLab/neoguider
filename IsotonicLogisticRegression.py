@@ -1,11 +1,94 @@
 #!/usr/bin/env python
 
-import collections,logging,math,pprint,random
+import collections,copy,logging,math,pprint,random,warnings
 import numpy as np
 import scipy
+from scipy.stats import spearmanr
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LinearRegression, LogisticRegression
+#from sklearn.neighbors import KernelDensity, KNeighborsRegressor
 
+from sklearn.preprocessing import QuantileTransformer
+
+def moving_average(x, w):
+    return np.convolve(x, np.ones(w), "valid") / w
+
+class ConvexRegression:
+    def __init__(self):
+        self.pivotlo = None
+        self.pivothi = None
+        self.pivotlo2 = None
+        self.pivothi2 = None
+        self.irlo = IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip')
+        self.irhi = IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip')
+    def compute_pivots(self, x, y, random_state=0):
+        assert len(x) == len(y)
+        mov_avg_width = int(math.ceil(len(x)**0.5)) # int(math.ceil(1.06 * sigma * len(x)**(-1.0/5.0))) #int(math.ceil(len(x)**0.5/4.0))
+        regression_width = mov_avg_width  #int(math.ceil(len(x)**0.5/4.0))
+        prediction_width = (regression_width + 1) // 2 # int(math.ceil(len(x)**0.5/8.0))
+        #qt = QuantileTransformer(random_state=random_state)
+        #x1 = qt.fit_transform([[v] for v in x])
+        y1 = moving_average(y, mov_avg_width)
+        assert len(y1) == len(y) - (mov_avg_width - 1), F'{len(y1)} == {len(y)} - ({mov_avg_width}-1) failed!'
+        #kd = KernelDensity(bandwidth=bandwidth)
+        #kd.fit(x1, y)
+        #y1 = kd.predict(x1)
+        #x2 = [v[0] for v in x1]
+        idxmax = np.argmax(y1)
+        idxmin = np.argmin(y1)
+        if (y1[0] + y1[-1]) / 2.0 > np.mean(y1):
+            idx = idxmin
+        else:
+            idx = idxmax
+        idxlo1 = max((int(idx + (mov_avg_width // 2) - regression_width), 0))
+        idxhi1 = min((int(idx + (mov_avg_width // 2) + regression_width), len(x)-1))
+        idxlo2 = max((int(idx + (mov_avg_width // 2) - prediction_width), 0))
+        idxhi2 = min((int(idx + (mov_avg_width // 2) + prediction_width), len(x)-1))
+
+        #pivots = qt.inverse_transform([[x2[idxlo]], [x2[idxhi]]])
+        #return pivots[0][0], pivots[1][0]
+        return x[idxlo1], x[idxhi1], x[idxlo2], x[idxhi2]
+    def fit(self, x, y):
+        x, y = zip(*sorted(zip(x,y)))
+        #print(x)
+        #print(y)
+        self.pivotlo, self.pivothi, self.pivotlo2, self.pivothi2 = self.compute_pivots(x, y)
+        logging.debug(F'pivots={self.pivotlo},{self.pivothi}')
+        xlo, ylo = zip(*[v for v in zip(x,y) if v[0] <= self.pivothi])
+        xhi, yhi = zip(*[v for v in zip(x,y) if v[0] >= self.pivotlo])
+        self.irlo.fit(xlo, ylo)
+        self.irhi.fit(xhi, yhi)
+    def transform(self, x):
+        return self.predict(x)
+    def predict(self, x):
+        ret = []
+        ylo = self.irlo.predict(x)
+        yhi = self.irhi.predict(x)
+        for i in range(len(x)):
+            if x[i] < self.pivotlo2:
+                v = ylo[i]
+            if x[i] > self.pivothi2:
+                v = yhi[i]
+            if x[i] >= self.pivotlo2 and x[i] <= self.pivothi2:
+                v = (ylo[i] + yhi[i]) / 2
+            ret.append(v)
+        return np.array(ret)
+    def fit2d(self, X, y):
+        X = np.array(X)
+        for colidx in range(X.shape[1]):
+            self.fit1d(X[:,colidx], y)
+        return self
+    def transform2d(X):
+        X = np.array(X)
+        ret = []
+        for colidx in range(X.shape[1]):
+            y = self.transform1d(X[:,colidx])
+            ret.append(y)
+        return np.array(ret).transpose()
+    def fit_transform(self, X, y):
+        self.fit(X, y)
+        return self.transform(X)
+    
 # This is some example code for an implementation of the logistic regression with odds ratios estimated by isotonic regressions.
 # In the future, we may:
 #   1. optimize both the isotonic curve and the logistic curve together so the the overall cross-entropy loss is minimized
@@ -13,14 +96,27 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 class IsotonicLogisticRegression:
     
-    def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0,
-            fit_add_measure_error=None, transform_add_measure_error=None,
-            ft_fit_add_measure_error=None, ft_transform_add_measure_error=None,
-            fit_data_clear=False, 
-            task='classification', **kwargs):
+    def __init__(self, 
+            excluded_cols = [], 
+            convex_cols=[],
+            task='classification',
+            final_predictor = None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
+            pseudocount=0.5, 
+            random_state=0,
+            fit_add_measure_error=None, 
+            transform_add_measure_error=None,
+            ft_fit_add_measure_error=None, 
+            ft_transform_add_measure_error=None,
+            fit_data_clear=False,            
+            **kwargs):
         """ 
-        Initialize 
-        task: classification (default) or regression
+        Initialize
+        @param excluded_cols: columns to remain untransformed
+        @param convex_cols: columns that are subject to convex regression instead of isotonic regression 
+        @param task: classification (default) or regression
+        @param final_predictor: the final predictor to be used afer feature transformations, 
+            defaults to LogisticRegression and LinearRegression with default params for classification and regression, respectively. 
+        @return the initialized instance
         """
         self.X0 = None
         self.X1 = None
@@ -34,8 +130,9 @@ class IsotonicLogisticRegression:
         self.irs2 = []
         self.ivs2 = []
         self.logORX = None
-        self.excluded_cols = excluded_cols
-        self.logr = LogisticRegression(**kwargs)
+        self.excluded_cols = copy.deepcopy(excluded_cols)
+        self.convex_cols = copy.deepcopy(convex_cols)
+        
         # Probability can be calibrated with:
         # n_splits=5, random_state=1, cccv_n_jobs=-1,
         # sklearn.calibration.CalibratedClassifierCV(estimator=None, *, method='sigmoid', cv=KFold(n_splits=5, shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
@@ -49,10 +146,79 @@ class IsotonicLogisticRegression:
         self.ft_fit_add_measure_error = ft_fit_add_measure_error
         self.ft_transform_add_measure_error = ft_transform_add_measure_error
         
+        self.convex_regressions_0 = []
+        self.convex_regressions_1 = []
+        self.convex_regressions_2 = []
+        
         self.fit_data_clear = fit_data_clear
         self.task = task
-        if task == 'regression':
-            self.logr = LinearRegression(**kwargs)
+        if final_predictor:
+            self.logr = final_predictor
+        else:
+            if task == 'regression':
+                self.logr = LinearRegression(**kwargs)
+                #self.logr = ElasticNetCV(**kwargs)
+            else:
+                self.logr = LogisticRegression(**kwargs)
+ 
+    def check_increasing(self, x, y):
+        """Determine whether y is monotonically correlated with x.
+
+        y is found increasing or decreasing with respect to x based on a Spearman
+        correlation test.
+
+        Parameters
+        ----------
+        x : array-like of shape (n_samples,)
+                Training data.
+
+        y : array-like of shape (n_samples,)
+            Training target.
+
+        Returns
+        -------
+        -1, 0, or 1 : boolean
+            Whether the relationship is increasing (1), decreasing (-1) or undetermined (0).
+
+        Notes
+        -----
+        The Spearman correlation coefficient is estimated from the data, and the
+        sign of the resulting estimate is used as the result.
+
+        In the event that the 95% confidence interval based on Fisher transform
+        spans zero, a warning is raised.
+
+        References
+        ----------
+        Fisher transformation. Wikipedia.
+        https://en.wikipedia.org/wiki/Fisher_transformation
+        """
+        
+        # Calculate Spearman rho estimate and set return accordingly.
+        rho, _ = spearmanr(x, y)
+        increasing_int = (1 if rho >= 0 else -1)
+
+        # Run Fisher transform to get the rho CI, but handle rho=+/-1
+        if rho not in [-1.0, 1.0] and len(x) > 3:
+            F = 0.5 * math.log((1.0 + rho) / (1.0 - rho))
+            F_se = 1 / math.sqrt(len(x) - 3)
+
+            # Use a 95% CI, i.e., +/-1.96 S.E.
+            # https://en.wikipedia.org/wiki/Fisher_transformation
+            rho_0 = math.tanh(F - 1.96 * F_se)
+            rho_1 = math.tanh(F + 1.96 * F_se)
+
+            # Warn if the CI spans zero.
+            if np.sign(rho_0) != np.sign(rho_1):
+                return 0
+                #warnings.warn(
+                #    "Confidence interval of the Spearman "
+                #    "correlation coefficient spans zero. "
+                #    "Determination of ``increasing`` may be "
+                #    "suspect."
+                #)
+
+        return increasing_int
 
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
@@ -223,40 +389,7 @@ class IsotonicLogisticRegression:
         inX, exX, inIdxs, exIdxs = self._split(X1)
         X = np.array(inX)
         y = np.array(y1)
-        
-        if self.task == 'regression':
-            raw_log_odds = self.raw_log_odds = [None for _ in range(X.shape[1])]
-            irs0 = self.irs0 = [None for _ in range(X.shape[1])]
-            ixs1 = self.ixs1 = [None for _ in range(X.shape[1])]
-            irs1 = self.irs1 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
-            ivs1 = self.ivs1 = [None for _ in range(X.shape[1])]
-            ixs2 = self.ixs2 = [None for _ in range(X.shape[1])]
-            irs2 = self.irs2 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
-            ivs2 = self.ivs2 = [None for _ in range(X.shape[1])]
-            for colidx in range(X.shape[1]):
-                x = X[:,colidx]
-                xylist = sorted(zip(x,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
-                #xcenters = []
-                #xodds = []
-                x1 = np.array([x for (x,y) in xylist])
-                y1 = np.array([y for (x,y) in xylist])
-                self.raw_log_odds[colidx] = x1
-                self.ixs1[colidx] = y1
-                self.ivs1[colidx] = self.irs1[colidx].fit_transform(x1, y1)
-                self.irs0[colidx] = self.irs1[colidx]
-                if is_centered:
-                    x2, y2 = self._center(x1, self.irs1[colidx].predict(x1))
-                    self.ixs2[colidx] = x2
-                    self.ivs2[colidx] = self.irs2[colidx].fit_transform(x2, y2)
-                    self.irs0[colidx] = self.irs2[colidx]
-            responses = self._transform(X, add_measure_error)
-            self.logr.fit(np.hstack([responses, exX]), y, **kwargs)
-            if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
-            return self
-        
-        self._assert_input(X, y)
-        X0 = self.X0 = X[y==0,:]
-        X1 = self.X1 = X[y==1,:]
+
         raw_log_odds = self.raw_log_odds = [None for _ in range(X.shape[1])]
         irs0 = self.irs0 = [None for _ in range(X.shape[1])]
         ixs1 = self.ixs1 = [None for _ in range(X.shape[1])]
@@ -265,47 +398,84 @@ class IsotonicLogisticRegression:
         ixs2 = self.ixs2 = [None for _ in range(X.shape[1])]
         irs2 = self.irs2 = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
         ivs2 = self.ivs2 = [None for _ in range(X.shape[1])]
-        self.prevalence_odds = (len(X1) / float(len(X0)))
-        for colidx in range(X.shape[1]):
+        
+        self.convex_regressions_0 = [None for _ in range(X.shape[1])]
+        self.convex_regressions_1 = [ConvexRegression() for _ in range(X.shape[1])]
+        self.convex_regressions_2 = [ConvexRegression() for _ in range(X.shape[1])]
+        
+        if self.task == 'regression':
+            self.prevalence_odds = np.nan
+        else:
+            self._assert_input(X, y)
+            X0 = self.X0 = X[y==0,:]
+            X1 = self.X1 = X[y==1,:]
+            self.prevalence_odds = (len(X1) / float(len(X0)))
+        for colidx in range(X.shape[1]): 
             x = X[:,colidx]
-            x2 = self.ensure_total_order(x)
-            xylist = sorted(zip(x2,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
-            xylistlist = self.partition(xylist)
-            xcenters = []
-            xodds = []
-            prev_ylabel = None
-            for i, curr_xylist in enumerate(xylistlist):
-                prev_len = (len(xylistlist[i-1]) if (i-1 >= 0)               else len(xylistlist[i+1]))
-                next_len = (len(xylistlist[i+1]) if (i+1 <  len(xylistlist)) else len(xylistlist[i-1]))
-                pre2_len = (len(xylistlist[i-2]) if (i-2 >= 0)               else len(curr_xylist))
-                nex2_len = (len(xylistlist[i+2]) if (i+2 <  len(xylistlist)) else len(curr_xylist))
-                assert prev_len > 0
-                assert next_len > 0
-                assert len(curr_xylist) > 0
-                yset = set(xy[1] for xy in curr_xylist)
-                assert len(yset) == 1
-                ylabel = list(yset)[0]
-                assert prev_ylabel != ylabel
-                xcenter = sum(xy[0] for xy in curr_xylist) / float(len(curr_xylist))
-                #if len(curr_xylist) * 2 < (prev_len + next_len):
-                #    odds = len(curr_xylist) / powermean((prev_len, next_len))
-                #else:
-                odds = (powermean((len(curr_xylist), powermean((pre2_len, nex2_len)))) + 0*self.pseudocount) / (powermean((prev_len, next_len)) + 0*self.pseudocount)
-                xcenters.append(xcenter)
-                xodds.append((odds) if (ylabel == 1) else (1/odds))
-                prev_ylabel = ylabel
-            raw_log_odds = np.log(xodds)
-            center_log_odds = np.log(self.prevalence_odds)
-            relative_log_odds = raw_log_odds - center_log_odds
-            self.raw_log_odds[colidx] = raw_log_odds
-            self.ixs1[colidx] = xcenters
-            self.ivs1[colidx] = 1*center_log_odds + self.irs1[colidx].fit_transform(xcenters, relative_log_odds)
-            self.irs0[colidx] = self.irs1[colidx]
+            if self.task == 'regression':                
+                xylist = sorted(zip(x,y))
+                x1 = np.array([x for (x,y) in xylist])
+                y1 = np.array([y for (x,y) in xylist])
+                center_log_odds = 0
+                self.raw_log_odds[colidx] = y1
+            else:
+                x = X[:,colidx]
+                xord = self.ensure_total_order(x)
+                xylist = sorted(zip(xord,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
+                xylistlist = self.partition(xylist)
+                xcenters = []
+                xodds = []
+                prev_ylabel = None
+                for i, curr_xylist in enumerate(xylistlist):
+                    prev_len = (len(xylistlist[i-1]) if (i-1 >= 0)               else len(xylistlist[i+1]))
+                    next_len = (len(xylistlist[i+1]) if (i+1 <  len(xylistlist)) else len(xylistlist[i-1]))
+                    pre2_len = (len(xylistlist[i-2]) if (i-2 >= 0)               else len(curr_xylist))
+                    nex2_len = (len(xylistlist[i+2]) if (i+2 <  len(xylistlist)) else len(curr_xylist))
+                    assert prev_len > 0
+                    assert next_len > 0
+                    assert len(curr_xylist) > 0
+                    yset = set(xy[1] for xy in curr_xylist)
+                    assert len(yset) == 1
+                    ylabel = list(yset)[0]
+                    assert prev_ylabel != ylabel
+                    xcenter = sum(xy[0] for xy in curr_xylist) / float(len(curr_xylist))
+                    #if len(curr_xylist) * 2 < (prev_len + next_len):
+                    #    odds = len(curr_xylist) / powermean((prev_len, next_len))
+                    #else:
+                    odds = (powermean((len(curr_xylist), powermean((pre2_len, nex2_len)))) + 0*self.pseudocount) / (powermean((prev_len, next_len)) + 0*self.pseudocount)
+                    xcenters.append(xcenter)
+                    xodds.append((odds) if (ylabel == 1) else (1/odds))
+                    prev_ylabel = ylabel
+                raw_log_odds = np.log(xodds)
+                center_log_odds = np.log(self.prevalence_odds)                
+                self.raw_log_odds[colidx] = raw_log_odds
+                x1 = np.array(xcenters)
+                y1 = relative_log_odds = raw_log_odds - center_log_odds
+            
+            X_in = inX
+            self.ixs1[colidx] = x1
+            if colidx in self.convex_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.convex_cols):
+                if not colidx in self.convex_cols: self.convex_cols.append(colidx)
+                self.ivs1[colidx] = self.convex_regressions_1[colidx].fit_transform(x1, y1)
+                self.convex_regressions_0[colidx] = self.convex_regressions_1[colidx]
+            else:
+                is_inc_or_dec = self.check_increasing(x1, y1)
+                if is_inc_or_dec == 0: 
+                    colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
+                    warnings.warn(F'The feature {colname} at column index {colidx} does not seem to be useful, you should probably not use this feature. ')
+                self.ivs1[colidx] = 1*center_log_odds + self.irs1[colidx].fit_transform(x1, y1)
+                self.irs0[colidx] = self.irs1[colidx]
             if is_centered:
-                x2, y2 = self._center(xcenters, self.irs1[colidx].predict(xcenters))
-                self.ixs2[colidx] = x2
-                self.ivs2[colidx] = 1*center_log_odds + self.irs2[colidx].fit_transform(x2, y2)
-                self.irs0[colidx] = self.irs2[colidx]
+                if colidx in self.convex_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.convex_cols):
+                    x2, y2 = self._center(x1, self.convex_regressions_1[colidx].predict(x1))
+                    self.ixs2[colidx] = x2
+                    self.ivs2[colidx] = 1*center_log_odds + self.convex_regressions_2[colidx].fit_transform(x2, y2)
+                    self.convex_regressions_0[colidx] = self.convex_regressions_2[colidx]
+                else:
+                    x2, y2 = self._center(x1, self.irs1[colidx].predict(x1))
+                    self.ixs2[colidx] = x2
+                    self.ivs2[colidx] = 1*center_log_odds + self.irs2[colidx].fit_transform(x2, y2)
+                    self.irs0[colidx] = self.irs2[colidx]
         log_ratios = self._transform(X, add_measure_error)
         self.logr.fit(np.hstack([log_ratios, exX]), y, **kwargs)
         if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
@@ -331,7 +501,12 @@ class IsotonicLogisticRegression:
             XT = np.array([self.ensure_total_order(X[:,colidx]) for colidx in range(X.shape[1])])
         else:
             XT = np.array([(X[:,colidx]) for colidx in range(X.shape[1])])
-        return np.array([self.irs0[colidx].predict(xT) for colidx,xT in enumerate(XT)]).transpose()
+        return np.array([(
+            self.convex_regressions_0[colidx].transform(xT)
+            if (colidx in self.convex_cols or (hasattr(X, 'columns') and X.columns[colidx] in self.convex_cols))
+            else self.irs0[colidx].predict(xT)
+            ) for colidx,xT in enumerate(XT)]).transpose()
+        #return np.array([self.irs0[colidx].predict(xT) for colidx,xT in enumerate(XT)]).transpose()
         #return np.array([self.irs0[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
     
     def transform(self, X1, add_measure_error=None):
@@ -418,7 +593,7 @@ def test_fit_and_predict_proba():
     pp.pprint(ilr.get_info())
     pp.pprint(np.hstack((X,y[:,None])))
 
-def test_fit_and_predict_with_dups():
+def test_fit_and_predict_with_dups(task='classification'):
     import pandas as pd
     
     pp = pprint.PrettyPrinter(indent=4)
@@ -446,10 +621,11 @@ def test_fit_and_predict_with_dups():
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,0,1, 0,0,1,0,1, 0,0,1,0,0, 0])
-    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'])
+    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'], task=task)
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
+    y1 = ilr.predict(X)
     ilr.set_random_state(42+1)
     x2 = ilr.ensure_total_order(X.iloc[:,0])
     ordered_xs = list(zip(X.iloc[:,0],x2))
@@ -457,6 +633,49 @@ def test_fit_and_predict_with_dups():
     print(F'train_transformed_X=\n{X2}')
     print(F'test_transformed_X=\n{X3}')
 
+def test_fit_and_predict_with_convex(task='classification'):
+    import pandas as pd
+
+    pp = pprint.PrettyPrinter(indent=4)
+    logging.basicConfig(format='test_fit_and_predict_with_convex %(asctime)s - %(message)s', level=logging.DEBUG)
+    X = np.array([
+        [ 0,  10, 0],
+        [ 0,  30, 0],
+        [ 0,  60, 0],
+        [ 0, 100, 0],
+        [ 0, 150, 0],
+
+        [ 1, 210, 0],
+        [ 1, 280, 0],
+        [ 1, 360, 0],
+        [ 1, 450, 0],
+        [ 1, 550, 0],
+
+        [ 2, 660, 0],
+        [ 2, 780, 0],
+        [ 2, 910, 0],
+        [ 2,1050, 0],
+        [ 2,1300, 0],
+
+        [ 2,1300, 0],
+    ])
+    X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
+    y = np.array([9,8,8,6,6,4,3,2,1,0,1,2,3,4,5,6])
+    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'], convex_cols = ['col2'], task='regression')
+    ilr.set_random_state(42+0)
+    X2 = ilr.fit_transform(X, y)
+    X3 = ilr.transform(X)
+    y1 = ilr.predict(X)
+    ilr.set_random_state(42+1)
+    x2 = ilr.ensure_total_order(X.iloc[:,0])
+    ordered_xs = list(zip(X.iloc[:,0],x2))
+    print(F'train_ordered_X={ordered_xs}')
+    print(F'train_transformed_X=\n{X2}')
+    print(F'test_transformed_X=\n{X3}')
+    print(F'test_predicted_X=\n{y1}')
+
 if __name__ == '__main__':
     test_fit_and_predict_proba()
     test_fit_and_predict_with_dups()
+    test_fit_and_predict_with_dups(task='regression')
+    test_fit_and_predict_with_convex(task='regression')
