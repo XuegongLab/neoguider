@@ -89,6 +89,7 @@ fifo_path_prefix = os.path.sep.join([config['fifo_dir'], tmpdirID])
 logging.debug(F'fifo_path_prefix={fifo_path_prefix}')
 
 variantcaller = config.get('variantcaller', 'uvc') # uvc or mutect2, please be aware that the performance of mutect2 is not evaluated. 
+stab_tmp = config.get('netmhcstabpan_tmp', '/tmp')
 
 ### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
 
@@ -573,14 +574,14 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores} --peplens {prep_peplens}'
         call_with_infolog(run_calculation)
     else:
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outputfile1} -n {path} -c {netmhc_ncores} --peplens {prep_peplens}'
-        remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
-        remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
-        remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {script_basedir}/fasta_partition.py {inputfile} {user}@{address}:/tmp/{outdir}/'
-        # remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_filt_thres} -H {hla_string}
+        remote_main_cmd = F'python {stab_tmp}/{outdir}/bindstab_filter.py -i {stab_tmp}/{inputfile} -o {stab_tmp}/{outputfile1} -n {path} -c {netmhc_ncores} --peplens {prep_peplens}'
+        remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r {stab_tmp}/{outdir}/ || true'
+        remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p {stab_tmp}/{outdir}/'
+        remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {script_basedir}/fasta_partition.py {inputfile} {user}@{address}:{stab_tmp}/{outdir}/'
+        # remote_main_cmd = F'python {stab_tmp}/{outdir}/bindstab_filter.py -i {stab_tmp}/{inputfile} -o {stab_tmp}/{outdir} -n {path} -b {binding_stability_filt_thres} -H {hla_string}
         remote_exe = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'        
-        remote_gzip = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} gzip --fast /tmp/{outputfile1} || true'
-        remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1}.gz {outdir}' 
+        remote_gzip = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} gzip --fast {stab_tmp}/{outputfile1} || true'
+        remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:{stab_tmp}/{outputfile1}.gz {outdir}' 
         call_with_infolog(remote_rmdir)
         call_with_infolog(remote_mkdir)
         call_with_infolog(remote_send)
@@ -678,14 +679,14 @@ def run_netMHCstabpan(bindstab_filter_py, inputfile = F'{pmhc_dir}/{PREFIX}_bind
     else:
         outputfile1 = F'{outdir}/{PREFIX}_bindstab_raw.txt'
         outputfile2 = F'{outdir}/{PREFIX}_candidate_pmhc.tsv'
-        remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r /tmp/{outdir}/ || true'
-        remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p /tmp/{outdir}/'
-        remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:/tmp/{outdir}/'
-        remote_main_cmd = F'python /tmp/{outdir}/bindstab_filter.py -i /tmp/{inputfile} -o /tmp/{outdir} -n {path} -b {binding_stability_filt_thres} -p {PREFIX}'
+        remote_rmdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} rm -r {stab_tmp}/{outdir}/ || true'
+        remote_mkdir = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} mkdir -p {stab_tmp}/{outdir}/'
+        remote_send = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {bindstab_filter_py} {inputfile} {user}@{address}:{stab_tmp}/{outdir}/'
+        remote_main_cmd = F'python {stab_tmp}/{outdir}/bindstab_filter.py -i {stab_tmp}/{inputfile} -o {stab_tmp}/{outdir} -n {path} -b {binding_stability_filt_thres} -p {PREFIX}'
         remote_exe = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} {remote_main_cmd}'
-        remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile1} {outdir}'
-        remote_receive2 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:/tmp/{outputfile2} {outdir}'
-        remote_gzip = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} gzip --fast /tmp/{outputfile1} /tmp/{outputfile2} || true'
+        remote_receive1 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:{stab_tmp}/{outputfile1} {outdir}'
+        remote_receive2 = F' sshpass -p "$StabPanRemotePassword" scp -P {port} {user}@{address}:{stab_tmp}/{outputfile2} {outdir}'
+        remote_gzip = F' sshpass -p "$StabPanRemotePassword" ssh -p {port} {user}@{address} gzip --fast {stab_tmp}/{outputfile1} {stab_tmp}/{outputfile2} || true'
         call_with_infolog(remote_rmdir)
         call_with_infolog(remote_mkdir)
         call_with_infolog(remote_send)
