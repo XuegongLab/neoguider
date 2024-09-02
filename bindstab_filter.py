@@ -29,16 +29,18 @@ def main(args_input = sys.argv[1:]):
     with open(all_vars_peptide_faa_summary) as jsonfile: hla2faa = json.load(jsonfile)
     all_vars_peptide_faa_partdir = os.path.dirname(os.path.realpath(all_vars_peptide_faa_summary))
     for hla_str, faa in sorted(hla2faa.items()):
+        partfaa = '{}.partition/{}'.format(infaa, faa)
+
         # peptide_to_pmhc_binding_affinity(F'{all_vars_peptide_faa_partdir}/{faa}', F'{all_vars_peptide_faa_partdir}/{faa}.netmhcpan.txt', hla_str)
         outtsv = args.outtsv + '.subdir/' + faa + '.netmhcstabpan.txt'
         call_with_infolog('rm -r {}.tmpdir/ || true'.format(outtsv))
         call_with_infolog('mkdir -p {}.tmpdir/'.format(outtsv))
         
-        call_with_infolog('''cat {} | awk '{{print $1}}' |  split -l 20 - {}.tmpdir/SPLITTED.'''.format(faa, outtsv))
+        call_with_infolog('''cat {} | awk '{{print $1}}' |  split -l 20 - {}.tmpdir/SPLITTED.'''.format(partfaa, outtsv))
         cmds = ['{} -f {}.tmpdir/{} -a {} -l {} -ia > {}.tmpdir/{}.{}.netMHCstabpan-result'
-                .format(netMHCstabpan_path, outtsv, faa, hla_str, peplens, outtsv, faafile, hla_str)
+                .format(netMHCstabpan_path, outtsv, faafile, hla_str, peplens, outtsv, faafile, hla_str)
                 # for hla_str in hla_strs 
-                for faafile in os.listdir('{}.tmpdir/'.format(outtsv)) if faafile.startswith('SPLITTED.')]
+                for faafile in os.listdir('{}.tmpdir/'.format(outtsv)) if (faafile.startswith('SPLITTED.') and not faafile.endswith('.netMHCstabpan-result'))]
         with open('{}.tmpdir/tmp.sh'.format(outtsv), 'w') as shfile:
             for cmd in cmds: shfile.write(cmd + '\n')
         # Each netmhcpan process uses much less than 100% CPU, so we can spawn many more processes
