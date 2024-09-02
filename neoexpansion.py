@@ -48,7 +48,7 @@ def alnscore_penalty(sequence1, neighbour1, blosum62):
             ret += scoremax - score
     return ret
 
-def pep2simpeps(bioseq, nbits, blosum62):
+def pep2simpeps(bioseq, nbits, editdist, blosum62):
     queue = [ bioseq ]
     seq2penalty = { bioseq : 0 }
     while queue:
@@ -56,27 +56,33 @@ def pep2simpeps(bioseq, nbits, blosum62):
         for neighbour in get_neighbour_seqs(nextseq):
             # neighbour is the original sequence whose TCR can cross react with bioseq
             penalty = alnscore_penalty(neighbour, bioseq, blosum62)
-            if not neighbour in seq2penalty and penalty * 0.5 <= nbits * (1.0 + sys.float_info.epsilon):
+            ed = calc_editdist(neighbour, bioseq)
+            if not neighbour in seq2penalty and penalty * 0.5 <= nbits * (1.0 + sys.float_info.epsilon) and ed <= editdist * (1.0 + sys.float_info.epsilon):
                 queue.append(neighbour)
                 seq2penalty[neighbour] = penalty * 0.5
     return seq2penalty
 
+def calc_editdist(A, B): return sum((0 if (a==b) else 1) for (a, b) in zip(A, B))
+
 def faa2newfaa(arg):
     blosum62 = substitution_matrices.load("BLOSUM62")
-    hdr, pep, nbits = arg
+    hdr, pep, (nbits, editdist) = arg
     pep2 = aaseq2canonical(pep)
     for aa in pep2:
         assert aa in ALPHABET, (F'The FASTA record (header={hdr}, sequence={pep}) contains non-standard amino-acid {aa} which is not in {ALPHABET}')
     logging.debug(F'Processing {hdr} {pep}')
     ret = []
-    seq2penalty = pep2simpeps(pep, nbits, blosum62)
+    seq2penalty = pep2simpeps(pep, nbits, editdist, blosum62)
     seqs = sorted(seq2penalty.keys())
     seqs.remove(pep)
     for i, simpep in enumerate([pep] + seqs):
         new_ID = hdr.split()[0] + (('_' + str(i)) if (i > 0) else '')
         pep_comment = ' '.join([tok for (j, tok) in enumerate(hdr.split()) if j > 0])
-        new_hdr = (F'{new_ID} {pep_comment} SOURCE={pep} MAX_BIT_DIST={seq2penalty[simpep]}')
+        assert len(pep) == len(simpep), F'len({pep}) == len({simpep}) failed'
+        curr_editdist = calc_editdist(pep, simpep)
+        new_hdr = (F'{new_ID} {pep_comment} SOURCE={pep} MAX_BIT_DIST={seq2penalty[simpep]} EDIT_DIST={curr_editdist}')
         new_seq = (simpep)
+        #if curr_editdist <= editdist: 
         ret.append((new_hdr, new_seq))
     return ret
 
@@ -173,6 +179,7 @@ def main():
             formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-b', '--nbits', type = float, help = 'max hamming distance by the number of bits. If this param is set, then do not expand by --reference', default = 0.75)
     parser.add_argument('-c', '--ncores', type = int, help = 'number of processes to use for computation. ', default = 8)
+    parser.add_argument('-e', '--editdist', type = float, help = 'max edit distance. ', default = 1.5)
     parser.add_argument('-r', '--reference', type = str, help = 'reference proteome fasta to blast against to match neo-peptides with self-peptides. If this param is set, then do not expand by --nbits. ', default = '')
     parser.add_argument('-t', '--tmp', type = str, help = 'temporary file path. ', default = '')
     
@@ -181,11 +188,11 @@ def main():
     hdr_pep_list = []
     for line in sys.stdin:
         if line.startswith('>'):
-            if hdr: hdr_pep_list.append((hdr, pep, args.nbits))
+            if hdr: hdr_pep_list.append((hdr, pep, (args.nbits, args.editdist)))
             hdr = line.strip()
         else:
             pep = line.strip()
-    if hdr: hdr_pep_list.append((hdr, pep, args.nbits))
+    if hdr: hdr_pep_list.append((hdr, pep, (args.nbits, args.editdist)))
     if args.reference != '':        
         blast_search(hdr_pep_list, args.reference, args.tmp, args.ncores)
         process_WT(hdr_pep_list)
