@@ -1,5 +1,8 @@
 species: 'Homo_sapiens' # will support Mus_musculus in the future
-hetero_nbits: 0.75      # will be part of future work
+hetero_nbits: 100.75      # will be part of future work
+hetero_editdist: 1.5    # will be part of future work
+keep_identical_ET_and_WT: 0
+keep_identical_MT_and_WT: 0
 
 ### Section 1: required input and output: one set-up per sample (dot (.) means NotAvailable)
 
