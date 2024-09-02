@@ -53,7 +53,7 @@ def hamming_dist(a, b):
     assert len(a) == len(b)
     return sum([(0 if (a1 == b1) else 1) for (a1, b1) in zip(a, b)])
 
-def alnscore_penalty(sequence, neighbour, blosum62, gap_open=-11, gap_ext=-1):
+def alnscore_bitdist(sequence, neighbour, blosum62, gap_open=-11, gap_ext=-1):
     assert len(sequence) == len(neighbour)
     ret = 0
     prev_gap_pos = -1-1
@@ -74,7 +74,7 @@ def alnscore_penalty(sequence, neighbour, blosum62, gap_open=-11, gap_ext=-1):
                 else:
                     score = blosum62[ba]
                 ret += scoremax - score
-    return ret
+    return ret * 0.5
 ''' 
 def bio_substr(s, subpos, sublen, is_zerolen_str_set_to_empty=True, skipchars=['-', '*']):
     ret = []
@@ -108,7 +108,7 @@ def aln_2(aligner, pep1, pep2):
     while aln1_str[j-1] == '-': j -= 1
     aln1_str = aln1_str[i:j]
     aln2_str = aln2_str[i:j]
-    return (aln1_str, aln2_str, hamming_dist(aln1_str, aln2_str), alnscore_penalty(aln1_str, aln2_str, aligner.substitution_matrix))
+    return (aln1_str, aln2_str, hamming_dist(aln1_str, aln2_str), alnscore_bitdist(aln1_str, aln2_str, aligner.substitution_matrix))
 
 def threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep):
     if wt_fpep != '':
@@ -246,21 +246,21 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, 
                         if len(et_pep) not in peplens: continue
                         mt_pep = st_pep = wt_pep = ''
                         if mt_fpep != '':
-                            et_mt_pep1_aln, et_mt_pep2_aln, et_mt_hamdist, et_mt_scoredist = aln_2(aligner, et_pep, mt_fpep)
+                            et_mt_pep1_aln, et_mt_pep2_aln, et_mt_hamdist, et_mt_bitdist = aln_2(aligner, et_pep, mt_fpep)
                             mt_pep = et_mt_pep2_aln.replace('-', '')
                         if st_fpep != '':
-                            mt_st_pep1_aln, mt_st_pep2_aln, mt_st_hamdist, mt_st_scoredist = aln_2(aligner, mt_pep, st_fpep)
+                            mt_st_pep1_aln, mt_st_pep2_aln, mt_st_hamdist, mt_st_bitdist = aln_2(aligner, mt_pep, st_fpep)
                             st_pep = mt_st_pep2_aln.replace('-', '')
                         if wt_fpep != '':
-                            mt_wt_pep1_aln, mt_wt_pep2_aln, mt_wt_hamdist, mt_wt_scoredist = aln_2(aligner, mt_pep, wt_fpep)
+                            mt_wt_pep1_aln, mt_wt_pep2_aln, mt_wt_hamdist, mt_wt_bitdist = aln_2(aligner, mt_pep, wt_fpep)
                             wt_pep = mt_wt_pep2_aln.replace('-', '')
                         
                         if et_pep != '' and mt_pep != '': 
-                            etpep_to_mtpep_list_dic[et_pep].append((et_mt_hamdist, et_mt_scoredist*0.5, mt_pep, et_mt_pep1_aln, et_mt_pep2_aln))
+                            etpep_to_mtpep_list_dic[et_pep].append((et_mt_hamdist, et_mt_bitdist, mt_pep, et_mt_pep1_aln, et_mt_pep2_aln))
                         if mt_pep != '' and st_pep != '': 
-                            mtpep_to_stpep_list_dic[mt_pep].append((mt_st_hamdist, mt_st_scoredist*0.5, st_pep, mt_st_pep1_aln, mt_st_pep2_aln))
+                            mtpep_to_stpep_list_dic[mt_pep].append((mt_st_hamdist, mt_st_bitdist, st_pep, mt_st_pep1_aln, mt_st_pep2_aln))
                         if mt_pep != '' and wt_pep != '': 
-                            mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hamdist, mt_wt_scoredist*0.5, wt_pep, mt_wt_pep1_aln, mt_wt_pep2_aln))
+                            mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hamdist, mt_wt_bitdist, wt_pep, mt_wt_pep1_aln, mt_wt_pep2_aln))
                         
                         if wt_pep != '': wtpep_to_fpep_list[wt_pep].append(wt_fpep)
                         if st_pep != '': stpep_to_fpep_list[st_pep].append(st_fpep)
@@ -557,6 +557,8 @@ def main():
     #        F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB,NB')
     parser.add_argument('-l', '--lengths', help = F'comma-separated tokens describing peptide lengths. '
             F'(same as the ones used by netMHCpan series)', required = False, default = '8,9,10,11,12')
+    parser.add_argument('--keep-identical-MT-and-WT', type=int, help = F'''Keep rows with identical MT (mutant type) and WT (wild type) columns''', default=0)
+    parser.add_argument('--keep-identical-ET-and-WT', type=int, help = F'''Keep rows with identical ET (heteroclitic type) and WT (wild type) columns''', default=0)
     
     args = parser.parse_args()
     peplens = [int(x) for x in args.lengths.split(',')]
@@ -580,8 +582,8 @@ def main():
     df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) 
             #& (df1['BindLevel'].isin(args.bind_levels.split(',')))
             & (df1['ET_pep'].str.len().isin(peplens))
-            & (df1['MT_pep'] != df1['WT_pep']) 
-            & (df1['ET_pep'] != df1['WT_pep'])]
+            &((df1['MT_pep'] != df1['WT_pep']) | args.keep_identical_MT_and_WT)
+            &((df1['ET_pep'] != df1['WT_pep']) | args.keep_identical_ET_and_WT)]
     df3 = df2.drop_duplicates(subset=['HLA_type','ET_pep'])
     df4 = df3.copy()
     col_ET_BindAff = df4['ET_BindAff'] #.copy()
