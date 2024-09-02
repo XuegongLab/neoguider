@@ -598,6 +598,10 @@ homologous_peptide_fasta = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 #if not isna(config.get('homologous_peptide_fasta', NA_REP)): homologous_peptide_fasta = config['homologous_peptide_fasta']
 
 hetero_nbits = config.get('hetero_nbits', 0.75)
+hetero_editdist = config.get('hetero_editdist', 1.5)
+keep_identical_MT_and_WT = config.get('keep_identical_MT_and_WT', 0)
+keep_identical_ET_and_WT = config.get('keep_identical_ET_and_WT', 0)
+
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_fasta, # dna_snvindel_wt_peptide_fasta,
            rna_snvindel_neopeptide_fasta, # rna_snvindel_wt_peptide_fasta,
@@ -608,7 +612,7 @@ rule Peptide_preprocessing:
     run:
         comma_sep_hla_str = ','.join(retrieve_hla_alleles())
         shell('cat {dna_snvindel_neopeptide_fasta} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
-            ' | python {script_basedir}/neoexpansion.py --nbits {hetero_nbits} > {dna_snvindel_neopeptide_fasta}.expansion')
+            ' | python {script_basedir}/neoexpansion.py --nbits {hetero_nbits} --editdist {hetero_editdist} > {dna_snvindel_neopeptide_fasta}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_fasta}.expansion ' # '{dna_snvindel_wt_peptide_fasta} '
             ' {rna_snvindel_neopeptide_fasta}           ' # '{rna_snvindel_wt_peptide_fasta} '
@@ -744,7 +748,7 @@ rule PrioPrep_with_all_TCRs_from_reads:
     output: features_extracted_from_reads_tsv #, final_pipeline_out
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l {prep_peplens}')
+              '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT}')
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
@@ -762,7 +766,7 @@ rule PrioPrep_with_all_TCRs_from_pMHCs:
     output: features_extracted_from_pmhcs_tsv
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l {prep_peplens}')
+              '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT}')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} '
             F''' {prioritization_function_params.replace('_', '-')}''')
