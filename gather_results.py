@@ -415,7 +415,22 @@ def main():
     keptdata1 = keptdata[keptdata['ET_pep']==keptdata['MT_pep']]
     keptdata2 = dropcols(keptdata1)
     
+    etpep2list = []
+    for etpep, mtpep in zip(keptdata['ET_pep'], keptdata['MT_pep']):
+        if len(etpep) != len(mtpep):
+            etpep2 = etpep.lower()
+        else:
+            etpep2 = []
+            for etaa, mtaa in zip(etpep, mtpep):
+                etpep2.append(etaa if (etaa == mtaa) else etaa.lower())
+            etpep2 = ''.join(etpep2)
+        etpep2list.append(etpep2)
+    keptdata['ET_pep'] = etpep2list
+    keptdata['MT_peplen'] = [len(mtpep) for mtpep in keptdata['MT_pep']]
+    keptdata = keptdata.sort_values(['HLA_type', 'MT_peplen', 'MT_pep', 'ET_pep'])
+    col2last(keptdata, 'PepTrace')
     keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=1, index=0, na_rep='NA')
+    
     keptdata2.to_csv(args.output_file,               sep='\t', header=1, index=0, na_rep='NA')
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
