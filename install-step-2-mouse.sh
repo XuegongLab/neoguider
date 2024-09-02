@@ -14,12 +14,19 @@ mkdir -p ${rootdir}/database && pushd ${rootdir}/database
 
 VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $2}' | awk -F. '{print $1}') # 109 #"105"
 
-wget -c http://ftp.ensembl.org/pub/release-109/variation/vep/mus_musculus_balbcj_vep_109_BALB_cJ_v1.tar.gz
+wget -c http://ftp.ensembl.org/pub/release-${VEP_version}/variation/vep/mus_musculus_balbcj_vep_109_BALB_cJ_v1.tar.gz
 tar xvzf mus_musculus_balbcj_vep_109_BALB_cJ_v1.tar.gz
-wget -c http://ftp.ensembl.org/pub/release-109/fasta/mus_musculus_balbcj/cdna/Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa.gz
+wget -c http://ftp.ensembl.org/pub/release-${VEP_version}/fasta/mus_musculus_balbcj/cdna/Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa.gz
 gunzip -fk Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa.gz
-wget -c http://ftp.ensembl.org/pub/release-109/fasta/mus_musculus_balbcj/pep/Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa.gz
+wget -c http://ftp.ensembl.org/pub/release-${VEP_version}/fasta/mus_musculus_balbcj/pep/Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa.gz
 gunzip -fk Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa.gz
+
+wget -c http://ftp.ensembl.org/pub/release-${VEP_version}/variation/vep/mus_musculus_c57bl6nj_vep_109_C57BL_6NJ_v1.tar.gz
+tar xvzf mus_musculus_c57bl6nj_vep_109_C57BL_6NJ_v1.tar.gz
+wget -c http://ftp.ensembl.org/pub/release-${VEP_version}/fasta/mus_musculus_c57bl6nj/cdna/Mus_musculus_c57bl6nj.C57BL_6NJ_v1.cdna.all.fa.gz
+gunzip -fk Mus_musculus_c57bl6nj.C57BL_6NJ_v1.cdna.all.fa.gz
+wget -c http://ftp.ensembl.org/pub/release-${VEP_version}/fasta/mus_musculus_c57bl6nj/pep/Mus_musculus_c57bl6nj.C57BL_6NJ_v1.pep.all.fa.gz
+gunzip -fk Mus_musculus_c57bl6nj.C57BL_6NJ_v1.pep.all.fa.gz
 
 wget -c https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play.tar.gz
 tar xvzf Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play.tar.gz
@@ -29,10 +36,8 @@ tar xvzf Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play.tar.gz
 # Mouse MHC (H2) alleles are not typed because the H2 alleles of the lab mouse strains are well known from the literature.
 #bwa index $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta
 
-for faa in Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa ; do # iedb.fasta; do # iedb.fasta is not used in the end
-    makeblastdb -in ${faa} -dbtype prot # in database
-    samtools faidx ${faa}
-done
+for faa in Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa Mus_musculus_c57bl6nj.C57BL_6NJ_v1.pep.all.fa ; do makeblastdb -in ${faa} -dbtype prot && samtools faidx ${faa} ; done
+# iedb.fasta; do # iedb.fasta is not used in the end
 
 bedtools sort \
     -faidx Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play/ctat_genome_lib_build_dir/ref_genome.fa.fai \
@@ -42,6 +47,7 @@ bedtools sort \
 bwa index Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play/ctat_genome_lib_build_dir/ref_genome.fa
 # kallisto index -i  GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.cdna.fa.kallisto-idx GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.cdna.fa
 kallisto index -i Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa.kallisto-idx Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa
+kallisto index -i Mus_musculus_c57bl6nj.C57BL_6NJ_v1.cdna.all.fa.kallisto-idx Mus_musculus_c57bl6nj.C57BL_6NJ_v1.cdna.all.fa
 
 ########## other databases for backward compatibility ##########
 
