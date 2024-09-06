@@ -1,6 +1,6 @@
-species: 'Homo_sapiens' # will support Mus_musculus in the future
-hetero_nbits: 100.75      # will be part of future work
-hetero_editdist: 1.5    # will be part of future work
+species: 'Homo_sapiens' # supports Mus_musculus with strain=C57BL_6NJ_v1 or strain=BALB_cJ_v1
+hetero_nbits: 100.75    # disable the nbits threshold
+hetero_editdist: 1.5    
 keep_identical_ET_and_WT: 0
 keep_identical_MT_and_WT: 0
 
@@ -24,6 +24,7 @@ prefix: '.'
 netmhcpan_cmd: '/mnt/d/code/neohunter/netMHCpan-4.1/netMHCpan'
 #netmhcstabpan_cmd: 'ssh://zxf@166.111.130.101:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
 netmhcstabpan_cmd: 'ssh://zxf@101.6.41.78:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
+netmhcstabpan_tmp: '/data8t_5/tmp'
 
 ### Section 3: parameters having some default values
 
