@@ -70,14 +70,26 @@ CTAT = config.get('ctat', F'{script_basedir}/database/GRCh37_gencode_v19_CTAT_li
 ASNEO_REF = config.get('asneo_ref', F'{script_basedir}/database/hg19.fa')          # The {CTAT} REF does not work with ASNEO
 ASNEO_GTF = config.get('asneo_gtf', F'{script_basedir}/database/hg19.refGene.gtf') # The {CTAT} gtf does not work with ASNEO
 
+vep_species = 'homo_sapiens'
+vep_assembly = 'GRCh37'
+vep_params = '--polyphen b --shift_hgvs 1 --sift b'
 if config.get('species') == 'Mus_musculus':
-    HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
-    CDNA_REF = config.get('cdna_ref', F'{script_basedir}/database/Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa') # .kallisto-idx
-    PEP_REF = config.get('pep_ref', F'{script_basedir}/database/Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa')
+    #HLA_REF = config.get('hla_ref', subprocess.check_output('printf $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta', shell=True).decode(sys.stdout.encoding))
     VEP_CACHE = config.get('vep_cache', F'{script_basedir}/database')
     CTAT = config.get('ctat', F'{script_basedir}/database/Mouse_GRCm39_M31_CTAT_lib_Nov092022.plug-n-play/ctat_genome_lib_build_dir/')
     ASNEO_REF = config.get('asneo_ref', F'{script_basedir}/database/mm39.fa')          # The {CTAT} REF does not work with ASNEO
     ASNEO_GTF = config.get('asneo_gtf', F'{script_basedir}/database/mm39.refGene.gtf') # The {CTAT} gtf does not work with ASNEO
+    vep_params = ''
+    if config.get('strain', '') in ['C57BL_6NJ_v1', '']:
+        CDNA_REF = config.get('cdna_ref', F'{script_basedir}/database/Mus_musculus_c57bl6nj.C57BL_6NJ_v1.cdna.all.fa')
+        PEP_REF = config.get('pep_ref', F'{script_basedir}/database/Mus_musculus_c57bl6nj.C57BL_6NJ_v1.pep.all.fa')   
+        vep_species = 'mus_musculus_c57bl6nj'
+        vep_assembly = 'C57BL_6NJ_v1'
+    if config.get('strain', '') in ['BALB_cJ_v1']:
+        CDNA_REF = config.get('cdna_ref', F'{script_basedir}/database/Mus_musculus_balbcj.BALB_cJ_v1.cdna.all.fa')
+        PEP_REF = config.get('pep_ref', F'{script_basedir}/database/Mus_musculus_balbcj.BALB_cJ_v1.pep.all.fa')
+        vep_species = 'mus_musculus_balbcj'
+        vep_assembly = 'BALB_cJ_v1'
 
 ### Section 5: parameters having some default values depending on other values
 REF = config.get('REF', F'{CTAT}/ref_genome.fa')
@@ -93,7 +105,7 @@ stab_tmp = config.get('netmhcstabpan_tmp', '/tmp')
 
 ### Section 6: parameters that were empirically determined to take advantage of multi-threading efficiently
 
-samtools_nthreads = 3
+samtools_nthreads = 2
 bcftools_nthreads = 3
 bwa_nthreads = max((workflow.cores // 4, 1))
 star_nthreads = max((workflow.cores // 4, 1))
@@ -105,7 +117,7 @@ mixcr_nthreads = max((workflow.cores // 2, 1))
 # We used the bwa and STAR RAM usage from https://link.springer.com/article/10.1007/s00521-021-06188-z/figures/3
 kallisto_mem_mb = 4000 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7202009/
 optitype_mem_mb = 40*1000 # bmcgenomics.biomedcentral.com/articles/10.1186/s12864-023-09351-z
-samtools_sort_mem_mb = 768 * (samtools_nthreads + 1)
+samtools_sort_mem_mb = 4000 * (samtools_nthreads + 1)
 bwa_mem_mb = 9000
 star_mem_mb = 32*1000
 uvc_mem_mb = uvc_nthreads_on_cmdline * 1536
@@ -316,7 +328,7 @@ rule RNA_tumor_preprocessing:
         shell(
         'rm {output.outbam}.tmp.*.bam || true '
         ' && samtools fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
-        ' | samtools sort -@ {samtools_nthreads} -o - - '
+        ' | samtools sort -m 4000M -T {rna_tumor_bam}.tmp -@ {samtools_nthreads} -o - - '
         ' | samtools markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_tumor_bam}'
         )
@@ -355,8 +367,9 @@ rule RNA_tumor_splicing_alignment:
         ' --sjdbScore 2 --alignSJDBoverhangMin 1 --genomeLoad NoSharedMemory --outFilterMatchNminOverLread 0.33 --outFilterScoreMinOverLread 0.33 '
         ''' --sjdbOverhang 150 --outSAMstrandField intronMotif –sjdbGTFfile {ASNEO_GTF} --outFileNamePrefix {asneo_out}/ --readFilesCommand 'gunzip -c' ''' 
         ' --outSAMtype BAM Unsorted --outTmpDir {fifo_path_prefix}.star.tmpdir '
+        ' && rm {rna_t_spl_bam}.tmp.*.bam || true '
         ' && samtools fixmate -@ {samtools_nthreads} -m {asneo_out}/Aligned.out.bam - '
-        ' | samtools sort -@ {samtools_nthreads} -o - -'
+        ' | samtools sort -m 4000M -T {rna_t_spl_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | samtools markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
         ' && samtools index -@ {samtools_nthreads} {rna_t_spl_bam}'
         )
@@ -381,7 +394,7 @@ rule DNA_tumor_alignment:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
         ' && bwa mem -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
         ' | samtools fixmate -@ {samtools_nthreads} -m - -'
-        ' | samtools sort -@ {samtools_nthreads} -o - -'
+        ' | samtools sort -m 4000M -T {dna_tumor_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | samtools markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
         ' && samtools index -@ {samtools_nthreads} {dna_tumor_bam}'
     
@@ -393,7 +406,7 @@ rule DNA_normal_alignment:
         'rm {dna_normal_bam}.tmp.*.bam || true'
         ' && bwa mem -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
         ' | samtools fixmate -@ {samtools_nthreads} -m - -'
-        ' | samtools sort -@ {samtools_nthreads} -o - -'
+        ' | samtools sort -m 4000M -T {dna_normal_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | samtools markdup -@ {samtools_nthreads} - {dna_normal_bam}'
         ' && samtools index -@ {samtools_nthreads} {dna_normal_bam}'
     
@@ -417,11 +430,11 @@ rule DNA_SmallVariant_detection:
             shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {dna_tumor_bam} -I {dna_normal_bam} -O {dna_vcf} 1> {dna_vcf}.stdout 2> {dna_vcf}.stderr ')
         else:
             shell(
-        'uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
+        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= {tumor_normal_var_qual}) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
-        ' && bash uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins'
+        ' && bash {script_basedir}/software/uvc-delins/bin/uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.uvcTN-delins'
         ' && bcftools view {output.vcf3} -Ov -o {dna_vcf}'
             )
 
@@ -440,28 +453,17 @@ rule RNA_SmallVariant_detection: # RNA filtering is more stringent
              shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {rna_tumor_bam} -I {dna_normal_bam} -O {rna_vcf} 1> {rna_vcf}.stdout 2> {rna_vcf}.stderr ')
          else:
              shell(
-        'uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
+        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 83) && (tAD[1] >= 7) && (tAD[1] >= (tAD[0] + tAD[1]) * 0.8) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
-        ' && bash uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins'
+        ' && bash {script_basedir}/software/uvc-delins/bin/uvcvcf-raw2delins-all.sh {REF} {output.vcf2} {snvindel_dir}/{PREFIX}_RNA_tumor_DNA_normal.uvcTN-delins'
         ' && bcftools view {output.vcf3} -Ov -o {rna_vcf}'
-        )
+            )
 
 # start-of-DNA-vep-mainline
 
 dna_variant_effect = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.variant_effect.tsv'
-if config.get('species', '') == 'Homo_sapiens':
-    vep_species = 'homo_sapiens'
-    vep_assembly = 'GRCh37'
-    vep_params = '--polyphen b --shift_hgvs 1 --sift b'
-elif config.get('species', '') == 'Mus_musculus':
-    vep_species = 'mus_musculus_balbcj'
-    vep_assembly = 'BALB_cJ_v1'
-    vep_params = ''
-else:
-    exit(-1)
-
 rule DNA_SmallVariant_effect_prediction:
     input: dna_vcf
     output: dna_variant_effect
