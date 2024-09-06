@@ -408,7 +408,8 @@ def main():
     data.Foreignness = data.Foreignness.astype(float)
     data.Agretopicity = data.Agretopicity.astype(str).replace(NA_VALS, np.nan).astype(float)
     data.Quantification = data.Quantification.astype(float)
-    
+   
+    col2last(data, 'SourceAlterationDetail')
     col2last(data, 'PepTrace')
     keptdata = data
     
@@ -422,15 +423,64 @@ def main():
         else:
             etpep2 = []
             for etaa, mtaa in zip(etpep, mtpep):
-                etpep2.append(etaa if (etaa == mtaa) else etaa.lower())
+                etpep2.append(etaa.upper() if (etaa == mtaa) else etaa.lower())
             etpep2 = ''.join(etpep2)
         etpep2list.append(etpep2)
-    keptdata['ET_pep'] = etpep2list
-    keptdata['MT_peplen'] = [len(mtpep) for mtpep in keptdata['MT_pep']]
-    keptdata = keptdata.sort_values(['HLA_type', 'MT_peplen', 'MT_pep', 'ET_pep'])
+    keptdata['ET_pep'] = etpep2list    
+    et2aff = {}
+    mt2aff = {}
+    et2wildcard = {}
+    wildcard2ets = collections.defaultdict(set)
+    for etpep, etaff, mtpep, mtaff in zip(keptdata['ET_pep'], keptdata['ET_BindAff'], keptdata['MT_pep'], keptdata['MT_BindAff']):
+        et2aff[etpep] = min((et2aff.get(etpep, float('inf')), etaff))
+        mt2aff[mtpep] = min((mt2aff.get(mtpep, float('inf')), mtaff))
+        wildcard = ''.join((etaa if etaa == etaa.upper() else 'x') for etaa in etpep)
+        et2wildcard[etpep] = wildcard
+        wildcard2ets[wildcard].add(etpep)
+    wcmt2binders = {}
+    wcet2binders = {}
+    n_ets_stronger_than_mt_list = []
+    n_ets_stronger_than_et_list = []
+    n_ets_weaker_than_mt_list = []
+    n_ets_weaker_than_et_list = []
+    wildcards = []
+    for etpep, etaff, mtpep, mtaff in zip(keptdata['ET_pep'], keptdata['ET_BindAff'], keptdata['MT_pep'], keptdata['MT_BindAff']):
+        wildcard = et2wildcard[etpep]
+        if (wildcard, mtpep) in wcmt2binders:
+            n_ets_stronger_than_mt, n_ets_weaker_than_mt = wcmt2binders[(wildcard, mtpep)]
+        else:
+            n_ets_stronger_than_mt, n_ets_weaker_than_mt = 0, 0
+            for etpep2 in wildcard2ets[wildcard]:
+                if et2aff[etpep2] < mtaff: n_ets_stronger_than_mt += 1
+                else:                      n_ets_weaker_than_mt += 1
+            wcmt2binders[(wildcard, mtpep)] = n_ets_stronger_than_mt, n_ets_weaker_than_mt
+        if (wildcard, etpep) in wcet2binders:
+            n_ets_stronger_than_et, n_ets_weaker_than_et = wcet2binders[(wildcard, etpep)]
+        else:
+            n_ets_stronger_than_et, n_ets_weaker_than_et = 0, 0
+            for etpep2 in wildcard2ets[wildcard]:
+                if et2aff[etpep2] < etaff: n_ets_stronger_than_et += 1
+                else:                      n_ets_weaker_than_et += 1
+            wcet2binders[(wildcard, etpep)] = n_ets_stronger_than_et, n_ets_weaker_than_et
+        n_ets_stronger_than_mt_list.append(n_ets_stronger_than_mt)
+        n_ets_stronger_than_et_list.append(n_ets_stronger_than_et)
+        n_ets_weaker_than_mt_list.append(n_ets_weaker_than_mt)
+        n_ets_weaker_than_et_list.append(n_ets_weaker_than_et)
+        wildcards.append(wildcard)
+    mt_peplens = [len(mtpep) for mtpep in keptdata['MT_pep']]
+    keptdata = keptdata.assign(
+        MT_peplen = mt_peplens, 
+        ETxpep    = wildcards, 
+        N_ETsbMT  = n_ets_stronger_than_mt_list, 
+        N_ETsbET  = n_ets_stronger_than_et_list, 
+        N_ETwbMT  = n_ets_weaker_than_mt_list, 
+        N_ETwbET  = n_ets_weaker_than_et_list)
+    keptdata = keptdata.sort_values(['HLA_type', 'MT_peplen', 'MT_pep', 'ETxpep', 'N_ETsbET', 'ET_pep'])
+    col2last(keptdata, 'SourceAlterationDetail')
     col2last(keptdata, 'PepTrace')
     keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=1, index=0, na_rep='NA')
-    
+    dropcols(keptdata, ['PepTrace']).to_csv(args.output_file + '.expansion.untraced', sep='\t', header=1, index=0, na_rep='NA')
+
     keptdata2.to_csv(args.output_file,               sep='\t', header=1, index=0, na_rep='NA')
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
