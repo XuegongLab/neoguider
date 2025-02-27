@@ -22,9 +22,10 @@ def get_val_by_key(fhdr, key):
                 val = v
     return val
 
-def get_neighbour_seqs(in_string_seq, alphabet = 'ARNDCQEGHILKMFPSTWYV'):
+def get_neighbour_seqs(in_string_seq, skipped_positions=[], alphabet='ARNDCQEGHILKMFPSTWYV'):
     ret = []
     for i in range(len(in_string_seq)):
+        if i in skipped_positions: continue
         sequence1 = [x for x in in_string_seq]
         for letter in alphabet: 
             sequence1[i] = letter
@@ -48,12 +49,12 @@ def alnscore_penalty(sequence1, neighbour1, blosum62):
             ret += scoremax - score
     return ret
 
-def pep2simpeps(bioseq, nbits, editdist, blosum62):
+def pep2simpeps(bioseq, nbits, editdist, blosum62, skipped_positions=[]):
     queue = [ bioseq ]
     seq2penalty = { bioseq : 0 }
     while queue:
         nextseq = queue.pop(0)
-        for neighbour in get_neighbour_seqs(nextseq):
+        for neighbour in get_neighbour_seqs(nextseq, skipped_positions):
             # neighbour is the original sequence whose TCR can cross react with bioseq
             penalty = alnscore_penalty(neighbour, bioseq, blosum62)
             ed = calc_editdist(neighbour, bioseq)
@@ -71,13 +72,18 @@ def faa2newfaa(arg):
     for aa in pep2:
         assert aa in ALPHABET, (F'The FASTA record (header={hdr}, sequence={pep}) contains non-standard amino-acid {aa} which is not in {ALPHABET}')
     logging.debug(F'Processing {hdr} {pep}')
+    skipped_positions = get_val_by_key(hdr, 'skipped_positions')
+    if skipped_positions:
+        skipped_positions = [int(x) for x in skipped_positions.split(',')]
+    else:
+        skipped_positions = []
     ret = []
-    seq2penalty = pep2simpeps(pep, nbits, editdist, blosum62)
+    seq2penalty = pep2simpeps(pep, nbits, editdist, blosum62, skipped_positions)
     seqs = sorted(seq2penalty.keys())
     seqs.remove(pep)
     for i, simpep in enumerate([pep] + seqs):
         new_ID = hdr.split()[0] + (('_' + str(i)) if (i > 0) else '')
-        pep_comment = ' '.join([tok for (j, tok) in enumerate(hdr.split()) if j > 0])
+        pep_comment = ' '.join([tok for (j, tok) in enumerate(hdr.split()) if j > 0])        
         assert len(pep) == len(simpep), F'len({pep}) == len({simpep}) failed'
         curr_editdist = calc_editdist(pep, simpep)
         new_hdr = (F'{new_ID} {pep_comment} SOURCE={pep} MAX_BIT_DIST={seq2penalty[simpep]} EDIT_DIST={curr_editdist}')
@@ -88,6 +94,14 @@ def faa2newfaa(arg):
 
 NA_REP = 'N/A'
 def runblast(query_seqs, target_fasta, output_file, ncores):
+    if isna(target_fasta):
+        ret1 = []
+        ret2 = []
+        for qseq in query_seqs:
+            ret1.append(qseq)
+            ret2.append([])
+        return ret1, ret2
+    
     query_fasta = F'{output_file}.query_seqs.fasta.tmp'
     with open(query_fasta, 'w') as query_fasta_file:
         for query_seq in query_seqs:
@@ -126,13 +140,15 @@ def blast_search(hdr_pep_list, reference, output_file, ncores):
     pep_list = [pep                        for (hdr, pep, _) in hdr_pep_list]
     hla_list = [get_val_by_key(hdr, 'HLA') for (hdr, pep, _) in hdr_pep_list]
     selfpeps1, alninfos1  = runblast(pep_list, reference, output_file, ncores)
-    pep2hla = {}
-    for hla, selfpep in zip(hla_list, selfpeps1):
-        if selfpep in pep2hla and pep2hla[selfpep] != hla:
-            logging.warning(F'The peptide {selfpep} has multiple mutant sequences with different HLA alleles {hla} and {pep2hla[selfpep]}')
-            pep2hla[selfpep] = pep2hla[selfpep] + ',' + hla
-        elif not (selfpep in pep2hla):
-            pep2hla[selfpep] = hla
+    pep2hla = collections.defaultdict(set)
+    for hla_csv, selfpep in zip(hla_list, selfpeps1):
+        for hla in hla_csv.split(','):
+            pep2hla[selfpep].add(hla)
+        #if selfpep in pep2hla and pep2hla[selfpep] != hla:
+        #    logging.warning(F'The peptide {selfpep} has multiple mutant sequences with different HLA alleles {hla} and {pep2hla[selfpep]}')
+        #    pep2hla[selfpep] = pep2hla[selfpep] + ',' + hla
+        #elif not (selfpep in pep2hla):
+        #    pep2hla[selfpep] = hla
     selfpeps = sorted(list(set(selfpeps1)))
     for (hdr, pep, _), selfpep, alninfo in zip(hdr_pep_list, selfpeps1, alninfos1):
         alninfo_str = json.dumps(sorted(alninfo)[::-1], separators=(',', ':'), sort_keys=True)
@@ -142,7 +158,7 @@ def blast_search(hdr_pep_list, reference, output_file, ncores):
         if isna(selfpep):
             logging.warning(F'The string (ST="{selfpep}") is not found in the list of peptides and is skipped. ')
             continue
-        hla = pep2hla[selfpep]
+        hla = ','.join(list(pep2hla[selfpep]))
         print(F'>SELF_{i+1} HLA={hla} ST={selfpep} IsHelperPeptide=1 IsSearchedFromSelfProteome=1')
         print(selfpep)
 
@@ -190,8 +206,10 @@ def main():
         if line.startswith('>'):
             if hdr: hdr_pep_list.append((hdr, pep, (args.nbits, args.editdist)))
             hdr = line.strip()
+            pep = ''
         else:
-            pep = line.strip()
+            assert hdr, F'Encountered sequence before header in FASTA input!'
+            pep += line.strip()
     if hdr: hdr_pep_list.append((hdr, pep, (args.nbits, args.editdist)))
     if args.reference != '':        
         blast_search(hdr_pep_list, args.reference, args.tmp, args.ncores)

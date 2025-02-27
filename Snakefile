@@ -91,6 +91,9 @@ if config.get('species') == 'Mus_musculus':
         vep_species = 'mus_musculus_balbcj'
         vep_assembly = 'BALB_cJ_v1'
 
+if 'CDNA_REF' in config: CDNA_REF = config['CDNA_REF']
+if  'PEP_REF' in config:  PEP_REF = config ['PEP_REF']
+
 ### Section 5: parameters having some default values depending on other values
 REF = config.get('REF', F'{CTAT}/ref_genome.fa')
 ERGO_PATH = config.get('ERGO_PATH', F'{ERGO_EXE_DIR}/Predict.py')
@@ -131,6 +134,8 @@ OPTITYPE_CONDA_ENV = 'optitype_env'
 OPTITYPE_CONFIG = f"{script_basedir}/software/optitype.config.ini"
 OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
+motif_file = F'{script_basedir}/database/all_peptides.motif.tsv'
+
 NA_REP = ''
 def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 def call_with_infolog(cmd, in_shell = True):
@@ -155,6 +160,12 @@ IS_ANY_TUMOR_SEQ_DATA_AS_INPUT = ((not isna(DNA_TUMOR_FQ1))  or (not isna(RNA_TU
 DNA_TUMOR_ISPE  = (not isna(DNA_TUMOR_FQ2))
 DNA_NORMAL_ISPE = (not isna(DNA_NORMAL_FQ2))
 RNA_TUMOR_ISPE  = (not isna(RNA_TUMOR_FQ2))
+
+def assert_not_equal(a, b, note): assert a != b, F'{a} != {b} failed ({note})'
+
+if DNA_TUMOR_ISPE:  assert_not_equal(DNA_TUMOR_FQ1,  DNA_TUMOR_FQ2,  'DNA tumor  FASTQ files')
+if DNA_NORMAL_ISPE: assert_not_equal(DNA_NORMAL_FQ1, DNA_NORMAL_FQ2, 'DNA normal FASTQ files')
+if RNA_TUMOR_ISPE:  assert_not_equal(RNA_TUMOR_FQ1,  RNA_TUMOR_FQ2,  'RNA tumor  FASTQ files')
 
 isRNAskipped = isna(RNA_TUMOR_FQ1)
 if isRNAskipped and not ('comma_sep_hla_list' in config):
@@ -222,6 +233,8 @@ elif os.path.exists(hla_out):
 
 logging.debug(F'HLA_REF = {HLA_REF}')
 
+samtools_bin = F'{script_basedir}/software/uvc/bin/samtools'
+
 rule RNA_tumor_HLA_typing_preparation:
     output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
     resources: mem_mb = bwa_mem_mb
@@ -229,8 +242,8 @@ rule RNA_tumor_HLA_typing_preparation:
     # Note: razers3 is too memory intensive, so bwa mem is used instead of the command
     # (razers3 --percent-identity 90 --max-hits 1 --distance-range 0 --output {hla_bam} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2})
     shell : '''
-        bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | samtools view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
-        samtools fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
+        bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | {samtools_bin} view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
+        {samtools_bin} fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
 if 'comma_sep_hla_list' in config: make_dummy_files([hla_out])
 rule HLA_typing:
     input: hla_fq_r1, hla_fq_r2, hla_fq_se
@@ -327,10 +340,10 @@ rule RNA_tumor_preprocessing:
     run:
         shell(
         'rm {output.outbam}.tmp.*.bam || true '
-        ' && samtools fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
-        ' | samtools sort -m 4000M -T {rna_tumor_bam}.tmp -@ {samtools_nthreads} -o - - '
-        ' | samtools markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
-        ' && samtools index -@ {samtools_nthreads} {rna_tumor_bam}'
+        ' && {samtools_bin} fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
+        ' | {samtools_bin} sort -m 4000M -T {rna_tumor_bam}.tmp -@ {samtools_nthreads} -o - - '
+        ' | {samtools_bin} markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
+        ' && {samtools_bin} index -@ {samtools_nthreads} {rna_tumor_bam}'
         )
 # This rule is not-used in the end results (but may still be needed for QC), so it is still kept
 HIGH_DP=1000*1000
@@ -341,7 +354,7 @@ rule RNA_postprocessing:
     output: rna_tumor_depth 
     #, rna_tumor_depth_summary
     shell:
-        ' samtools view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
+        ' {samtools_bin} view -hu -@ {samtools_nthreads} -F 0xD04 {rna_tumor_bam} '
         ' | bcftools mpileup --threads {bcftools_nthreads} -a DP,AD -d {HIGH_DP} -f {REF} -q 0 -Q 0 -T {CTAT}/ref_annot.gtf.mini.sortu.bed - -o {rna_tumor_depth} '
         ' && bcftools index --threads {bcftools_nthreads} -ft {rna_tumor_depth} '
         ''' && cat {CTAT}/ref_annot.gtf.mini.sortu.bed | awk '{{ i += 1; s += $3-$2 }} END {{ print "exome_total_bases\t" s; }}' > {rna_tumor_depth_summary} '''
@@ -368,10 +381,10 @@ rule RNA_tumor_splicing_alignment:
         ''' --sjdbOverhang 150 --outSAMstrandField intronMotif –sjdbGTFfile {ASNEO_GTF} --outFileNamePrefix {asneo_out}/ --readFilesCommand 'gunzip -c' ''' 
         ' --outSAMtype BAM Unsorted --outTmpDir {fifo_path_prefix}.star.tmpdir '
         ' && rm {rna_t_spl_bam}.tmp.*.bam || true '
-        ' && samtools fixmate -@ {samtools_nthreads} -m {asneo_out}/Aligned.out.bam - '
-        ' | samtools sort -m 4000M -T {rna_t_spl_bam}.tmp -@ {samtools_nthreads} -o - -'
-        ' | samtools markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
-        ' && samtools index -@ {samtools_nthreads} {rna_t_spl_bam}'
+        ' && {samtools_bin} fixmate -@ {samtools_nthreads} -m {asneo_out}/Aligned.out.bam - '
+        ' | {samtools_bin} sort -m 4000M -T {rna_t_spl_bam}.tmp -@ {samtools_nthreads} -o - -'
+        ' | {samtools_bin} markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
+        ' && {samtools_bin} index -@ {samtools_nthreads} {rna_t_spl_bam}'
         )
 
 rule RNA_splicing_peptide_generation:
@@ -393,10 +406,10 @@ rule DNA_tumor_alignment:
     shell:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
         ' && bwa mem -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
-        ' | samtools fixmate -@ {samtools_nthreads} -m - -'
-        ' | samtools sort -m 4000M -T {dna_tumor_bam}.tmp -@ {samtools_nthreads} -o - -'
-        ' | samtools markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
-        ' && samtools index -@ {samtools_nthreads} {dna_tumor_bam}'
+        ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
+        ' | {samtools_bin} sort -m 4000M -T {dna_tumor_bam}.tmp -@ {samtools_nthreads} -o - -'
+        ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
+        ' && {samtools_bin} index -@ {samtools_nthreads} {dna_tumor_bam}'
     
 rule DNA_normal_alignment:
     output: dna_normal_bam, dna_normal_bai
@@ -405,10 +418,10 @@ rule DNA_normal_alignment:
     shell:
         'rm {dna_normal_bam}.tmp.*.bam || true'
         ' && bwa mem -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
-        ' | samtools fixmate -@ {samtools_nthreads} -m - -'
-        ' | samtools sort -m 4000M -T {dna_normal_bam}.tmp -@ {samtools_nthreads} -o - -'
-        ' | samtools markdup -@ {samtools_nthreads} - {dna_normal_bam}'
-        ' && samtools index -@ {samtools_nthreads} {dna_normal_bam}'
+        ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
+        ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp -@ {samtools_nthreads} -o - -'
+        ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_normal_bam}'
+        ' && {samtools_bin} index -@ {samtools_nthreads} {dna_normal_bam}'
     
 gatk_jar=F'{script_basedir}/software/gatk-4.3.0.0/gatk-package-4.3.0.0-local.jar'
 
@@ -603,6 +616,7 @@ hetero_nbits = config.get('hetero_nbits', 0.75)
 hetero_editdist = config.get('hetero_editdist', 1.5)
 keep_identical_MT_and_WT = config.get('keep_identical_MT_and_WT', 0)
 keep_identical_ET_and_WT = config.get('keep_identical_ET_and_WT', 0)
+rescue_MT_from_binding_affinity_thres = config.get('rescue_MT_from_binding_affinity_thres', 0) # --rescue-MT-from-binding-affinity-thres
 
 rule Peptide_preprocessing:
     input: dna_snvindel_neopeptide_fasta, # dna_snvindel_wt_peptide_fasta,
@@ -750,15 +764,15 @@ rule PrioPrep_with_all_TCRs_from_reads:
     output: features_extracted_from_reads_tsv #, final_pipeline_out
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT}')
+              '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} '
+            F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' #' --passflag 0x0 '
             F''' {prioritization_function_params.replace('_', '-')}''')
         else:
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} ' # ' -S {splicing_info_file} '
+            F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} ' # ' -S {splicing_info_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
             F''' {prioritization_function_params.replace('_', '-')}''')
@@ -768,9 +782,9 @@ rule PrioPrep_with_all_TCRs_from_pMHCs:
     output: features_extracted_from_pmhcs_tsv
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
-              '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT}')
+              '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} '
+            F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} -m {motif_file} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
 # This directory contains files generated by Validation_with_all_TCRs_from_pMHCs on data posted at https://figshare.com/s/147e67dde683fb769908 
@@ -820,7 +834,7 @@ rule Validation_with_all_TCRs_from_reads:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {features_extracted_from_reads_tsv} -t {alteration_type}'
+            F' -o {features_extracted_from_reads_tsv} -t {alteration_type} -m {motif_file}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
 rule Validation_with_all_TCRs_from_pMHCs:
@@ -830,7 +844,7 @@ rule Validation_with_all_TCRs_from_pMHCs:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type}'
+            F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} -m {motif_file}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
 ### auxiliary prioritization rules

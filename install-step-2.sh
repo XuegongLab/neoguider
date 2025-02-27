@@ -122,3 +122,6 @@ gunzip -fk hg19.refGene.gtf.gz
 
 # download refseq annotation for hg19
 
+wget http://mhcmotifatlas.org/data/classI/MS/Peptides/all_peptides.txt
+python ../neomotif.py -i all_peptides.txt -o all_peptides -p GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_annot.pep
+

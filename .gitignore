@@ -4,4 +4,6 @@ model/
 models/
 figs/*.pdf
 figs/*.pdf.txt
+figs/*.ttf
 seafile-ignore.txt
+_aux/

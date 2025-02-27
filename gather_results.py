@@ -15,6 +15,7 @@ import pysam
 NA_REP = 'N/A'
 BIG_INT = 2**32
 DROP_COLS = [
+    'ETinfo',
     'ET_pep',     #'MT_pep',     'ST_pep',     'WT_pep',
     'ET_BindAff', # 'MT_BindAff', 'ST_BindAff', 'WT_BindAff',
     'ET_MT_pairAln', 'ET_ST_pairAln', 'ET_WT_pairAln', # 'MT_ST_pairAln', 'MT_WT_pairAln',
@@ -25,6 +26,8 @@ DROP_COLS = [
 def u2d(s): return '--' + s.replace('_', '-')
 
 def aaseq2canonical(aaseq): return aaseq.upper().replace('U', 'X').replace('O', 'X')
+
+def norm_mhc(mhc): return mhc.replace('*', '').replace('HLA-', '').replace(':', '').replace('-', '')
 
 def col2last(df, colname): return (df.insert(len(df.columns)-1, colname, df.pop(colname)) if colname in df.columns else -1) # return operation status
 def dropcols(df, colnames = DROP_COLS):
@@ -175,6 +178,92 @@ def allblast(query_seqs, target_fasta, output_file):
             if is_canonical: ret[qseqid].append(sseq)
     return ret
 
+def compute_info(mhc, peptide, motifdf):
+    if isna(mhc) or isna(peptide):
+        logging.warning(F'MHC={mhc} Pep={peptide} is of type N/A')
+        return np.nan
+    ret = 0
+    mhc = norm_mhc(mhc)
+    #if mhc not in set(motifdf['MHC']): 
+    #    logging.warning(F'{mhc} is not found in DB')
+    #    return np.nan
+    peptide = peptide.upper()
+    peplen = len(peptide)
+    if (mhc, peplen) not in motifdf:
+        logging.warning(F'MHC={mhc} Len={peplen} is not found in DB')
+        return np.nan
+    #subdf = motifdf.loc[((motifdf['MHC']==mhc) & (motifdf['Len']==peplen)),:]
+    subdf = motifdf[(mhc, peplen)]
+    #print(subdf)
+    #print(peptide)
+    for pos in range(peplen):
+        #vals = subdf.loc[subdf['Pos']==pos,peptide[pos]].values
+        #if not vals:
+        #    logging.warning(F'Skipping MHC={mhc} with peptide={peptide} and pos={pos} where AA={peptide[pos]}')
+        #else:
+        #    ret += vals[0]
+        # https://stackoverflow.com/questions/16729574/how-can-i-get-a-value-from-a-cell-of-a-dataframe
+        pos2 = subdf['Pos'].iloc[pos]
+        assert pos == pos2, F'{pos} == {pos2} failed for MHC={mhc} peptide={peptide}'
+        aa = peptide[pos]
+        if aa == 'X':
+            val = 0
+        else:
+            val = subdf[aa].iloc[pos]
+        ret += float(val)
+    return ret
+
+# zip(keptdata['ET_pep'], keptdata['ET_BindAff'], keptdata['MT_pep'], keptdata['MT_BindAff']):
+def df2ranks(et_pep_list, et_rank_list, mt_pep_list, mt_rank_list, transf1=lambda x:x, transf2=lambda x:x):
+    et2aff = {}
+    mt2aff = {}
+    et2wildcard = {}
+    wildcard2ets = collections.defaultdict(set)
+    for etpep, etaff, mtpep, mtaff in zip(et_pep_list, et_rank_list, mt_pep_list, mt_rank_list):
+        et2aff[etpep] = min((et2aff.get(etpep, float('inf')), etaff))
+        mt2aff[mtpep] = min((mt2aff.get(mtpep, float('inf')), mtaff))
+        wildcard = ''.join((etaa if etaa == etaa.upper() else 'x') for etaa in etpep)
+        et2wildcard[etpep] = wildcard
+        wildcard2ets[wildcard].add(etpep)
+    wc2avgaff = {}
+    for wildcard in sorted(wildcard2ets.keys()):
+        if wildcard not in wc2avgaff:
+            wc2avgaff[wildcard] = np.mean(list(et2aff[etpep2] for etpep2 in wildcard2ets[wildcard]))
+    wcmt2binders = {}
+    wcet2binders = {}
+    n_ets_more_bind_than_mt_list = []
+    n_ets_more_bind_than_et_list = []
+    n_ets_less_bind_than_mt_list = []
+    n_ets_less_bind_than_et_list = []
+    wildcards = []
+    avgaff_list = []
+    for etpep, etaff, mtpep, mtaff in zip(et_pep_list, et_rank_list, mt_pep_list, mt_rank_list):
+        wildcard = et2wildcard[etpep]
+        if (wildcard, mtpep) in wcmt2binders:
+            n_ets_more_bind_than_mt, n_ets_less_bind_than_mt = wcmt2binders[(wildcard, mtpep)]
+        else:
+            n_ets_more_bind_than_mt, n_ets_less_bind_than_mt = 0, 0
+            for etpep2 in wildcard2ets[wildcard]:
+                if et2aff[etpep2] < mtaff: n_ets_more_bind_than_mt += 1
+                else:                      n_ets_less_bind_than_mt += 1            
+            wcmt2binders[(wildcard, mtpep)] = n_ets_more_bind_than_mt, n_ets_less_bind_than_mt
+        if (wildcard, etpep) in wcet2binders:
+            n_ets_more_bind_than_et, n_ets_less_bind_than_et = wcet2binders[(wildcard, etpep)]
+        else:
+            n_ets_more_bind_than_et, n_ets_less_bind_than_et = 0, 0
+            for etpep2 in wildcard2ets[wildcard]:
+                if et2aff[etpep2] < etaff: n_ets_more_bind_than_et += 1
+                else:                      n_ets_less_bind_than_et += 1
+            wcet2binders[(wildcard, etpep)] = n_ets_more_bind_than_et, n_ets_less_bind_than_et
+        n_ets_more_bind_than_mt_list.append(n_ets_more_bind_than_mt)
+        n_ets_more_bind_than_et_list.append(n_ets_more_bind_than_et)
+        n_ets_less_bind_than_mt_list.append(n_ets_less_bind_than_mt)
+        n_ets_less_bind_than_et_list.append(n_ets_less_bind_than_et)
+        wildcards.append(wildcard)
+        avgaff_list.append(wc2avgaff[wildcard])
+    return wildcards, avgaff_list, n_ets_more_bind_than_mt_list, n_ets_more_bind_than_et_list, n_ets_less_bind_than_mt_list, n_ets_less_bind_than_et_list
+ 
+
 def main():
     description = 'This script gathers the results from netMHC, netMHCstabpan and other tools. '
     
@@ -184,6 +273,9 @@ def main():
     
     parser.add_argument('-i', u2d('input_file'), help = 'Input file generated by bindstab_filter.py (binding-stability filter)', required = True)
     parser.add_argument('-I', u2d('iedb_fasta'), help = 'path to IEDB reference fasta file containing pathogen-derived immunogenic peptides', required = True)
+    parser.add_argument('-m',  u2d('motif'), default = '',
+            help = 'The MHC motif TSV file')
+
     parser.add_argument('-o', u2d('output_file'), help = 'output file to store results of neoantigen prioritization', required = True)
     
     parser.add_argument('-D', u2d('dna_detail'), help = 'Optional input file providing SourceAlterationDetail for SNV and InDel variants from DNA-seq', default = '')
@@ -217,7 +309,15 @@ def main():
     args = parser.parse_args()
     paramset = args
     logging.info(paramset)
-    
+
+    motif_df = pd.read_csv(args.motif, sep='\t')
+    motif_df['MHC'] = [norm_mhc(mhc) for mhc in list(motif_df['MHC'])]
+    # https://stackoverflow.com/questions/33742588/pandas-split-dataframe-by-column-value
+    motif_df2 = {x : y for (x, y) in motif_df.groupby(['MHC', 'Len'], as_index=False)}
+    #print(motif_df2.keys())
+    #info = compute_info('H2:*-:Ld', 'LPFQFAHHL', motif_df)
+    #print(F'TestInfo={info}')
+
     if not isna(args.truth_file):
         def norm_hla(h): return h.astype(str).str.replace('*', '', regex=False).str.replace('HLA-', '', regex=False).str.replace(':', '', regex=False).str.strip()
         origdata = pd.read_csv(args.truth_file)
@@ -285,7 +385,7 @@ def main():
     for line1 in reader:
         assert not '|' in line1[et_pep_idx], F'The line {line1} is characterized by invalid ET_pep {line1[et_pep_idx]}'
         if line1[et_pep_idx] in line1[wt_pep_idx].split('|'):
-            logging.info(F'Skipping the peptide candidate {line1[et_pep_idx]} because it is found in the list of wild-type peptides {line1[wt_pep_idx]}')
+            logging.debug(F'Should skip the peptide candidate {line1[et_pep_idx]} because it is found in the list of wild-type peptides {line1[wt_pep_idx]}')
         line = copy.deepcopy(line1)
         line.append(-1)
         dna_varqual = 0
@@ -409,6 +509,15 @@ def main():
     data.Agretopicity = data.Agretopicity.astype(str).replace(NA_VALS, np.nan).astype(float)
     data.Quantification = data.Quantification.astype(float)
    
+    logging.info('Start compute_info')
+    data = data.assign(
+        ETinfo = [round(compute_info(mhc, et_pep, motif_df2), 5) for mhc, et_pep in zip(data['HLA_type'], data['ET_pep'])],
+        MTinfo = [round(compute_info(mhc, mt_pep, motif_df2), 5) for mhc, mt_pep in zip(data['HLA_type'], data['MT_pep'])],
+        STinfo = [round(compute_info(mhc, st_pep, motif_df2), 5) for mhc, st_pep in zip(data['HLA_type'], data['ST_pep'])],
+        WTinfo = [round(compute_info(mhc, wt_pep, motif_df2), 5) for mhc, wt_pep in zip(data['HLA_type'], data['WT_pep'])])
+    
+    logging.info('End compute_info')
+
     col2last(data, 'SourceAlterationDetail')
     col2last(data, 'PepTrace')
     keptdata = data
@@ -427,55 +536,26 @@ def main():
             etpep2 = ''.join(etpep2)
         etpep2list.append(etpep2)
     keptdata['ET_pep'] = etpep2list    
-    et2aff = {}
-    mt2aff = {}
-    et2wildcard = {}
-    wildcard2ets = collections.defaultdict(set)
-    for etpep, etaff, mtpep, mtaff in zip(keptdata['ET_pep'], keptdata['ET_BindAff'], keptdata['MT_pep'], keptdata['MT_BindAff']):
-        et2aff[etpep] = min((et2aff.get(etpep, float('inf')), etaff))
-        mt2aff[mtpep] = min((mt2aff.get(mtpep, float('inf')), mtaff))
-        wildcard = ''.join((etaa if etaa == etaa.upper() else 'x') for etaa in etpep)
-        et2wildcard[etpep] = wildcard
-        wildcard2ets[wildcard].add(etpep)
-    wcmt2binders = {}
-    wcet2binders = {}
-    n_ets_stronger_than_mt_list = []
-    n_ets_stronger_than_et_list = []
-    n_ets_weaker_than_mt_list = []
-    n_ets_weaker_than_et_list = []
-    wildcards = []
-    for etpep, etaff, mtpep, mtaff in zip(keptdata['ET_pep'], keptdata['ET_BindAff'], keptdata['MT_pep'], keptdata['MT_BindAff']):
-        wildcard = et2wildcard[etpep]
-        if (wildcard, mtpep) in wcmt2binders:
-            n_ets_stronger_than_mt, n_ets_weaker_than_mt = wcmt2binders[(wildcard, mtpep)]
-        else:
-            n_ets_stronger_than_mt, n_ets_weaker_than_mt = 0, 0
-            for etpep2 in wildcard2ets[wildcard]:
-                if et2aff[etpep2] < mtaff: n_ets_stronger_than_mt += 1
-                else:                      n_ets_weaker_than_mt += 1
-            wcmt2binders[(wildcard, mtpep)] = n_ets_stronger_than_mt, n_ets_weaker_than_mt
-        if (wildcard, etpep) in wcet2binders:
-            n_ets_stronger_than_et, n_ets_weaker_than_et = wcet2binders[(wildcard, etpep)]
-        else:
-            n_ets_stronger_than_et, n_ets_weaker_than_et = 0, 0
-            for etpep2 in wildcard2ets[wildcard]:
-                if et2aff[etpep2] < etaff: n_ets_stronger_than_et += 1
-                else:                      n_ets_weaker_than_et += 1
-            wcet2binders[(wildcard, etpep)] = n_ets_stronger_than_et, n_ets_weaker_than_et
-        n_ets_stronger_than_mt_list.append(n_ets_stronger_than_mt)
-        n_ets_stronger_than_et_list.append(n_ets_stronger_than_et)
-        n_ets_weaker_than_mt_list.append(n_ets_weaker_than_mt)
-        n_ets_weaker_than_et_list.append(n_ets_weaker_than_et)
-        wildcards.append(wildcard)
+    wildcards1, avg_bind_list, n_ets_more_bind_than_mt_list, n_ets_more_bind_than_et_list, n_ets_less_bind_than_mt_list, n_ets_less_bind_than_et_list = df2ranks(
+        keptdata['ET_pep'], keptdata['ET_BindAff'], keptdata['MT_pep'], keptdata['MT_BindAff'])
+    wildcards2, avg_info_list, n_ets_more_info_than_mt_list, n_ets_more_info_than_et_list, n_ets_less_info_than_mt_list, n_ets_less_info_than_et_list = df2ranks(
+        keptdata['ET_pep'], -keptdata['ETinfo'], keptdata['MT_pep'], -keptdata['MTinfo'])
+    assert wildcards1 == wildcards2
     mt_peplens = [len(mtpep) for mtpep in keptdata['MT_pep']]
     keptdata = keptdata.assign(
-        MT_peplen = mt_peplens, 
-        ETxpep    = wildcards, 
-        N_ETsbMT  = n_ets_stronger_than_mt_list, 
-        N_ETsbET  = n_ets_stronger_than_et_list, 
-        N_ETwbMT  = n_ets_weaker_than_mt_list, 
-        N_ETwbET  = n_ets_weaker_than_et_list)
-    keptdata = keptdata.sort_values(['HLA_type', 'MT_peplen', 'MT_pep', 'ETxpep', 'N_ETsbET', 'ET_pep'])
+        EXinfo  = np.round(avg_info_list, 5),
+        MTlen   = mt_peplens,
+        EXpep   = wildcards1,
+        NmAffMT = n_ets_more_bind_than_mt_list, 
+        NmAffET = n_ets_more_bind_than_et_list, 
+        NlAffMT = n_ets_less_bind_than_mt_list, 
+        NlAffET = n_ets_less_bind_than_et_list,
+        NmInfMT = n_ets_more_info_than_mt_list,
+        NmInfET = n_ets_more_info_than_et_list,
+        NlInfMT = n_ets_less_info_than_mt_list,
+        NlInfET = n_ets_less_info_than_et_list,
+    )
+    keptdata = keptdata.sort_values(['HLA_type', 'MTlen', 'MT_pep', 'EXpep', 'NmInfET', 'ET_pep'])
     col2last(keptdata, 'SourceAlterationDetail')
     col2last(keptdata, 'PepTrace')
     keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=1, index=0, na_rep='NA')
@@ -487,5 +567,6 @@ def main():
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
     
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(pathname)s:%(lineno)d %(levelname)s - %(message)s')
     main()
 

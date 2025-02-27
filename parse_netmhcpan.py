@@ -139,7 +139,7 @@ def threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep):
         wt_aln_str = '-' * len(et_fpep) # ret3
     return (wt_aln_str, mt_aln_str, et_aln_str)
 
-def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, binding_affinity_thres, peplens):
+def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, binding_affinity_thres, peplens, rescue_MT_from_binding_affinity_thres):
     """ This function assumes that there is a one-to-one correspondence between peptide and RNA transcript in fasta_filename. """
     blosum62 = aligner.substitution_matrix
     
@@ -242,7 +242,7 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, 
                         end = beg + peplen
                         if end > len(et_fpep): continue
                         et_pep = et_fpep[beg:end]
-                        if etpep_to_min_aff.get(et_pep, -float('inf')) > binding_affinity_thres: continue
+                        if etpep_to_min_aff.get(et_pep, -float('inf')) > binding_affinity_thres and not (et_fpep == mt_fpep and rescue_MT_from_binding_affinity_thres): continue
                         if len(et_pep) not in peplens: continue
                         mt_pep = st_pep = wt_pep = ''
                         if mt_fpep != '':
@@ -557,6 +557,7 @@ def main():
     #        F'(a combination of SB/WB/NB denoting strong/weak/no binding)', required = False, default = 'SB,WB,NB')
     parser.add_argument('-l', '--lengths', help = F'comma-separated tokens describing peptide lengths. '
             F'(same as the ones used by netMHCpan series)', required = False, default = '8,9,10,11,12')
+    parser.add_argument('--rescue-MT-from-binding-affinity-thres', type=int, help='The param --binding-affinity-thres is not applied to MT peptides', default=0)
     parser.add_argument('--keep-identical-MT-and-WT', type=int, help = F'''Keep rows with identical MT (mutant type) and WT (wild type) columns''', default=0)
     parser.add_argument('--keep-identical-ET-and-WT', type=int, help = F'''Keep rows with identical ET (heteroclitic type) and WT (wild type) columns''', default=0)
     
@@ -576,7 +577,7 @@ def main():
     aligner.substitution_matrix = blosum62
     
     df0, etpep_mhc_to_aff = netmhcpan_result_to_df(args.netmhcpan_file)
-    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file, aligner, etpep_mhc_to_aff, args.binding_affinity_thres, peplens)
+    et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup = build_pep_ID_to_seq_info_TPM_dic(args.fasta_file, aligner, etpep_mhc_to_aff, args.binding_affinity_thres, peplens, args.rescue_MT_from_binding_affinity_thres)
     logging.info(F'Finished build_pep_ID_to_seq_info_TPM_dic')
     df1 = netmhcpan_df_in2out(df0, etpep_mhc_to_aff, et2mt_mt2wt_2tup_pep2pep, et_mt_wt_3tup_pep2fpep, fpep2fid_fid2finfo_3tup, aligner)
     df2 = df1[(df1['ET_BindAff'] <= args.binding_affinity_thres) 
