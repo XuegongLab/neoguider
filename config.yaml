@@ -44,6 +44,7 @@ agretopicity_thres: 1e9 # 0.100
 foreignness_thres: -1 # 1.00e-16
 
 alteration_type: 'snv,indel,fsv,fusion,splicing'
+more_alteration_type: 'self,wild' # self and wild rescue mutant peptides that mutated into self and wild-type peptides (this mutation occurs rarely)
 
 netmhc_ncores: 128
 netmhc_nthreads: 2
