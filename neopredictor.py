@@ -9,7 +9,7 @@ from collections import defaultdict, namedtuple
 
 from scipy import stats
 
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.compose import ColumnTransformer
 # Modified from https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
@@ -116,9 +116,10 @@ def assess_top20_top50_top100_ttif_fr_auprc(df):
     top100 = len([r for r in ranks if (r <= 100)])
     ttif = safediv(top20, len(df0.loc[df0['Rank'] <= 20, :]))
     fr = safediv(top100, len(ranks))
-    auprc = (roc_auc_score(df0['VALIDATED'], -df0['Rank']) if (set(df0['VALIDATED']) == set([0, 1])) else np.nan)
-    PerformanceResult = namedtuple("PerformanceResult", "top20 top50 top100 TTIF FR AUPRC TFA_mean")
-    return PerformanceResult(top20, top50, top100, ttif, fr, auprc, np.mean([ttif, fr, auprc]))
+    auroc = (roc_auc_score(df0['VALIDATED'], -df0['Rank']) if (set(df0['VALIDATED']) == set([0, 1])) else np.nan)
+    auprc = (average_precision_score(df0['VALIDATED'], -df0['Rank']) if (set(df0['VALIDATED']) == set([0, 1])) else np.nan)
+    PerformanceResult = namedtuple("PerformanceResult", "top20 top50 top100 TTIF FR AUPRC TFA_mean AUROC")
+    return PerformanceResult(top20, top50, top100, ttif, fr, auprc, np.mean([ttif, fr, auprc]), auroc)
 
 def filtdf(df, peplens):
     if not ('PepTrace' in df.columns): return df
