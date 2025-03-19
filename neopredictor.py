@@ -82,7 +82,7 @@ PREDICTORS = {
     'LR' : LogisticRegression(random_state=0),
     # Tree-based algorithms other than the ones used above:
     'eET': ExtraTreesClassifier(random_state=0),
-    'eGB': GradientBoostingClassifier(random_state=0),
+    'eGB': GradientBoostingClassifier(random_state=0), # GB is similar to XGB
     'eXGB': XGBClassifier(random_state=0),
 }
 
@@ -347,8 +347,8 @@ def main():
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
         required=False, nargs='+', default=[
-        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
-        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity'])
+        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested',
+        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile'])
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')
 
     args = parser.parse_args()
