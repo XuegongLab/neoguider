@@ -48,6 +48,20 @@ fi
 ## You have to go to the following three web-pages to manually download netMHCpan and netMHCstabpan and manually request for the licenses to use them
 ## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux # used alone
 ## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCstabpan&version=1.0&packageversion=1.0a&platform=Linux
+
+# IMPORTNT-NOTE: PRIME and MixMHCpred are free for non-commercial use only. For commercial use, please contact the GfellerLab
+mkdir -p ${rootdir}/software/prime && pushd ${rootdir}/software/prime
+git clone https://github.com/GfellerLab/PRIME.git
+pushd PRIME && git checkout e798aad && popd
+g++ -O3 PRIME/lib/PRIME.cc -o PRIME/lib/PRIME.x
+git clone https://github.com/GfellerLab/MixMHCpred.git
+pushd MixMHCpred && git checkout 0a7f9b9
+chmod +x MixMHCpred
+chmod +x install_packages && ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)
+# chmod +x setup_path && ./setup_path # recommended by the authors of MixMHCpred but not needed here
+popd
+popd
+
 ## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=2.8&packageversion=2.8a&platform=Linux # used with netMHCstabpan
 
 if [ $(echo "$1" | grep -cP "skip-mutect2|skip-all-software") -eq 0 ]; then
