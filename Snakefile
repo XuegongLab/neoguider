@@ -52,7 +52,8 @@ tumor_abundance_filt_thres = config['tumor_abundance_filt_thres']
 agretopicity_thres = config['agretopicity_thres']
 foreignness_thres = config['foreignness_thres']
 alteration_type = config['alteration_type']
-
+more_alteration_type = config['more_alteration_type']
+if more_alteration_type: alteration_type = more_alteration_type + ',' + alteration_type
 netmhc_ncores = config['netmhc_ncores']
 netmhc_nthreads = config['netmhc_nthreads']
 ergo2_nthreads = config['ergo2_nthreads']
@@ -605,6 +606,18 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         call_with_infolog(remote_receive1)
         call_with_infolog(F'gzip -d {outputfile1}.gz')
 
+prime_cmd = '/mnt/d/code/neoguider/software/prime/PRIME/PRIME'
+mixmhcpred_path = '/mnt/d/code/neoguider/software/prime/MixMHCpred/MixMHCpred'
+def norm_hla(h): return h.replace('*', '').replace('HLA-', '').replace(':', '').replace('H-2-', 'H2-').strip()
+def peptide_to_pmhc_immunogenicity(infaa, outtsv, hla_string_orig):
+    hla_string = ','.join([norm_hla(h) for h in hla_string_orig.split(',')])
+    call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true && mkdir -p {outtsv}.tmpdir/')
+    # The numbers 8 and 14 are the Lmin and Lmax from PRIME/lib/run_PRIME.pl
+    call_with_infolog(F'''cat {infaa} | grep -v "^>" | awk -v N1=8 -v N2=14 '{{ for (N=N1; N<=N2; N++) for (i = 1; i <= length($0) - N + 1; i++) print substr($0, i, N) }}' > {outtsv}.seqs.txt''')
+    cmd = F'{prime_cmd} -i {outtsv}.seqs.txt -mix {mixmhcpred_path} -a {hla_string} -o {outtsv}'
+    call_with_infolog(cmd)
+    return {norm_hla(h) : h for h in hla_string_orig.split(',')}
+
 tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
 if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)): #tumor_spec_peptide_fasta = config['tumor_spec_peptide_fasta'] 
     make_dummy_files([tumor_spec_peptide_fasta], origfile=config['tumor_spec_peptide_fasta'], extension='.copied', is_refresh_allowed=True)
@@ -637,23 +650,25 @@ rule Peptide_preprocessing:
             ' | python {script_basedir}/fasta_addkey.py --key HLA --val "{comma_sep_hla_str}" '
             ' > {tumor_spec_peptide_fasta}')
 
+homologous_peptide_fasta_done = F"{homologous_peptide_fasta}.done"
 rule Peptide_processing:
     input: tumor_spec_peptide_fasta
-    output: homologous_peptide_fasta
+    output: homologous_peptide_fasta, homologous_peptide_fasta_done
     threads: workflow.cores
     run:
         comma_sep_hla_str = ','.join(retrieve_hla_alleles())
         shell('cat {tumor_spec_peptide_fasta} '
             ' | python {script_basedir}/fasta_addkey.py --key HLA --val "{comma_sep_hla_str}" '
             ' | python {script_basedir}/neoexpansion.py --reference {PEP_REF} --tmp {homologous_peptide_fasta}.tmp > {homologous_peptide_fasta}')
+        shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta} && touch {homologous_peptide_fasta_done}')
 
 homologous_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
 rule PeptideMHC_binding_affinity_prediction:
-    input: homologous_peptide_fasta #, hla_out
+    input: homologous_peptide_fasta, homologous_peptide_fasta_done #, hla_out
     output: homologous_netmhcpan_txt
     threads: netmhc_nthreads # 12
     run:
-        shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta}')
+        #shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta}')
         homologous_peptide_fasta_summary = F'{homologous_peptide_fasta}.partition/mapping.json'
         with open(homologous_peptide_fasta_summary) as jsonfile: hla2faa = json.load(jsonfile)
         homologous_peptide_fasta_partdir = os.path.dirname(os.path.realpath(homologous_peptide_fasta_summary))
@@ -663,12 +678,50 @@ rule PeptideMHC_binding_affinity_prediction:
 
 homologous_netmhcstabpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcstabpan.txt'
 rule PeptideMHC_binding_stability_prediction:
-    input: homologous_peptide_fasta #, hla_out
+    input: homologous_peptide_fasta, homologous_peptide_fasta_done #, hla_out
     output: homologous_netmhcstabpan_txt
     threads: netmhc_nthreads # 12
     run:
         peptide_to_pmhc_binding_stability(homologous_peptide_fasta, homologous_netmhcstabpan_txt, retrieve_hla_alleles())
 
+homologous_prime_txt = F'{pmhc_dir}/{PREFIX}_all_peps.prime.txt'
+hla_short2long_json =  F'{pmhc_dir}/{PREFIX}_all_peps.hla_short2long.json' # F'{homologous_peptide_fasta}.partition/hla_short2long.json'
+rule PeptideMHC_immunogenicity_prediction:
+    input: homologous_peptide_fasta, homologous_peptide_fasta_done
+    output: homologous_prime_txt, hla_short2long_json
+    threads: 1 # 12
+    run:
+        hla_short2long_dict = {}
+        #shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta}')
+        homologous_peptide_fasta_summary = F'{homologous_peptide_fasta}.partition/mapping.json'
+        with open(homologous_peptide_fasta_summary) as jsonfile: hla2faa = json.load(jsonfile)
+        homologous_peptide_fasta_partdir = os.path.dirname(os.path.realpath(homologous_peptide_fasta_summary))
+        shell(F'rm {homologous_peptide_fasta_partdir}/*.prime.txt || true')
+        for hla_str, faa in sorted(hla2faa.items()):
+            local_hla_short2long = peptide_to_pmhc_immunogenicity(F'{homologous_peptide_fasta_partdir}/{faa}', F'{homologous_peptide_fasta_partdir}/{faa}.prime.txt', hla_str)
+            hla_short2long_dict.update(local_hla_short2long)
+        shell(F'cat {homologous_peptide_fasta_partdir}/*.prime.txt > {homologous_prime_txt}')
+        with open(hla_short2long_json, 'w') as jsonfile: json.dump(hla_short2long_dict, jsonfile, indent=2)
+
+homologous_mhcflurry_txt = F'{pmhc_dir}/{PREFIX}_all_peps.mhcflurry.txt'
+rule PeptideMHC_mhcflurry_prediction:
+    input: homologous_peptide_fasta, homologous_peptide_fasta_done
+    output: homologous_mhcflurry_txt
+    threads: 1 # 12
+    run:
+        tmp_outs = []
+        homologous_peptide_fasta_summary = F'{homologous_peptide_fasta}.partition/mapping.json'
+        with open(homologous_peptide_fasta_summary) as jsonfile: hla2faa = json.load(jsonfile)
+        homologous_peptide_fasta_partdir = os.path.dirname(os.path.realpath(homologous_peptide_fasta_summary))
+        for hla_str, faa in sorted(hla2faa.items()):
+            for hla in hla_str.split(','):
+                # example cmd: '''mhcflurry-predict-scan     test/data/example.fasta     --alleles HLA-A*02:01,HLA-A*03:01,HLA-B*57:01,HLA-B*45:01,HLA-C*02:01,HLA-C*07:02'''
+                hla2 = norm_hla(hla)
+                call_with_infolog(F'mhcflurry-predict-scan {homologous_peptide_fasta_partdir}/{faa} --alleles "{hla}" --results-all --out "{homologous_peptide_fasta_partdir}/{faa}.{hla2}.mhcflurry.out"')
+                tmp_outs.append(F'''{homologous_peptide_fasta_partdir}/{faa}.{hla2}.mhcflurry.out''')
+        call_with_infolog(F'''cat {tmp_outs[0]} | head -n1 > {homologous_mhcflurry_txt}''')
+        call_with_infolog(F'''cat {" ".join(tmp_outs)} | grep -v "^sequence_name,pos,peptide," >> {homologous_mhcflurry_txt}''')
+        
 try:
     from urllib.parse import urlparse
 except ImportError:
@@ -759,7 +812,8 @@ logging.debug(F'features_extracted_from_reads_tsv = {features_extracted_from_rea
 
 rule PrioPrep_with_all_TCRs_from_reads:
     input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt, # homologous_bindstab_filtered_tsv, # dna_tonly_raw_vcf, rna_tonly_raw_vcf, # dna_vcf, rna_vcf,
-        dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file
+        dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file, 
+        homologous_prime_txt, hla_short2long_json, homologous_mhcflurry_txt,
         # splicing_info_file   
     output: features_extracted_from_reads_tsv #, final_pipeline_out
     run:
@@ -767,23 +821,27 @@ rule PrioPrep_with_all_TCRs_from_reads:
               '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' #' --passflag 0x0 '
             F''' {prioritization_function_params.replace('_', '-')}''')
         else:
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} ' # ' -S {splicing_info_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
 rule PrioPrep_with_all_TCRs_from_pMHCs:
-    input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt # homologous_bindstab_filtered_tsv 
+    input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt, # homologous_bindstab_filtered_tsv 
+        homologous_prime_txt, hla_short2long_json, homologous_mhcflurry_txt,
     output: features_extracted_from_pmhcs_tsv
     run:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
               '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} '
             F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} -m {motif_file} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
