@@ -17,7 +17,7 @@ from Bio.Align import substitution_matrices
 # from Bio.SubsMat import MatrixInfo
 
 # import edlib
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(pathname)s:%(lineno)d %(levelname)s - %(message)s')
 
 BIG_INT = 2**30
 NA_REP = 'N/A'
@@ -53,7 +53,7 @@ def hamming_dist(a, b):
     assert len(a) == len(b)
     return sum([(0 if (a1 == b1) else 1) for (a1, b1) in zip(a, b)])
 
-def alnscore_bitdist(sequence, neighbour, blosum62, gap_open=-11, gap_ext=-1):
+def alnscore_bitdist(sequence, neighbour, blosum62, gap_open=-11-5, gap_ext=-1):
     assert len(sequence) == len(neighbour)
     ret = 0
     prev_gap_pos = -1-1
@@ -216,9 +216,15 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, 
                 #aln = pairwise2.align.globalxx(wt_fpep, mt_fpep) # format_alignment
                 #aln.format_alignment()
                 
-                wt_aln_str, mt_aln_str, et_aln_str = threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep)
-                st_aln_st2, mt_aln_st2, et_aln_st2 = threewise_aln(aligner, st_fpep, mt_fpep, et_fpep)
-
+                try:
+                    wt_aln_str, mt_aln_str, et_aln_str = threewise_aln(aligner, wt_fpep, mt_fpep, et_fpep)
+                except BaseException as ex:
+                    raise RuntimeError(F'threewise_aln({aligner}, wt_pep={wt_fpep}, mt_fpep={mt_fpep}, et_fpep={et_fpep})') from ex
+                try:
+                    st_aln_st2, mt_aln_st2, et_aln_st2 = threewise_aln(aligner, st_fpep, mt_fpep, et_fpep)
+                except BaseException as ex:
+                    raise RuntimeError(F'threewise_aln({aligner}, st_pep={wt_fpep}, mt_fpep={mt_fpep}, et_fpep={et_fpep})') from ex
+                
                 #wt_sr = SeqRecord(Seq(wt_fpep), id='WT')
                 #mt_sr = SeqRecord(Seq(mt_fpep), id='MT')
                 #et_sr = SeqRecord(Seq(et_fpep), id='ET')
@@ -344,7 +350,8 @@ def netmhcpan_result_to_df(infilename):
     with open(infilename) as file:
         for lineno, line in enumerate(file):
             if lineno & (lineno+1) == 0:
-                logging.info(F'{infilename}:start_parsing_line:lineno={lineno},line=({line})')
+                line2 = line.replace("\r", "CarriageReturn").replace("\n", "LineFeed")
+                logging.info(F'{infilename}:start_parsing_line:lineno={lineno},line=({line2})')
             if not line.startswith(' '): continue
             toks = line.strip().split()
             if toks[0] == 'Pos': 
@@ -569,7 +576,7 @@ def main():
     aligner.mode = 'global'
     #aligner.match_score = 2
     #aligner.mismatch_score = -1
-    aligner.open_gap_score = -11
+    aligner.open_gap_score = -11-5
     aligner.extend_gap_score = -1
     aligner.target_end_gap_score = 0.0 # first is in second
     aligner.query_end_gap_score = -(2**10) # first is in second
