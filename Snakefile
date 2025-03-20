@@ -892,6 +892,7 @@ rule Validation_with_all_TCRs_from_reads:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} ' # dummy
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} -m {motif_file}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
@@ -902,6 +903,7 @@ rule Validation_with_all_TCRs_from_pMHCs:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} ' # dummy
             F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} -m {motif_file}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
