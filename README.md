@@ -12,8 +12,9 @@ First, follow the instruction at https://bioconda.github.io/ to install bioconda
 Then, run the following commands:
 ```
 # If the working directory is not neoguider, then change it to neoguider
-sh -evx install-step-1-by-conda.sh ng # install all dependencies by conda
-conda run -n hhh sh install-step-2.sh # download databases and build database indexes
+sh -evx install-step-1-by-conda.sh ng                              # install all dependencies by conda
+conda run -n ng sh -evx install-step-2-for-neoepitope-detection.sh # download tools and database for detecting neoepitope candidates (in FASTA format) from sequencing data
+conda run -n ng sh -evx install-step-2-for-feature-extraction.sh   # download tools and database for extracting features (in TSV format) from neoepitope candidates
 ```
 If the "$conda install" command in install-step-1-by-conda.sh ran into any error, you can try replacing this command by each of the following commands:
 ```
@@ -23,16 +24,18 @@ conda env create --name ng --file env/freeze.env_export_no_builds.yml    # if th
 conda env create --name ng --file env/freeze.env_export_from_history.yml
 ```
 
-Next, you have to manually set up netMHCpan, netMHCstabpan and MixCR (due to their licensing requirements).
-Please refer to https://services.healthtech.dtu.dk/services/NetMHC-4.0/ and https://services.healthtech.dtu.dk/services/NetMHCstabpan-1.0/ for how to manually download, install and activate netMHCpan and netMHCstabpan.
-After doing so, please set the full paths of netMHCpan and netMHCstabpan in the config.ini file accordingly.
-Please obtain a license for MixCR from https://licensing.milaboratories.com/ and then run the command ```software/mixcr activate-license``` to activate MixCR.
+The tools netMHCpan, netMHCstabpan, and MixCR can only be manually downloaded and configured due to their licensing requirements.
 
-Last but no the least, please be aware that UVC, netMHCpan, netMHCstabpan and MixCR are free for academic use but require commercial licensing for for-profit use.
+(1) For using netMHCpan and netMHCstabpan (neoepitope feature extractors), please refer to https://services.healthtech.dtu.dk/services/NetMHC-4.0/ and https://services.healthtech.dtu.dk/services/NetMHCstabpan-1.0/ for how to manually download, install and activate netMHCpan and netMHCstabpan.
+After doing so, please set the full paths of netMHCpan and netMHCstabpan in the config.ini file accordingly.
+
+(2) For using MixCR (TCR-clonotype detector), please obtain a license from https://licensing.milaboratories.com/ and then run the command ```software/mixcr activate-license``` to activate MixCR.
+
+Last but no the least, please be aware that UVC, netMHCpan, netMHCstabpan, PRIME, and MixCR are free for academic use but require commercial licensing for for-profit use.
 
 ## How to run
 
-### With FASTQ files as input
+### How to use FASTQ files as input
 
 Example shell command to run NeoGuider with FASTQ files as input:
 ```
@@ -50,7 +53,7 @@ snakemake --configfile config.yaml --config \
 ```
 After a successful run, you should be able check neoantigen prioritization results at: ${NeoOutDir}/${patientID}_prioritization_from_reads.tsv
 
-### With peptide FASTA file as input
+### How to use a peptide FASTA file as input
 
 Example shell command to run NeoGuider on a peptide FASTA file and a string of HLA alleles as input:
 ```
@@ -86,9 +89,56 @@ then the HLA key=value pair must be specified in the ${tumorSpecificPeptideFasta
 Otherwise,
 the HLA key=value pair can be omitted in the ${tumorSpecificPeptideFasta} file.
 
-### With neoantigen-feature TSV file as input
+### How to use any feature (e.g., neoepitope feature) TSV file as input
 
-Please run ```neopredictor.py --help``` to see how to run with neoantigen features as input
+Please run ```neopredictor.py --help``` to see how to run with an example-by-feature table containing numerical values as input. 
+In brief, neopredictor.py perform training, testing, or both. 
+The option --train specifies the TSV file containing training data. 
+The option --test specifies the TSV file containing test data. 
+The option --feature-sets specifies the set of columns of the training and/or test TSV files. 
+
+The python script ```neopredictor.py``` can take any TSV file containing numerical values as input, so the output of tools such as pVAC-seq (which is tabular) can be the input to this script. 
+
+### How to use this repository as a scikit-learn machine-learning library
+
+The novel feature transformation is implemented in the IsotonicLogisitcRegression.py file. 
+The IsotonicLogisitcRegression class in this file implements the fit, transform, fit_transform, predict, and predict_proba methods. 
+Hence, this file conforms to the API specification of scikit-learn estimators and can be used as a general-purpose machine learning library. 
+
+### Description of the columns generates by the pipeline by default
+
+Here is a list of imprtant columns that are generated by the pipeline when taking FASTQ or FASTA files as input (```neopredictor.py``` and the relevant methods in IsotonicLogisitcRegression can take any table with any set of columns as input).
+
+MT_pep: mutant peptide, peptide generated by a mutation (can also be an exogenous peptide such as a viral peptide). 
+
+ST_pep: self peptide, peptide that is similar to the mutant peptide. This peptide is often (but not always) the same as the wild-type peptide. 
+
+WT_pep: wild-type peptide, the non-mutated peptide that generated the mutant peptide. This peptide is often (but not always) the same as the self peptide.
+
+HLA_type: MHC allotype that is paired with the peptide. 
+
+MT_BindAff: mutant-peptide binding affiniy (IC50 in nanomolar, ranging from 0 to infinity) to the MHC molecules, estimated by NetMHCpan 4.1. 
+
+%Rank_EL: the eluted-ligand likelihood rank (percentile ranging from 0 to 1, lower corresponds to more likelihood) of the mutant-peptide for being eluted with 
+(i.e., bound to, acting as a ligand to) the MHC molecules, estimated by NetMHCpan 4.1.
+
+BindStab: mutant-peptide binding stability (half life in hour, ranging from 0 to infinity) to the MHC molecules, estimated by NetMHCstabpan. 
+
+Quantification: the abundance (transcript-per-million, TPM) of the gene that generated the mutant peptide, estimated by Kallisto from RNA-seq data.
+
+Agretop: agretopicity (mutant-type binding affinity divided by the wild-type affinity, with both affinities estimated by NetMHCpan 4.1). 
+
+PRIME_rank: the percentile of the PRIME-estimated immunogenicity of the mutant peptide in the MHC context (ranging from 0 to 1, lower means more immunogenic). 
+
+PRIME_BArank: the percentile of the estimated binding affinity between the mutant peptide and the MHC molecules (ranging from 0 to 1, lower corresponds to higher affinity and lower IC50). 
+
+mhcflurry_aff_percentile: the percentile of the affinity between the mutant peptide and the MHC molecules (ranging from 0 to 1, lower corresponds to higher affinity and lower IC50). 
+
+mhcflurry_presentation_percentile: the percentile of the probability that the peptide is presented by the MHC molecules (ranging from 0 to 1, lower means more immunogenic). 
+
+ln_NumTested: the number of all mutant peptides originated from the same patient (from which this peptide originated) that were or willb be tested for immunogenicity. 
+
+ET_pep : heteroclitic peptide of the mutant peptide (a peptide that is further mutated for therapeutic purpose). This is experimental, so please ignore this for now. 
 
 ### Additional information
 

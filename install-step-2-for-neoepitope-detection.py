@@ -6,9 +6,20 @@ rootdir="$(cd "$rootdir"; pwd;)"
 neoguider=$1 # neoguider env name
 if [ -z "$neoguider" ]; then neoguider=ng; fi
 
-mkdir -p ${rootdir}/software && pushd ${rootdir}/software 
+###
+### Tools and database for detecting neoepitope candidates from sequencing data
+###
 
-### IMPORTNT-NOTE: UVC (along with UVC-delins) is free for non-commercial use only. For commercial use, please contact Genetron Health
+###
+### (1) software download
+###
+
+VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $2}' | awk -F. '{print $1}') # 109 #"105"
+
+mkdir -p ${rootdir}/software
+cd       ${rootdir}/software 
+
+# IMPORTNT-NOTE: UVC (along with UVC-delins) is free for non-commercial use only. For commercial use, please contact Genetron Health
 export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${CONDA_PREFIX}/include"
 
 if [ $(echo "$1" | grep -cP "skip-uvc|skip-all-software") -eq 0 ]; then
@@ -44,26 +55,6 @@ if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
     sed -i "s;# df.to_csv('results.csv', index=False);df.to_csv(sys.argv[3], index=False) # df.to_csv('results.csv', index=False);g" ERGO-II/Predict.py
 fi
 
-# IMPORTNT-NOTE: netMHCpan and netMHCstabpan are free for non-commercial use only. For commercial use, please contact DTU Health Tech
-## You have to go to the following three web-pages to manually download netMHCpan and netMHCstabpan and manually request for the licenses to use them
-## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux # used alone
-## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCstabpan&version=1.0&packageversion=1.0a&platform=Linux
-
-# IMPORTNT-NOTE: PRIME and MixMHCpred are free for non-commercial use only. For commercial use, please contact the GfellerLab
-mkdir -p ${rootdir}/software/prime && pushd ${rootdir}/software/prime
-git clone https://github.com/GfellerLab/PRIME.git
-pushd PRIME && git checkout e798aad && popd
-g++ -O3 PRIME/lib/PRIME.cc -o PRIME/lib/PRIME.x
-git clone https://github.com/GfellerLab/MixMHCpred.git
-pushd MixMHCpred && git checkout 0a7f9b9
-chmod +x MixMHCpred
-chmod +x install_packages && ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)
-# chmod +x setup_path && ./setup_path # recommended by the authors of MixMHCpred but not needed here
-popd
-popd
-
-## https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=2.8&packageversion=2.8a&platform=Linux # used with netMHCstabpan
-
 if [ $(echo "$1" | grep -cP "skip-mutect2|skip-all-software") -eq 0 ]; then
     wget https://github.com/broadinstitute/gatk/releases/download/4.3.0.0/gatk-4.3.0.0.zip
     unzip gatk-4.3.0.0.zip
@@ -73,28 +64,26 @@ fi
 #unzip snpEff_latest_core.zip
 #git clone https://github.com/XuegongLab/NeoHunter.git && cd NeoHunter
 
-mkdir -p ${rootdir}/database && pushd ${rootdir}/database
+###
+### (2) database download
+###
 
-VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $2}' | awk -F. '{print $1}') # 109 #"105"
+mkdir -p ${rootdir}/database
+cd       ${rootdir}/database
 
 wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/variation/vep/homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 tar xvzf homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh37.cdna.all.fa.gz
 gunzip -fk Homo_sapiens.GRCh37.cdna.all.fa.gz
-wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/pep/Homo_sapiens.GRCh37.pep.all.fa.gz
-gunzip -fk Homo_sapiens.GRCh37.pep.all.fa.gz
 
 wget -c https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 tar xvzf GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 
-########## index construction ##########
+###
+### (3) database index construction
+###
 
 bwa index $(dirname $(which OptiTypePipeline.py))/data/hla_reference_rna.fasta
-
-for faa in Homo_sapiens.GRCh37.pep.all.fa iedb.fasta; do
-    makeblastdb -in ${faa} -dbtype prot # in database
-    samtools faidx ${faa}
-done
 
 bedtools sort \
     -faidx GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_genome.fa.fai \
@@ -105,7 +94,9 @@ bwa index GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_buil
 # kallisto index -i  GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.cdna.fa.kallisto-idx GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.cdna.fa
 kallisto index -i Homo_sapiens.GRCh37.cdna.all.fa.kallisto-idx Homo_sapiens.GRCh37.cdna.all.fa
 
-########## other databases for backward compatibility ##########
+###
+### (4) other database download for backward compatibility
+###
 
 wget -c https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
 gunzip -fk hg19.fa.gz
@@ -135,7 +126,4 @@ gunzip -fk hg19.refGene.gtf.gz
 #tar xzvf funcotator_dataSources.v1.6.20190124s.tar.gz
 
 # download refseq annotation for hg19
-
-wget http://mhcmotifatlas.org/data/classI/MS/Peptides/all_peptides.txt
-python ../neomotif.py -i all_peptides.txt -o all_peptides -p Homo_sapiens.GRCh37.pep.all.fa # GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_annot.pep
 
