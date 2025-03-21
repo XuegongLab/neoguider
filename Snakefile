@@ -606,15 +606,15 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         call_with_infolog(remote_receive1)
         call_with_infolog(F'gzip -d {outputfile1}.gz')
 
-prime_cmd = '/mnt/d/code/neoguider/software/prime/PRIME/PRIME'
-mixmhcpred_path = '/mnt/d/code/neoguider/software/prime/MixMHCpred/MixMHCpred'
+prime_cmd = F'{script_basedir}/software/prime/PRIME/PRIME'
+mixmhcpred_path = F'{script_basedir}/prime/MixMHCpred/MixMHCpred'
 def norm_hla(h): return h.replace('*', '').replace('HLA-', '').replace(':', '').replace('H-2-', 'H2-').strip()
 def peptide_to_pmhc_immunogenicity(infaa, outtsv, hla_string_orig):
     hla_string = ','.join([norm_hla(h) for h in hla_string_orig.split(',')])
     call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true && mkdir -p {outtsv}.tmpdir/')
     # The numbers 8 and 14 are the Lmin and Lmax from PRIME/lib/run_PRIME.pl
     call_with_infolog(F'''cat {infaa} | grep -v "^>" | awk -v N1=8 -v N2=14 '{{ for (N=N1; N<=N2; N++) for (i = 1; i <= length($0) - N + 1; i++) print substr($0, i, N) }}' > {outtsv}.seqs.txt''')
-    cmd = F'{prime_cmd} -i {outtsv}.seqs.txt -mix {mixmhcpred_path} -a {hla_string} -o {outtsv}'
+    cmd = F'{prime_cmd} -i {outtsv}.seqs.txt -mix {mixmhcpred_path} -a {hla_string} -o {outtsv} 1> {outtsv}.stdout 2> {outtsv}.stderr'
     call_with_infolog(cmd)
     return {norm_hla(h) : h for h in hla_string_orig.split(',')}
 
