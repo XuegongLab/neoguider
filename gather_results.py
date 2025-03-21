@@ -212,17 +212,14 @@ def allblast(query_seqs, target_fasta, output_file):
 def compute_info(mhc, peptide, motifdf, zerobased_positions='all', rettype='sum'):
     if isna(mhc) or isna(peptide):
         logging.warning(F'MHC={mhc} Pep={peptide} is of type N/A')
-        return np.nan
+        return ([] if rettype=='list' else np.nan)
     ret = ([] if rettype=='list' else 0)
     mhc = norm_mhc(mhc)
-    #if mhc not in set(motifdf['MHC']): 
-    #    logging.warning(F'{mhc} is not found in DB')
-    #    return np.nan
     peptide = peptide.upper()
     peplen = len(peptide)
     if (mhc, peplen) not in motifdf:
         logging.warning(F'MHC={mhc} Len={peplen} is not found in DB')
-        return np.nan
+        return ([] if rettype=='list' else np.nan)
     #subdf = motifdf.loc[((motifdf['MHC']==mhc) & (motifdf['Len']==peplen)),:]
     subdf = motifdf[(mhc, peplen)]
     #print(subdf)
