@@ -607,7 +607,10 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
         call_with_infolog(F'gzip -d {outputfile1}.gz')
 
 prime_cmd = F'{script_basedir}/software/prime/PRIME/PRIME'
-mixmhcpred_path = F'{script_basedir}/prime/MixMHCpred/MixMHCpred'
+mixmhcpred_path = F'{script_basedir}/software/prime/MixMHCpred/MixMHCpred'
+assert os.path.exist(prime_cmd)
+assert os.path.exist(mixmhcpred_path)
+
 def norm_hla(h): return h.replace('*', '').replace('HLA-', '').replace(':', '').replace('H-2-', 'H2-').strip()
 def peptide_to_pmhc_immunogenicity(infaa, outtsv, hla_string_orig):
     hla_string = ','.join([norm_hla(h) for h in hla_string_orig.split(',')])
