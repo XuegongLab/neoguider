@@ -717,8 +717,9 @@ rule PeptideMHC_mhcflurry_prediction:
             for hla in hla_str.split(','):
                 # example cmd: '''mhcflurry-predict-scan     test/data/example.fasta     --alleles HLA-A*02:01,HLA-A*03:01,HLA-B*57:01,HLA-B*45:01,HLA-C*02:01,HLA-C*07:02'''
                 hla2 = norm_hla(hla)
-                call_with_infolog(F'mhcflurry-predict-scan {homologous_peptide_fasta_partdir}/{faa} --alleles "{hla}" --results-all --out "{homologous_peptide_fasta_partdir}/{faa}.{hla2}.mhcflurry.out"')
-                tmp_outs.append(F'''{homologous_peptide_fasta_partdir}/{faa}.{hla2}.mhcflurry.out''')
+                mhcflurry_out = F'''{homologous_peptide_fasta_partdir}/{faa}.{hla2}.mhcflurry.out'''
+                call_with_infolog(F'mhcflurry-predict-scan {homologous_peptide_fasta_partdir}/{faa} --alleles "{hla}" --results-all --out "{mhcflurry_out}" 1> "{mhcflurry_out}.stdout" 2> "{mhcflurry_out}.stderr"')
+                tmp_outs.append(mhcflurry_out)
         call_with_infolog(F'''cat {tmp_outs[0]} | head -n1 > {homologous_mhcflurry_txt}''')
         call_with_infolog(F'''cat {" ".join(tmp_outs)} | grep -v "^sequence_name,pos,peptide," >> {homologous_mhcflurry_txt}''')
         
