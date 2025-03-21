@@ -30,14 +30,13 @@ class AlwaysConstantRegressor(BaseEstimator, ClassifierMixin, RegressorMixin):
         return np.full(X.shape[0], self.predicted_value)
  
 class ConvexRegression(BaseEstimator, ClassifierMixin, RegressorMixin):
-    def __init__(self):
+    def __init__(self, shape='auto'):
         super().__init__()
         self.pivotlo = None
         self.pivothi = None
         self.pivotlo2 = None
         self.pivothi2 = None
-        self.irlo = IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip')
-        self.irhi = IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip')
+        self.shape = shape
     def compute_pivots(self, x, y, random_state=0):
         assert len(x) == len(y)
         mov_avg_width = int(math.ceil(len(x)**0.5)) # int(math.ceil(1.06 * sigma * len(x)**(-1.0/5.0))) #int(math.ceil(len(x)**0.5/4.0))
@@ -66,6 +65,12 @@ class ConvexRegression(BaseEstimator, ClassifierMixin, RegressorMixin):
         #return pivots[0][0], pivots[1][0]
         return x[idxlo1], x[idxhi1], x[idxlo2], x[idxhi2]
     def fit(self, x, y):
+        incs = ('auto','auto')
+        if self.shape == 'convex': incs = True, False
+        if self.shape == 'concave': incs = False, True
+        self.irlo = IsotonicRegression(increasing = incs[0], out_of_bounds = 'clip')
+        self.irhi = IsotonicRegression(increasing = incs[1], out_of_bounds = 'clip')
+
         x, y = zip(*sorted(zip(x,y)))
         #print(x)
         #print(y)
@@ -126,6 +131,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             ft_transform_add_measure_error=None,
             fit_data_clear=False,
             spearman_r_pvalue_thres=0.05, spearman_r_pvalue_warn=True, spearman_r_pvalue_drop_irrelevant_feature=True, spearman_r_pvalue_correction='none',
+            increasing = 'auto',
             **kwargs):
         """ 
         Initialize
@@ -145,37 +151,10 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         @param spearman_r_pvalue_drop_irrelevant_feature: zero out the feature if the null hypothesis fails to hold at the given p-value for the feature. 
             It is highly recommended to use sklearn.feature_selection.VarianceThreshold to remove the features that are zeroed-out. 
         @param spearman_r_pvalue_correction: can be "bonferroni" (which tends to over-correct p-values) or anything else (which does not correct)
+        @param increasing: True/False if the label as a function of each feature is increasing/decreasing, where 'auto' means inferred from the data
         @return the initialized instance
         """
         super().__init__()
-        self.X0_ = None
-        self.X1_ = None
-        
-        '''
-        self.prevalence_odds_ = -1
-        self.raw_log_odds_ = []
-        self.feature_names_in_ = []
-        self.ivs0_ = []
-        self.irs0_ = []
-        self.ixs1_ = []
-        self.irs1_ = []
-        self.ivs1_ = []
-        self.ixs2_ = []
-        self.irs2_ = []
-        self.ivs2_ = []
-        self.logORX = None
-        
-        self.feature_names_in__ = None
-        self.feature_importances_to_label_ = None
-        self.feature_importances_to_features_ = None
-        self.feature_importances_ = None
-        self.feature_spearman_rs_ = None
-        self.feature_pvalues_ = None
-        self.feature_trends_ = None
-        self.convex_regressions_0_ = []
-        self.convex_regressions_1_ = []
-        self.convex_regressions_2_ = []
-        '''
 
         self.excluded_cols = excluded_cols
         self.convex_cols =   convex_cols
@@ -200,6 +179,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.spearman_r_pvalue_warn = spearman_r_pvalue_warn
         self.spearman_r_pvalue_drop_irrelevant_feature = spearman_r_pvalue_drop_irrelevant_feature
         self.spearman_r_pvalue_correction = spearman_r_pvalue_correction
+        self.increasing = increasing
         self.kwargs = kwargs
 
     def __sklearn_is_fitted__(self):
@@ -359,8 +339,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         assert X.shape[0] == len(y), F'{X.shape[0]} == {len(y)} failed for the input X={X} and y={y}'
         if is_binary_clf_asserted:
             for label in y: assert label in [0, 1], F'Label {label} is not binary'
-            X0 = self.X0_ = X[y==0,:]
-            X1 = self.X1_ = X[y==1,:]
+            X0 = X[y==0,:]
+            X1 = X[y==1,:]
             assert X.shape[1] == X0.shape[1] and X0.shape[1] == X1.shape[1], 'InternalError'
             assert X0.shape[0] > 1, 'At least two negative examples should be provided'
             assert X1.shape[0] > 1, 'At least two positive examples should be provided'
@@ -522,10 +502,10 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         ivs0 = self.ivs0_ = [None for _ in range(X.shape[1])]
         irs0 = self.irs0_ = [None for _ in range(X.shape[1])]
         ixs1 = self.ixs1_ = [None for _ in range(X.shape[1])]
-        irs1 = self.irs1_ = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+        irs1 = self.irs1_ = [IsotonicRegression(increasing=self.increasing, out_of_bounds='clip') for _ in range(X.shape[1])]
         ivs1 = self.ivs1_ = [None for _ in range(X.shape[1])]
         ixs2 = self.ixs2_ = [None for _ in range(X.shape[1])]
-        irs2 = self.irs2_ = [IsotonicRegression(increasing = 'auto', out_of_bounds = 'clip') for _ in range(X.shape[1])]
+        irs2 = self.irs2_ = [IsotonicRegression(increasing=self.increasing, out_of_bounds='clip') for _ in range(X.shape[1])]
         ivs2 = self.ivs2_ = [None for _ in range(X.shape[1])]
         
         self.convex_regressions_0_ = [None for _ in range(X.shape[1])]
@@ -534,6 +514,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         if self.task == 'regression':
             self._assert_input(X, y, is_binary_clf_asserted=False)
+            X0 = self.X0_ = X[y<=np.mean(y),:]
+            X1 = self.X1_ = X[y> np.mean(y),:]
             self.prevalence_odds_ = np.nan
         else:
             self._assert_input(X, y)
