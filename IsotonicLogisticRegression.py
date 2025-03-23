@@ -140,18 +140,29 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         @param task: classification (default) or regression
         @param final_predictor: the final predictor to be used afer feature transformations, 
             defaults to LogisticRegression and LinearRegression with default params for classification and regression, respectively. 
+        
         @param pseudocount: deprecated and not used (has no effect whatsoever)
+        
         @param random_state: the state for generating random numbers (just like the random_state from sklearn)
+        
+        @param fit_add_measure_error         : introduce noise to the fit                      method to prevent overfitting. Empirical evidence supports its use for plain decision trees. 
+        @param transform_add_measure_error   : introduce noise to the transform                method to prevent overfitting. This option is advanced. 
+        @param ft_fit_add_measure_error      : introduce noise to the fit part of       fit_transform to prevent overfitting. This option is advanced. 
+        @param ft_transform_add_measure_error: introduce noise to the transform part of fit_transform to prevent overfitting. This option is advanced. 
+        
+        @param fit_data_clear: let the fit method perform clear_intermediate_internal_data at its end
+        
         @param spearman_r_pvalue_thres: the p-value for the null hypothesis that the label as a function of a feature is neither increasing nor decreasing
-        @param spearman_r_pvalue_warn: gives warning if the null hypothesis fails to hold at the given p-value
-        @fit_add_measure_error         : introduce noise to the fit                      method to prevent overfitting. Empirical evidence supports its use for plain decision trees. 
-        @transform_add_measure_error   : introduce noise to the transform                method to prevent overfitting. This option is advanced. 
-        @ft_fit_add_measure_error      : introduce noise to the fit part of       fit_transform to prevent overfitting. This option is advanced. 
-        @ft_transform_add_measure_error: introduce noise to the transform part of fit_transform to prevent overfitting. This option is advanced. 
-        @param spearman_r_pvalue_drop_irrelevant_feature: zero out the feature if the null hypothesis fails to hold at the given p-value for the feature. 
+        @param spearman_r_pvalue_warn: when set to True, gives warning with warnings.warn if the null hypothesis fails to hold at the given p-value threshold of spearman_r_pvalue_thres
+        @param spearman_r_pvalue_drop_irrelevant_feature: zero out the feature if the null hypothesis fails to hold at the p-value threshold of spearman_r_pvalue_thres for the feature. 
+            If the p-value threshold is <0 and >1, then always zero out and and keep unchanged the feature, respectively.
             It is highly recommended to use sklearn.feature_selection.VarianceThreshold to remove the features that are zeroed-out. 
-        @param spearman_r_pvalue_correction: can be "bonferroni" (which tends to over-correct p-values) or anything else (which does not correct)
-        @param increasing: True/False if the label as a function of each feature is increasing/decreasing, where 'auto' means inferred from the data
+        @param spearman_r_pvalue_correction: can be "bonferroni" (which tends to over-correct p-values) or anything else (which does not correct) for correcting p-values
+        
+        @param increasing: True/False if the label as a function of each feature is increasing/decreasing, where 'auto' means inferred from the data.
+            Typically, when this value is set to either True or False (i.e., not 'auto'), then spearman_r_pvalue_drop_irrelevant_feature should be set to False
+            because this True/False provides prior info to the relationship between the label and the feature.
+        
         @return the initialized instance
         """
         super().__init__()
@@ -499,6 +510,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         if self.spearman_r_pvalue_correction == 'bonferroni': spearman_r_pvalue_thres = spearman_r_pvalue_thres / float(X.shape[1])
 
         raw_log_odds = self.raw_log_odds_ = [None for _ in range(X.shape[1])]
+        inv0 = self.inv0_ = [IsotonicRegression(increasing=self.increasing, out_of_bounds='clip') for _ in range(X.shape[1])]
+        ixs0 = self.ixs0_ = [None for _ in range(X.shape[1])]
         ivs0 = self.ivs0_ = [None for _ in range(X.shape[1])]
         irs0 = self.irs0_ = [None for _ in range(X.shape[1])]
         ixs1 = self.ixs1_ = [None for _ in range(X.shape[1])]
@@ -591,6 +604,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 self.ivs1_[colidx] = 1*center_log_odds + self.irs1_[colidx].fit_transform(x1, y1)                
                 self.irs0_[colidx] = self.irs1_[colidx]
                 self.ivs0_[colidx] = self.ivs1_[colidx]
+            self.ixs0_[colidx] = self.ixs1_[colidx]
             if is_centered:
                 if colidx in self.convex_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.convex_cols):
                     x2, y2 = self._center(x1, self.convex_regressions_1_[colidx].predict(x1))
@@ -601,9 +615,14 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                     x2, y2 = self._center(x1, self.irs1_[colidx].predict(x1))
                     self.ixs2_[colidx] = x2
                     self.ivs2_[colidx] = 1*center_log_odds + self.irs2_[colidx].fit_transform(x2, y2)
-                    self.irs0_[colidx] = self.irs2_[colidx]
+                    self.irs0_[colidx] = self.irs2_[colidx]                
                 self.ivs0_[colidx] = self.ivs2_[colidx]
-        log_ratios = self._transform(X, add_measure_error)
+                self.ixs0_[colidx] = self.ixs2_[colidx]
+                self.inv0_[colidx].fit_transform(y2, x2)
+                _x2 = self.inv0_[colidx].predict(y2)
+            else:
+                self.inv0_[colidx].fit_transform(y1, x1)
+        log_ratios = self._transform(X, add_measure_error=add_measure_error, is_inverse=False)
         self._internal_predictor.fit(np.hstack([log_ratios, exX]), y, **kwargs)
         if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
         self.n_features_in_ = X1.shape[1]
@@ -626,34 +645,48 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
     def get_centered_isotonic_log_odds(self):
         return self.ivs2_
         
-    def _transform(self, X, add_measure_error):
+    def _transform(self, X, add_measure_error, is_inverse):
         if add_measure_error:
             XT = np.array([self.ensure_total_order(X[:,colidx]) for colidx in range(X.shape[1])])
         else:
             XT = np.array([(X[:,colidx]) for colidx in range(X.shape[1])])
         return np.array([(
+            self.inv0_[colidx].transform(xT) if is_inverse else (
             self.convex_regressions_0_[colidx].transform(xT)
             if (colidx in self.convex_cols or (hasattr(X, 'columns') and X.columns[colidx] in self.convex_cols))
             else self.irs0_[colidx].predict(xT)
-            ) for colidx,xT in enumerate(XT)]).transpose()
+            )) for colidx,xT in enumerate(XT)]).transpose()
         #return np.array([self.irs0_[colidx].predict(xT) for colidx,xT in enumerate(XT)]).transpose()
         #return np.array([self.irs0_[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
     
-    def transform(self, X1, add_measure_error=None):
-        """ scikit-learn transform """
+    def transform(self, X1, add_measure_error=None, is_inverse=False):
+        """ scikit-learn transform 
+            add_measure_error: set to True to add measurement error to prevent overfitting
+            is_inverse: set to True to perform inverse transform. Please use the inverse_transform method instead if possible.
+        """
         check_is_fitted(self)
-        # NOTE: Setting add_measure_error=True may improve the performance of some ML methods.
         add_measure_error = self.get_default(add_measure_error, self.transform_add_measure_error, False)
         X = np.array(X1)
         inX, exX, inIdxs, exIdxs = self._split(X, True)
-        test_orX = self._transform(inX, add_measure_error)
+        test_orX = self._transform(inX, add_measure_error=add_measure_error, is_inverse=is_inverse)
         X2 = np.zeros((X.shape[0], X.shape[1]))
         X2[:,inIdxs] = test_orX
         X2[:,exIdxs] = exX
         return X2
     
+    def inverse_transform(self, X1):
+        """
+        scikit-learn inverse_transform
+        caveat: inverse_transform(transform(X)) != X and transform(inverse_transform(X)) != X for a column x of X 
+                if at least one scalar value of x is not within the range in which the transform function of x is monotonically increasing
+        """
+        return self.transform(X1, is_inverse=True)
+    
     def fit_transform(self, X1, y1, fit_add_measure_error=None, transform_add_measure_error=None):
-        """ scikit-learn fit_transform """
+        """ scikit-learn fit_transform 
+            fit_add_measure_error: set to True to add measurement error to prevent overfitting (it may work for plain decision trees)
+            transform_add_measure_error: set to True to add measurement error to prevent overfitting
+        """
         # NOTE: Setting add_measure_error=True may improve the performance of some ML methods 
         #   such as DecisionTreeClassifier (DT) presumably because DT without regularization tends to overfit.
         fit_add_measure_error = self.get_default(fit_add_measure_error, self.ft_fit_add_measure_error, False)
@@ -663,7 +696,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
     
     def _extract_features(self, X):
         inX, exX, inIdxs, exIdxs = self._split(X, True)
-        test_orX = self._transform(inX, False)
+        test_orX = self._transform(inX, add_measure_error=False, is_inverse=False)
         return np.hstack([test_orX, exX])
     
     def predict(self, X1):
@@ -707,7 +740,7 @@ def test_fit_and_predict_proba():
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,1,1,0,0,0,0,0,1,0,0,0,0])
-    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'])
+    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, excluded_cols=['col3'])
     ilr.fit(X, y)
     Xtest = np.array([
         [0,    0, 0],
@@ -754,7 +787,7 @@ def test_fit_and_predict_with_dups(task='classification'):
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,0,1, 0,0,1,0,1, 0,0,1,0,0, 0])
-    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'], task=task)
+    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, excluded_cols=['col3'], task=task)
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
@@ -794,7 +827,7 @@ def test_fit_and_predict_with_convex(task='classification'):
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([9,8,8,6,6,4,3,2,1,0,1,2,3,4,5,6])
-    ilr = IsotonicLogisticRegression(excluded_cols = ['col3'], convex_cols = ['col2'], task='regression')
+    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, excluded_cols=['col3'],convex_cols=['col2'], task='regression')
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
@@ -807,8 +840,41 @@ def test_fit_and_predict_with_convex(task='classification'):
     print(F'test_transformed_X=\n{X3}')
     print(F'test_predicted_X=\n{y1}')
 
+def test_inverse_transform(
+        task='classification',
+        #task='regression'
+        ):
+    Xtrain = np.array([
+        [-1, -10, 0],
+        [ 0,  10, 0],
+        [ 1,  30, 0],
+        [ 2,  60, 0],
+        [ 3, 100, 0],
+        [ 4, 150, 0],
+        [ 5, 210, 0],
+        [ 6, 280, 0],
+    ])
+    #ytrain = [1e0,1e1,1e2,1e3,1e4,1e5,1e6]
+    ytrain = [0, 0, 1, 0, 1, 0, 1, 1]
+    Xtest = np.array([
+        [ 0,  10, 0],
+        [ 1,  30, 0],
+        [ 2,  60, 0],
+        [ 3, 100, 0],
+        [ 4, 150, 0],
+        [ 5, 210, 0],
+    ])
+    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, task=task)
+    ilr.set_random_state(42+0)
+    ilr.fit(Xtrain, ytrain)
+    X2 = ilr.transform(Xtest)
+    X3 = ilr.inverse_transform(X2)
+    np.testing.assert_allclose(X3, Xtest, rtol=1e-6, atol=1e-6)
+
 if __name__ == '__main__':
+    test_inverse_transform()
     test_fit_and_predict_proba()
     test_fit_and_predict_with_dups()
     test_fit_and_predict_with_dups(task='regression')
     test_fit_and_predict_with_convex(task='regression')
+    
