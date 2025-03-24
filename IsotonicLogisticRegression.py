@@ -130,7 +130,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             ft_fit_add_measure_error=None, 
             ft_transform_add_measure_error=None,
             fit_data_clear=False,
-            spearman_r_pvalue_thres=0.05, spearman_r_pvalue_warn=True, spearman_r_pvalue_drop_irrelevant_feature=True, spearman_r_pvalue_correction='none',
+            feat_pvalue_method='auto', 
+            feat_pvalue_thres=0.05, feat_pvalue_warn=True, feat_pvalue_drop_irrelevant_feature=True, feat_pvalue_correction='none',
             increasing = 'auto',
             **kwargs):
         """ 
@@ -152,15 +153,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         @param fit_data_clear: let the fit method perform clear_intermediate_internal_data at its end
         
-        @param spearman_r_pvalue_thres: the p-value for the null hypothesis that the label as a function of a feature is neither increasing nor decreasing
-        @param spearman_r_pvalue_warn: when set to True, gives warning with warnings.warn if the null hypothesis fails to hold at the given p-value threshold of spearman_r_pvalue_thres
-        @param spearman_r_pvalue_drop_irrelevant_feature: zero out the feature if the null hypothesis fails to hold at the p-value threshold of spearman_r_pvalue_thres for the feature. 
+        @param feat_pvalue_thres: the p-value for the null hypothesis that the label as a function of a feature is neither increasing nor decreasing
+        @param feat_pvalue_warn: when set to True, gives warning with warnings.warn if the null hypothesis fails to hold at the given p-value threshold of feat_pvalue_thres
+        @param feat_pvalue_drop_irrelevant_feature: zero out the feature if the null hypothesis fails to hold at the p-value threshold of feat_pvalue_thres for the feature. 
             If the p-value threshold is <0 and >1, then always zero out and and keep unchanged the feature, respectively.
             It is highly recommended to use sklearn.feature_selection.VarianceThreshold to remove the features that are zeroed-out. 
-        @param spearman_r_pvalue_correction: can be "bonferroni" (which tends to over-correct p-values) or anything else (which does not correct) for correcting p-values
+        @param feat_pvalue_correction: can be "bonferroni" (which tends to over-correct p-values) or anything else (which does not correct) for correcting p-values
         
         @param increasing: True/False if the label as a function of each feature is increasing/decreasing, where 'auto' means inferred from the data.
-            Typically, when this value is set to either True or False (i.e., not 'auto'), then spearman_r_pvalue_drop_irrelevant_feature should be set to False
+            Typically, when this value is set to either True or False (i.e., not 'auto'), then feat_pvalue_drop_irrelevant_feature should be set to False
             because this True/False provides prior info to the relationship between the label and the feature.
         
         @return the initialized instance
@@ -186,10 +187,12 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.ft_transform_add_measure_error = ft_transform_add_measure_error
         
         self.fit_data_clear = fit_data_clear
-        self.spearman_r_pvalue_thres = spearman_r_pvalue_thres
-        self.spearman_r_pvalue_warn = spearman_r_pvalue_warn
-        self.spearman_r_pvalue_drop_irrelevant_feature = spearman_r_pvalue_drop_irrelevant_feature
-        self.spearman_r_pvalue_correction = spearman_r_pvalue_correction
+        
+        self.feat_pvalue_method = feat_pvalue_method
+        self.feat_pvalue_thres = feat_pvalue_thres
+        self.feat_pvalue_warn = feat_pvalue_warn
+        self.feat_pvalue_drop_irrelevant_feature = feat_pvalue_drop_irrelevant_feature
+        self.feat_pvalue_correction = feat_pvalue_correction
         self.increasing = increasing
         self.kwargs = kwargs
 
@@ -199,7 +202,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         """
         return hasattr(self, "_is_fitted") and self._is_fitted
 
-    def check_increasing(self, x, y, spearman_r_pvalue_thres, effective_n_samples):
+    def check_increasing(self, x, y, feat_pvalue_thres, effective_n_samples):
         """Determine whether y is monotonically correlated with x.
 
         y is found increasing or decreasing with respect to x based on a Spearman
@@ -213,7 +216,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         y : array-like of shape (n_samples,)
             Training target.
         
-        spearman_r_pvalue_thres : float
+        feat_pvalue_thres : float
             The P value threshold for the Spearman correlation test
         
         effective_n_samples : number of independent datapoints sampled, this is generally smaller than n_samples
@@ -263,7 +266,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 pvalue_observed = 0.0
         else:
             pvalue_observed = 1.0
-        return rho, pvalue_observed, (rho_sgn if pvalue_observed < spearman_r_pvalue_thres else 0)
+        return rho, pvalue_observed, (rho_sgn if pvalue_observed < feat_pvalue_thres else 0)
 
     def _abbrevshow(alist, anum=5):
         if len(alist) <= anum*2: return [alist]
@@ -318,7 +321,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         if hasattr(X, 'iloc'):
             return X.iloc[:,in_colidxs], X.iloc[:,ex_colidxs], in_colidxs, ex_colidxs
         else:
-            return X[:,in_colidxs], X[:,ex_colidxs], in_colidxs, ex_colidxs
+            return X1[:,in_colidxs], X1[:,ex_colidxs], in_colidxs, ex_colidxs
     
     def _center(self, x, y, epsilon = 1e-6):
         """ Implement the centering step of the centered isotonic regression at https://arxiv.org/pdf/1701.05964.pdf """
@@ -425,37 +428,64 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
     def get_feature_names(self):
         check_is_fitted(self)
         return self.feature_names_in_
+    
+    def _get_feature_importances(self, analysis, stat_test):
+        if stat_test == 'auto':
+            if self.task == 'regression': stat_test = 'spearmanr'
+            elif self.task == 'classification': stat_test = 'mannwhitneyu'
+            else: raise RuntimeError(F'The self.task {self.task} is invalid (only "classification" and "regression" are valid)!')
+        
+        if   stat_test == 'spearmanr': stat_test_retval = self.spearmanr_retval_
+        elif stat_test == 'mannwhitneyu': stat_test_retval = self.mannwhitneyu_retval_
+        elif stat_test == 'odds_spearmanr': 
+            OddsSpearmanrResult = collections.namedtuple('OddsSpearmanrResult', ['statistic', 'pvalue'])
+            stat_test_retval = OddsSpearmanrResult(
+                    statistic=np.array([x for x in self.feat_odds_spearman_rs_]),
+                    pvalue=np.array([x for x in self.feat_odds_spearman_pvalues_]))
+        else: raise TypeError(F'The statistical test {stat_test} is invalid (only "auto", "spearmanr" and "mannwhitneyu" are valid)!')
+        
+        if   analysis == 'f2l2f':
+            return self.feature_importances_
+        elif analysis == 'f2l':
+            return self.feature_importances_to_label_
+        elif analysis == 'f2f':
+            return self.feature_importances_to_features_
+        elif analysis == 'statistic':
+            return stat_test_retval.statistic
+        elif analysis == 'pvalue':
+            return stat_test_retval.pvalue
+        elif analysis == 'trend':
+            return np.where(stat_test_retval.pvalue < self.feat_pvalue_thres, np.sign(stat_test_retval.statistic), 0)
+        else:
+            raise TypeError(F'The importance type "{analysis}" is invalid, it must be either "f2l", "f2f", "f2l2f", "statistic", "pvalue", or "trend"!')
 
-    def get_feature_importances(self, analysis='f2l2f'):
-        """ get feature importance scores
-            analysis: one of the following 1-D array in which each number corresponds to a feature
-                "spearman_r": returning the observed spearman correlation coefficient of each single feature by itself with the label when ignoring all other features;
-                "pvalue": returning the P-value of each single feature by itself when ignoring all other features, with the null hypothesis of having zero spearman correlation coefficient;
+    def get_feature_importances(self, analysis='f2l2f', stat_test='auto'):
+        """ Method to compute feature importance scores
+            
+            @param analysis: one of the following 1-D array in which each number corresponds to a feature
+                "statistic": returning the observed statistic of each single feature by itself with the label when ignoring all other features;
+                    the statistic can be either spearman-correlation-coefficient or wilxocon-rank-sum
+                "pvalue": returning the P-value of each single feature by itself when ignoring all other features, with the null hypothesis of having statistic=0;
                 "trend" : returning one of (-1,0,+1) for each single feature by itself, where the label is (decreasing,constant,increasing) as a function of the feature, when ignoring all other features;
                 "f2l"   : feature-to-label, returning the average log odds contributed by each single feature by itself when ignoring all other features;
                 "f2f"   : feature-to-features, returning the percent contribution of each feature in the ensemble of all features;
                 "f2l2f" : feature-to-label multiplied by feature-to-feature, returning the average log odds contributed by each feature in the ensemble of all features.                
+            @param stat_test: one of "auto", "spearmanr", "mannwhitneyu", or "odds_spearmanr" for computing satistic, pvalue or trend:
+                "auto"     : "mannwhitneyu" for classication and "spearmanr" for regression
+                "mannwhitneyu" : scipy.stats.mannwhitneyu test
+                "spearmanr": scipy.stats.spearmanr test
+                "odds_spearmanr": scipy.stats.spearmanr test performed on the adaKDE-estimated odds (instead of the raw input values)
+            
+            @return: an array in which each element denotes the importance of the corresponding feature
         """
         check_is_fitted(self)
-        if analysis=='f2l2f':
-            return self.feature_importances_
-        elif analysis=='f2l':
-            return self.feature_importances_to_label_
-        elif analysis=='f2f':
-            return self.feature_importances_to_features_
-        elif analysis=='spearman_r':
-            return self.feature_spearman_rs_
-        elif analysis=='pvalue':
-            return self.feature_pvalues_
-        elif analysis=='trend':
-            return self.feature_trends_
-        else:
-            raise TypeError(F'The importance type "{importance_type}" is invalid, it must be either "f2l", "f2f", "f2l2f", "spearman_r", "pvalue", or "trend"!')
-    
+        return self._get_feature_importances(analysis, stat_test)
+
     def _set_feature_importances(self):
         assert len(self._internal_predictor.coef_.shape) <= 2, F'The shape {self._internal_predictor.coef_.shape} of the coef_ {self._internal_predictor.coef_} of {self._internal_predictor} has more than two dimensions!'
         assert len(self._internal_predictor.coef_.shape) == 1 or self._internal_predictor.coef_.shape[0] == 1, F'The shape {self._internal_predictor.coef_.shape} of the coef_ {self._internal_predictor.coef_} of {self._internal_predictor} is invalid!'
-        self.feature_importances_to_label_       = np.array([np.mean([abs(x - np.log(self.get_odds_offset())) for x in self.ivs0_[colidx]]) for colidx, colname in enumerate(self.feature_names_in_)])
+        mu = np.log(self.get_odds_offset()) if self.task == 'classification' else self.get_average_y()
+        self.feature_importances_to_label_ = np.array([np.mean([abs(x - mu) for x in self.ivs0_[colidx]]) for colidx, colname in enumerate(self.feature_names_in_)])
         self.feature_importances_to_features_ = np.array([
             self._internal_predictor.coef_[colidx] if 1==len(self._internal_predictor.coef_.shape) else self._internal_predictor.coef_[0][colidx] 
             for colidx, colname in enumerate(self.feature_names_in_)])
@@ -463,18 +493,18 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         return self.feature_importances_
 
     def fit(self, X1, y1, is_centered=True, add_measure_error=None, data_clear=None, data_clear_steps=[0,1,2], set_feature_importances=True,
-            spearman_r_pvalue_thres=None, spearman_r_pvalue_warn=None, spearman_r_pvalue_drop_irrelevant_feature=None, **kwargs):
+            feat_pvalue_thres=None, feat_pvalue_warn=None, feat_pvalue_drop_irrelevant_feature=None, increasings=None, **kwargs):
         """ scikit-learn fit
             is_centered : using centered isotonic regression or not
             set_feature_importances: will set feature importances during the fit
-            spearman_r_pvalue_thres:                   if set then will override the one from __init__
-            spearman_r_pvalue_warn:                    if set then will override the one from __init__
-            spearman_r_pvalue_drop_irrelevant_feature: if set then will override the one from __init__
+            feat_pvalue_thres:                   if set then will override the one from __init__
+            feat_pvalue_warn:                    if set then will override the one from __init__
+            feat_pvalue_drop_irrelevant_feature: if set then will override the one from __init__
             kwargs: keyword arguments to the LinearRegression() or LogisticRegression() that is internally used for the regression or classification task and the fit() method used for the task
         """
-        if spearman_r_pvalue_thres                   == None: spearman_r_pvalue_thres                   = self.spearman_r_pvalue_thres
-        if spearman_r_pvalue_warn                    == None: spearman_r_pvalue_warn                    = self.spearman_r_pvalue_warn
-        if spearman_r_pvalue_drop_irrelevant_feature == None: spearman_r_pvalue_drop_irrelevant_feature = self.spearman_r_pvalue_drop_irrelevant_feature
+        if feat_pvalue_thres                   == None: feat_pvalue_thres                   = self.feat_pvalue_thres
+        if feat_pvalue_warn                    == None: feat_pvalue_warn                    = self.feat_pvalue_warn
+        if feat_pvalue_drop_irrelevant_feature == None: feat_pvalue_drop_irrelevant_feature = self.feat_pvalue_drop_irrelevant_feature
         
         if self.final_predictor:
             self._internal_predictor = self.final_predictor
@@ -492,13 +522,20 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         # NOTE: Setting add_measure_error=True may improve the performance of some ML methods. 
         add_measure_error = self.get_default(add_measure_error, self.fit_add_measure_error, False)
         data_clear = self.get_default(data_clear, self.fit_data_clear, False)
+        
         inX, exX, inIdxs, exIdxs = self._split(X1)
         X = np.array(inX)
         y = np.array(y1)
         
-        self.feature_spearman_rs_  = [None for _ in range(X.shape[1])]
-        self.feature_pvalues_     = [None for _ in range(X.shape[1])]
-        self.feature_trends_      = [None for _ in range(X.shape[1])]
+        if increasings and not isinstance(increasings, str) and isinstance(increasings, collections.abc.Iterable):
+            self.increasings_ = np.array([increasings[i] for i in inIdxs])
+        else:
+            increasing = self.get_default(increasings, self.increasing, None)
+            self.increasings_ = np.array([increasing for i in inIdxs]) 
+        
+        self.feat_odds_spearman_rs_ = [None for _ in range(X.shape[1])]
+        self.feat_odds_spearman_pvalues_     = [None for _ in range(X.shape[1])]
+        self.feat_odds_spearman_trends_      = [None for _ in range(X.shape[1])]
         if hasattr(inX, 'columns'):
             self.feature_names_in_ = [(colname if colname != '' else colidx) for colidx, colname in enumerate(inX.columns)]
         else:
@@ -507,34 +544,62 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         assert X.shape[0] > 0, F'The input {X1} does not have any rows'
         assert X.shape[1] > 0, F'The input {X1} does not have any columns'
         
-        if self.spearman_r_pvalue_correction == 'bonferroni': spearman_r_pvalue_thres = spearman_r_pvalue_thres / float(X.shape[1])
+        if self.feat_pvalue_correction == 'bonferroni': feat_pvalue_thres = feat_pvalue_thres / float(X.shape[1])
 
         raw_log_odds = self.raw_log_odds_ = [None for _ in range(X.shape[1])]
-        inv0 = self.inv0_ = [IsotonicRegression(increasing=self.increasing, out_of_bounds='clip') for _ in range(X.shape[1])]
+        inv0 = self.inv0_ = [IsotonicRegression(increasing=self.increasings_[i], out_of_bounds='clip') for i in range(X.shape[1])]
         ixs0 = self.ixs0_ = [None for _ in range(X.shape[1])]
         ivs0 = self.ivs0_ = [None for _ in range(X.shape[1])]
         irs0 = self.irs0_ = [None for _ in range(X.shape[1])]
         ixs1 = self.ixs1_ = [None for _ in range(X.shape[1])]
-        irs1 = self.irs1_ = [IsotonicRegression(increasing=self.increasing, out_of_bounds='clip') for _ in range(X.shape[1])]
+        irs1 = self.irs1_ = [IsotonicRegression(increasing=self.increasings_[i], out_of_bounds='clip') for i in range(X.shape[1])]
         ivs1 = self.ivs1_ = [None for _ in range(X.shape[1])]
         ixs2 = self.ixs2_ = [None for _ in range(X.shape[1])]
-        irs2 = self.irs2_ = [IsotonicRegression(increasing=self.increasing, out_of_bounds='clip') for _ in range(X.shape[1])]
+        irs2 = self.irs2_ = [IsotonicRegression(increasing=self.increasings_[i], out_of_bounds='clip') for i in range(X.shape[1])]
         ivs2 = self.ivs2_ = [None for _ in range(X.shape[1])]
         
         self.convex_regressions_0_ = [None for _ in range(X.shape[1])]
         self.convex_regressions_1_ = [ConvexRegression() for _ in range(X.shape[1])]
         self.convex_regressions_2_ = [ConvexRegression() for _ in range(X.shape[1])]
-        
+        self.feat_pvalue_method_ = self.feat_pvalue_method
+
+        self.average_y_ = np.mean(y)
         if self.task == 'regression':
             self._assert_input(X, y, is_binary_clf_asserted=False)
             X0 = self.X0_ = X[y<=np.mean(y),:]
-            X1 = self.X1_ = X[y> np.mean(y),:]
+            X1 = self.X1_ = X[y> np.mean(y),:]            
             self.prevalence_odds_ = np.nan
-        else:
-            self._assert_input(X, y)
+            if self.feat_pvalue_method == 'auto': self.feat_pvalue_method_ = 'spearmanr'
+        elif self.task == 'classification':
+            self._assert_input(X, y, is_binary_clf_asserted=True)
             X0 = self.X0_ = X[y==0,:]
             X1 = self.X1_ = X[y==1,:]
-            self.prevalence_odds_ = (len(X1) / float(len(X0)))
+            self.prevalence_odds_ = len(X1) / len(X0)
+            if self.feat_pvalue_method == 'auto': self.feat_pvalue_method_ = 'mannwhitneyu'
+        else:
+            raise TypeError(F'The task name {self.task} is invalid (only `classification` and `regression` are valid)!')
+        def mannwhitneyu2(a1, a2, *args, **kwargs):
+            # from https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mannwhitneyu.html#Notes
+            ret = scipy.stats.mannwhitneyu(a1, a2, *args, **kwargs)
+            axis = kwargs.get('axis', 0)
+            U1 = ret.statistic
+            Udiff = U1 - a1.shape[axis] * a2.shape[axis] / 2.0
+            MannwhitneyuResult2 = collections.namedtuple('MannwhitneyuResult2', ['statistic', 'pvalue'])
+            return MannwhitneyuResult2(statistic=Udiff, pvalue=ret.pvalue)
+        self.mannwhitneyu_retval_ = mannwhitneyu2(self.X1_, self.X0_, axis=0)
+        self.spearmanr_retval_raw_ = scipy.stats.spearmanr(X, y, axis=0)
+        SpearmanrResult2 = collections.namedtuple('SpearmanrResult2', ['statistic', 'pvalue'])
+        self.spearmanr_retval_ = SpearmanrResult2(
+            statistic=np.array([self.spearmanr_retval_raw_.statistic[i,-1] for i in range(X.shape[1])]), 
+            pvalue=np.array([self.spearmanr_retval_raw_.pvalue[i,-1] for i in range(X.shape[1])]))
+        if self.feat_pvalue_method_ == 'mannwhitneyu':
+            self.feat_pvalue_method_retval_ = self.mannwhitneyu_retval_
+        elif self.feat_pvalue_method_ == 'spearmanr':
+            self.feat_pvalue_method_retval_ = self.spearmanr_retval_
+        else:
+            raise TypeError(F'The p-value computation method {self.feat_pvalue_method_} (derived from {self.feat_pvalue_method}) is invalid'
+                    F' (only `auto`, `mannwhitneyu`, and `spearmanr` are valid)!')
+
         for colidx in range(X.shape[1]): 
             x = X[:,colidx]
             if self.task == 'regression':                
@@ -577,15 +642,22 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 self.raw_log_odds_[colidx] = raw_log_odds
                 x1 = np.array(xcenters)
                 y1 = relative_log_odds = raw_log_odds - center_log_odds
-                n_effective_examples = (len(xylistlist) - 1) / 2.0
-
+                n_effective_examples = (len(xylistlist) + 1) / 2.0
+                
             X_in = inX
             self.ixs1_[colidx] = x1
-            spearman_r, pvalue_observed, is_inc_or_dec = self.check_increasing(x1, y1, spearman_r_pvalue_thres, n_effective_examples)
-            self.feature_spearman_rs_[colidx] = spearman_r
-            self.feature_pvalues_[colidx] = pvalue_observed
-            self.feature_trends_[colidx] = is_inc_or_dec
-
+            
+            spearman_r, pvalue_observed = spearmanr(x1, y1)
+            is_inc_or_dec = (np.sign(spearman_r) if pvalue_observed < feat_pvalue_thres else 0)
+            #spearman_r, pvalue_observed, is_inc_or_dec = self.check_increasing(x1, y1, feat_pvalue_thres, n_effective_examples)
+            self.feat_odds_spearman_rs_[colidx] = spearman_r
+            self.feat_odds_spearman_pvalues_[colidx] = pvalue_observed
+            self.feat_odds_spearman_trends_[colidx] = is_inc_or_dec
+            
+            test_statistic = self._get_feature_importances('statistic', self.feat_pvalue_method_)[colidx]
+            pvalue_observed = self._get_feature_importances('pvalue', self.feat_pvalue_method_)[colidx]
+            is_inc_or_dec = self._get_feature_importances('trend', self.feat_pvalue_method_)[colidx]
+            
             if colidx in self.convex_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.convex_cols):
                 if not colidx in self.convex_cols: self.convex_cols.append(colidx)
                 self.ivs1_[colidx] = self.convex_regressions_1_[colidx].fit_transform(x1, y1)
@@ -593,13 +665,13 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             else:
                 if is_inc_or_dec == 0:
                     self.irrelevant_feature_indexes_.append(colidx)
-                    if spearman_r_pvalue_warn:
+                    if feat_pvalue_warn:
                         colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
-                        if spearman_r_pvalue_drop_irrelevant_feature:
+                        if feat_pvalue_drop_irrelevant_feature:
                             warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant and is dropped (not kept). ')
                         else:
                             warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant but is still kept (not dropped). ')
-                    if spearman_r_pvalue_drop_irrelevant_feature:
+                    if feat_pvalue_drop_irrelevant_feature:
                         self.irs1_[colidx] = AlwaysConstantRegressor(0)
                 self.ivs1_[colidx] = 1*center_log_odds + self.irs1_[colidx].fit_transform(x1, y1)                
                 self.irs0_[colidx] = self.irs1_[colidx]
@@ -619,7 +691,6 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 self.ivs0_[colidx] = self.ivs2_[colidx]
                 self.ixs0_[colidx] = self.ixs2_[colidx]
                 self.inv0_[colidx].fit_transform(y2, x2)
-                _x2 = self.inv0_[colidx].predict(y2)
             else:
                 self.inv0_[colidx].fit_transform(y1, x1)
         log_ratios = self._transform(X, add_measure_error=add_measure_error, is_inverse=False)
@@ -630,6 +701,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self._set_feature_importances()
         return self
     
+    def get_average_y(self):
+        return self.average_y_
     def get_odds_offset(self):
         return self.prevalence_odds_
     def get_density_estimated_X(self):
@@ -682,7 +755,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         """
         return self.transform(X1, is_inverse=True)
     
-    def fit_transform(self, X1, y1, fit_add_measure_error=None, transform_add_measure_error=None):
+    def fit_transform(self, X1, y1, *args, fit_add_measure_error=None, transform_add_measure_error=None, **kwargs):
         """ scikit-learn fit_transform 
             fit_add_measure_error: set to True to add measurement error to prevent overfitting (it may work for plain decision trees)
             transform_add_measure_error: set to True to add measurement error to prevent overfitting
@@ -691,7 +764,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #   such as DecisionTreeClassifier (DT) presumably because DT without regularization tends to overfit.
         fit_add_measure_error = self.get_default(fit_add_measure_error, self.ft_fit_add_measure_error, False)
         transform_add_measure_error = self.get_default(transform_add_measure_error, self.ft_transform_add_measure_error, True)
-        self.fit(X1, y1, add_measure_error=fit_add_measure_error)
+        self.fit(X1, y1, *args, add_measure_error=fit_add_measure_error, **kwargs)
         return self.transform(X1, add_measure_error=transform_add_measure_error)
     
     def _extract_features(self, X):
@@ -716,7 +789,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             return np.array([(x,x) for x in ret])
         return self._internal_predictor.predict_proba(allfeatures)
 
-def test_fit_and_predict_proba():
+def test_fit_and_predict_proba(ilr=None):
     import pandas as pd
     
     pp = pprint.PrettyPrinter(indent=4)
@@ -740,7 +813,8 @@ def test_fit_and_predict_proba():
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,1,1,0,0,0,0,0,1,0,0,0,0])
-    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, excluded_cols=['col3'])
+    
+    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, excluded_cols=['col3'])
     ilr.fit(X, y)
     Xtest = np.array([
         [0,    0, 0],
@@ -759,7 +833,7 @@ def test_fit_and_predict_proba():
     pp.pprint(ilr.get_info())
     pp.pprint(np.hstack((X,y[:,None])))
 
-def test_fit_and_predict_with_dups(task='classification'):
+def test_fit_and_predict_with_dups(ilr=None, task='classification'):
     import pandas as pd
     
     pp = pprint.PrettyPrinter(indent=4)
@@ -787,7 +861,8 @@ def test_fit_and_predict_with_dups(task='classification'):
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,0,1, 0,0,1,0,1, 0,0,1,0,0, 0])
-    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, excluded_cols=['col3'], task=task)
+
+    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, excluded_cols=['col3'], task=task)
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
@@ -799,7 +874,7 @@ def test_fit_and_predict_with_dups(task='classification'):
     print(F'train_transformed_X=\n{X2}')
     print(F'test_transformed_X=\n{X3}')
 
-def test_fit_and_predict_with_convex(task='classification'):
+def test_fit_and_predict_with_convex(ilr=None, task='classification'):
     import pandas as pd
 
     pp = pprint.PrettyPrinter(indent=4)
@@ -827,7 +902,8 @@ def test_fit_and_predict_with_convex(task='classification'):
     ])
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([9,8,8,6,6,4,3,2,1,0,1,2,3,4,5,6])
-    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, excluded_cols=['col3'],convex_cols=['col2'], task='regression')
+    
+    if not ilr : ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, excluded_cols=['col3'],convex_cols=['col2'], task='regression')
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
@@ -840,10 +916,7 @@ def test_fit_and_predict_with_convex(task='classification'):
     print(F'test_transformed_X=\n{X3}')
     print(F'test_predicted_X=\n{y1}')
 
-def test_inverse_transform(
-        task='classification',
-        #task='regression'
-        ):
+def test_inverse_transform(ilr=None, task='classification'):
     Xtrain = np.array([
         [-1, -10, 0],
         [ 0,  10, 0],
@@ -864,17 +937,189 @@ def test_inverse_transform(
         [ 4, 150, 0],
         [ 5, 210, 0],
     ])
-    ilr = IsotonicLogisticRegression(spearman_r_pvalue_thres=2.0, task=task)
+    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, task=task)
     ilr.set_random_state(42+0)
     ilr.fit(Xtrain, ytrain)
     X2 = ilr.transform(Xtest)
     X3 = ilr.inverse_transform(X2)
     np.testing.assert_allclose(X3, Xtest, rtol=1e-6, atol=1e-6)
 
+def test_with_simulation(tasks=['classification', 'regression'], n_samples_s=[2**8], seeds=list(range(10))):
+    odds_spearmanr_PVALUE_THRES = 1e-9
+    import itertools, random, sys
+    import numpy as np
+    import scipy as sp
+    import pandas as pd
+    logging.basicConfig(format='test_with_simulation %(asctime)s - %(message)s', level=logging.INFO)
+    def create_random_typed_mat(x):
+        r = random.random() 
+        if r < 1.0/3: return list(x)
+        elif r < 2.0/3: return np.array(x)
+        else: 
+            if 1 == len(x.shape): return pd.Series(x, ['vector_name_{}'.format(i+1) for i in range(x.shape[0])])
+            elif 2 == len(x.shape): return pd.DataFrame(x, columns=['matrix_column_{}'.format(i+1) for i in range(x.shape[1])])
+    
+    ilr_default = IsotonicLogisticRegression() # check that the default constructor without any param works
+    for task, n_samples, seed_val in itertools.product(tasks, n_samples_s, seeds): #['classification', 'regression']:
+        info1 = F'task={task} n_samples={n_samples} seed_val={seed_val}'
+
+        random.seed(seed_val)
+        np.random.seed(seed_val)
+        drop_feat = seed_val%10//5
+        if task == 'classification':
+            ilr = IsotonicLogisticRegression(task=task, feat_pvalue_thres=0.01, feat_pvalue_drop_irrelevant_feature=drop_feat, C=0.5)
+        else:
+            ilr = IsotonicLogisticRegression(task=task, feat_pvalue_thres=0.01, feat_pvalue_drop_irrelevant_feature=drop_feat)
+        Xtrain = np.array([[i, -i, i + 0.2*float(scipy.stats.norm.rvs(size=1)), 0, 0.2*float(scipy.stats.norm.rvs(size=1))] for i in range(n_samples)])
+        ytrain_odds = np.exp((np.array(range(n_samples)) * 2 - (n_samples-1)) * 5 / n_samples) # 2**2 / (1 + np.array(range(n_samples)))
+        
+        if task == 'classification':
+            ytrain_probs = ytrain_odds / (1 + ytrain_odds)
+            ytrain = scipy.stats.bernoulli.rvs(ytrain_probs)
+        else:
+            ytrain = ytrain_odds
+        
+        increasings = (True, False, True, seed_val%4//2, seed_val%4%2) if (seed_val%5) else None
+        for_trans_vals = ilr.fit_transform(create_random_typed_mat(Xtrain), create_random_typed_mat(ytrain), increasings=increasings)
+        inv_trans_vals = ilr.inverse_transform(create_random_typed_mat(for_trans_vals))
+        inv_trans_vals2 = np.array(inv_trans_vals)
+        logging.debug(F'inv_trans_vals2={inv_trans_vals2}\nXtrain={Xtrain}')
+        ind = int(n_samples - n_samples/6)
+        assert np.allclose(inv_trans_vals2[ind:-ind,:], Xtrain[ind:-ind,:]), F'{inv_trans_vals[ind:-ind,:]} == {Xtrain[ind:-ind,:]} failed!'            
+        
+        if task == 'classification':
+            Xpred_odds = np.exp(for_trans_vals) * ilr.get_odds_offset()
+            ypred_probas = ilr.predict_proba(create_random_typed_mat(Xtrain))
+        else:
+            Xpred_odds = for_trans_vals
+        ypred_labels = ilr.predict(create_random_typed_mat(Xtrain))
+        
+        logging.debug(F'Xtrain=\n{Xtrain}')
+        logging.debug(F'ytrain=\n{ytrain}')
+        logging.debug(F'mannwhitneyu_retval={ilr.mannwhitneyu_retval_}')
+        logging.debug(F'spearmanr_retval={ilr.spearmanr_retval_}')
+        logging.debug(F'Xpred_odds=\n{Xpred_odds}')
+        rt, frac2, rt2, frac3, rt3, frac4, rt4 = 3.0, 0.95, 2.5, 0.85, 2.0, 0.7, 1.5  # relative tolerance
+        edgedist = 0 # this seems to be irrelevant
+        def to_display(a1, a2):
+            ret = ([[i, round(e1,5), round(e2,5)] for i, (e1, e2) in enumerate(zip(a1, a2))])
+            return ret if len(a1) < 500 else ret[0:200] + ['...', '...', '...'] + ret[-200:]
+        def check_close(a1, a2, rtol1, frac2, rtol2, frac3, rtol3, frac4, rtol4, is_reverse=False):
+            assert len(a1) == len(a2), F'Internal error: {a1} and {a2} are not equal in length!'
+            a1 = np.log(a1)
+            a2 = np.log(a2)
+            if is_reverse: msg = 'succeeded (but should fail)'
+            else: msg = 'failed (but should succeed)'
+            assert is_reverse != (np.allclose(a1, a2, atol=rtol1)), (
+                    F'for seed={seed_val} and n_samples={n_samples}, allclose with ln(tolerance)={rtol1} {msg}!\n{to_display(a1, a2)}')
+            assert is_reverse != (sum(np.isclose(a1, a2, atol=rtol2)) >= len(a1) * frac2), (
+                    F'for seed={seed_val} and n_samples={n_samples}, isclose with ln(tolerance)={rtol2} at {frac2*100}% {msg}!\n{to_display(a1, a2)}')
+            assert is_reverse != (sum(np.isclose(a1, a2, atol=rtol3)) >= len(a1) * frac3), (
+                    F'for seed={seed_val} and n_samples={n_samples}, isclose with ln(tolerance)={rtol3} at {frac3*100}% {msg}!\n{to_display(a1, a2)}')
+            assert is_reverse != (sum(np.isclose(a1, a2, atol=rtol4)) >= len(a1) * frac4), (
+                    F'for seed={seed_val} and n_samples={n_samples}, isclose with ln(tolerance)={rtol3} at {frac3*100}% {msg}!\n{to_display(a1, a2)}')
+        check_close(Xpred_odds [edgedist:-1-edgedist:1,0], ytrain_odds [edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4)
+        check_close(Xpred_odds [edgedist:-1-edgedist:1,1], ytrain_odds [edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4)
+        check_close(Xpred_odds [edgedist:-1-edgedist:1,2], ytrain_odds [edgedist:-1-edgedist:1], rt*1.5, frac2, rt2*1.5, frac3, rt3*1.5, frac4, rt4*1.5) 
+        if task == 'classification':
+            check_close(ypred_probas[edgedist:-1-edgedist:1,1], ytrain_probs[edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4)
+            assert sorted(list(ypred_labels)) == list(ypred_labels)
+        else:
+            check_close(ypred_labels[edgedist:-1-edgedist:1  ], ytrain_odds[edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4)
+        check_close(Xpred_odds [edgedist:-1-edgedist:1,3], ytrain_odds [edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4, is_reverse=True)
+        
+        def aeq(a, b, tol=1.0): return abs(a-b) < sys.float_info.min or (a / b <= 1+tol and a/b >= 1/(1+tol))
+        def beq(a, b): return aeq(a, b, 100.0)
+        
+        # For (mannwhitneyu, spearmanr, odds_spearmanr)
+        def check_statistic(fi, approx_ranges=None, stat_method='NA'):
+            if (np.isnan(fi[3]) and stat_method in ['spearmanr', 'odds_spearmanr']): fi[3] = 0
+            assert aeq(fi[0] ,    -fi[1]), F'{fi[0]} ~    {-fi[1]}  failed for stat_test={stat_method} {info1}!'
+            assert 1.1*fi[0] >     fi[2],  F'{fi[0]} >     {fi[2]}  failed for stat_test={stat_method} {info1}!'
+            assert     fi[2] > abs(fi[3]), F'{fi[2]} > abs({fi[3]}) failed for stat_test={stat_method} {info1}!'
+            assert     fi[2] > abs(fi[4]), F'{fi[2]} > abs({fi[4]}) failed for stat_test={stat_method} {info1}!'
+            if approx_ranges:
+                for i, (lo, hi) in enumerate(approx_ranges):
+                    assert lo <= fi[i] and fi[i] <= hi, F'{lo} <= {fi[i]} <= {hi} failed for {fi} at {i} for stat_test={stat_method} {info1}'
+        def check_pvalue(fi, approx_ranges=None, stat_method='NA'): 
+            if (np.isnan(fi[3]) and stat_method in ['spearmanr', 'odds_spearmanr']): fi[3] = 0.5
+            mul = odds_spearmanr_PVALUE_THRES if stat_method in ['odds_spearmanr'] else 0.1
+            assert beq(fi[0] ,     fi[1]), F'{fi[0]} ~     {fi[1]}  failed for stat_test={stat_method} {info1}!'
+            assert mul*fi[0] <=    fi[2],  F'{fi[0]} <     {fi[2]}  failed for stat_test={stat_method} {info1}!'
+            assert     fi[2] <    (fi[3]), F'{fi[2]} < abs({fi[3]}) failed for stat_test={stat_method} {info1}!'
+            assert     fi[2] <    (fi[4]), F'{fi[2]} < abs({fi[4]}) failed for stat_test={stat_method} {info1}!'
+            if approx_ranges:
+                for i, (lo, hi) in enumerate(approx_ranges):
+                    assert lo <= fi[i] and fi[i] <= hi, F'{lo} <= {fi[i]} <= {hi} failed for {fi} at {i} for stat_test={stat_method} {info1}'
+        def check_trend(fi, approx_ranges=None, stat_method='NA', pvalues=None):
+            assert fi[0] ==  1, F'{fi[0]} ==  1 failed for stat_test={stat_method} {info1} with pvalues={pvalues}!'
+            assert fi[1] == -1, F'{fi[1]} == -1 failed for stat_test={stat_method} {info1} with pvalues={pvalues}!'
+            assert fi[2] ==  1, F'{fi[2]} ==  1 failed for stat_test={stat_method} {info1} with pvalues={pvalues}!'
+            assert fi[3] ==  0, F'{fi[3]} ==  0 failed for stat_test={stat_method} {info1} with pvalues={pvalues}!'
+            if stat_method in ['odds_spearmanr']:
+                pass
+            else:
+                assert fi[4] ==  0, F'{fi[4]} ==  0 failed for stat_test={stat_method} {info1} with pvalues={pvalues}!'
+            if approx_ranges:
+                for i, (lo, hi) in enumerate(approx_ranges):
+                    assert lo <= fi[i] and fi[i] <= hi, F'{lo} <= {fi[i]} <= {hi} failed for {fi} at {i} for stat_test={stat_method} {info1} with pvalues={pvalues}'
+        fi1 = ilr.get_feature_importances('f2l2f')
+        fi2 = ilr.get_feature_importances('f2l')
+        fi3 = ilr.get_feature_importances('f2f')
+        fi1min = min((fi1[0], fi1[1], fi1[2])) + 1e-8
+        fi1sum = sum((fi1[0], fi1[1], fi1[2]))
+        fi1max = max((fi1[3], fi1[4])) - 1e-8
+        fi2min = min((fi2[0], fi2[1], fi2[2])) + 1e-8
+        fi2sum = sum((fi2[0], fi2[1], fi2[2]))
+        fi2max = max((fi2[3], fi2[4])) - 1e-8
+        fi3min = min((fi3[0], fi3[1], fi3[2])) + 1e-8
+        fi3sum = sum((fi3[0], fi3[1], fi3[2]))
+        fi3max = max((fi3[3], fi3[4])) - 1e-8        
+        assert fi1min > fi1max, F'min(({fi1[0]}, {fi1[1]}, {fi1[2]})) > max({fi1[3]}, {fi1[4]}) failed!'
+        assert fi1sum > 5/4.0,  F'sum(({fi1[0]}, {fi1[1]}, {fi1[2]})) > 5/4.0 failed!'
+        assert fi2min > fi2max, F'min(({fi2[0]}, {fi2[1]}, {fi2[2]})) > max({fi2[3]}, {fi2[4]}) failed!'
+        assert fi2sum > 5/4.0,  F'sum(({fi2[0]}, {fi2[1]}, {fi2[2]})) > 5/4.0 failed!'
+        if drop_feat:
+            assert fi3min > fi3max, F'min(({fi3[0]}, {fi3[1]}, {fi3[2]})) > max({fi3[3]}, {fi3[4]}) failed!'
+        assert fi3sum > 0.90,   F'sum(({fi3[0]}, {fi3[1]}, {fi3[2]})) > 0.95 failed!'
+        assert fi3sum < 1.10,   F'sum(({fi3[0]}, {fi3[1]}, {fi3[2]})) < 1.05 failed!'
+
+        for stat_method in ['mannwhitneyu', 'spearmanr', 'odds_spearmanr']:
+            fi4 = ilr.get_feature_importances('statistic', stat_method)
+            fi5 = ilr.get_feature_importances('pvalue', stat_method)
+            fi6 = ilr.get_feature_importances('trend', stat_method)
+            if (stat_method == 'mannwhitneyu' and task == 'classification') or (stat_method == 'spearmanr' and task == 'regression'):
+                assert np.allclose(ilr.get_feature_importances('statistic'), fi4, equal_nan=True), (
+                        F'''{ilr.get_feature_importances('statistic')} ~ {fi4} failed!''')
+                assert np.allclose(ilr.get_feature_importances('pvalue'), fi5, equal_nan=True), (
+                        F'''{ilr.get_feature_importances('pvalue')} ~ {fi5} failed!''')
+                assert np.allclose(ilr.get_feature_importances('trend'), fi6, equal_nan=True), (
+                        F'''{ilr.get_feature_importances('trend')} ~ {fi6} failed!''')
+            if stat_method == 'mannwhitneyu':
+                lo, mi, hi = 9*n_samples, n_samples**1.5, n_samples**2
+            elif stat_method == 'spearmanr' and task == 'classification':
+                lo, mi, hi = 0.5, 0.6, 1.0
+            elif stat_method == 'spearmanr' and task == 'regression':
+                lo, mi, hi = 0.2, 0.9, 1.0
+            elif stat_method == 'odds_spearmanr' and task == 'classification':
+                lo, mi, hi = 0.5, 0.6, 1.0
+            elif stat_method == 'odds_spearmanr' and task == 'regression':
+                lo, mi, hi = 0.2, 0.9, 1.0
+            else: raise ValueError(F'The statistical test {stat_method} is invalid for task {task}!')
+            H0pv = (odds_spearmanr_PVALUE_THRES if stat_method in 'odds_spearmanr' else 1e-2)
+            statistic_ranges = [(mi, hi), (-hi, -mi), (mi, hi), (-lo, lo), (-lo, lo)]
+            check_statistic(fi4, statistic_ranges, stat_method=stat_method)
+            check_pvalue(fi5, [(0, 1e-9), (0, 1e-9), (0, 1e-9), (H0pv, 1), (H0pv, 1)], stat_method=stat_method)
+            check_trend(fi6, stat_method=stat_method, pvalues=fi5)
+    logging.info(F'Finished testing with the combinations of tasks={tasks}, n_samples_s={n_samples_s}, seeds={seeds}')
+
 if __name__ == '__main__':
-    test_inverse_transform()
-    test_fit_and_predict_proba()
-    test_fit_and_predict_with_dups()
-    test_fit_and_predict_with_dups(task='regression')
-    test_fit_and_predict_with_convex(task='regression')
+    #ilr1 = IsotonicLogisticRegression(feat_pvalue_drop_irrelevant_feature=False, task='classification')
+    #ilr2 = IsotonicLogisticRegression(feat_pvalue_drop_irrelevant_feature=False, task='regression')
+    test_with_simulation() #(tasks=['classification', 'regression'])
+    #test_inverse_transform(ilr1)
+    #test_fit_and_predict_proba(ilr1)
+    #test_fit_and_predict_with_dups(ilr1)
+    #test_fit_and_predict_with_dups(ilr2)
+    #test_fit_and_predict_with_convex(ilr2)
     
