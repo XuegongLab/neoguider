@@ -12,6 +12,9 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from sklearn.utils.validation import check_is_fitted
 
+MannwhitneyuResult2 = collections.namedtuple('MannwhitneyuResult2', ['statistic', 'pvalue'])
+SpearmanrResult2 = collections.namedtuple('SpearmanrResult2', ['statistic', 'pvalue'])
+
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), "valid") / w
 
@@ -583,12 +586,10 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             ret = scipy.stats.mannwhitneyu(a1, a2, *args, **kwargs)
             axis = kwargs.get('axis', 0)
             U1 = ret.statistic
-            Udiff = U1 - a1.shape[axis] * a2.shape[axis] / 2.0
-            MannwhitneyuResult2 = collections.namedtuple('MannwhitneyuResult2', ['statistic', 'pvalue'])
+            Udiff = U1 - a1.shape[axis] * a2.shape[axis] / 2.0            
             return MannwhitneyuResult2(statistic=Udiff, pvalue=ret.pvalue)
         self.mannwhitneyu_retval_ = mannwhitneyu2(self.X1_, self.X0_, axis=0)
         self.spearmanr_retval_raw_ = scipy.stats.spearmanr(X, y, axis=0)
-        SpearmanrResult2 = collections.namedtuple('SpearmanrResult2', ['statistic', 'pvalue'])
         self.spearmanr_retval_ = SpearmanrResult2(
             statistic=np.array([self.spearmanr_retval_raw_.statistic[i,-1] for i in range(X.shape[1])]), 
             pvalue=np.array([self.spearmanr_retval_raw_.pvalue[i,-1] for i in range(X.shape[1])]))
