@@ -136,6 +136,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             feat_pvalue_method='auto', 
             feat_pvalue_thres=0.05, feat_pvalue_warn=True, feat_pvalue_drop_irrelevant_feature=True, feat_pvalue_correction='none',
             increasing = 'auto',
+            nan_policy = 'raise', # similar to https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
             **kwargs):
         """ 
         Initialize
@@ -167,6 +168,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             Typically, when this value is set to either True or False (i.e., not 'auto'), then feat_pvalue_drop_irrelevant_feature should be set to False
             because this True/False provides prior info to the relationship between the label and the feature.
         
+        @param nan_policy: how to treat nan values in the input sample-times-feature matrix
         @return the initialized instance
         """
         super().__init__()
@@ -197,6 +199,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.feat_pvalue_drop_irrelevant_feature = feat_pvalue_drop_irrelevant_feature
         self.feat_pvalue_correction = feat_pvalue_correction
         self.increasing = increasing
+        self.nan_policy = nan_policy
         self.kwargs = kwargs
 
     def __sklearn_is_fitted__(self):
@@ -346,11 +349,18 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             idx1 = idx2
         return (x2, y2)
     
+    def _prep_input(self, X):
+        arr = copy.deepcopy(X)
+        if self.nan_policy == 'mean':
+            col_means = np.nanmean(arr, axis=0)
+            nan_indices = np.isnan(arr)
+            arr[nan_indices] = np.take(col_means, np.where(nan_indices)[1])
+        return arr
     def _assert_input(self, X, y, is_num_asserted=True, is_binary_clf_asserted=True):
         for rowit in range(X.shape[0]):
             for colit in range(X.shape[1]):
-                if is_num_asserted: 
-                    assert not math.isnan(X[rowit][colit]), F'Nan value encountered in row {rowit} col {colit} ({X[rowit]})'
+                if is_num_asserted:
+                    if self.nan_policy in ['assert', 'raise']: assert not math.isnan(X[rowit][colit]), F'Nan value encountered in row {rowit} col {colit} ({X[rowit]})'
                     assert (-1e50 < X[rowit][colit]), F'Number too small (< -1e50)  at row {rowit} col {colit} ({X[rowit]})'
                     assert ( 1e50 > X[rowit][colit]), F'Number too large (>  1e50)  at row {rowit} col {colit} ({X[rowit]})'
         assert X.shape[0] == len(y), F'{X.shape[0]} == {len(y)} failed for the input X={X} and y={y}'
@@ -567,6 +577,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.feat_pvalue_method_ = self.feat_pvalue_method
 
         self.average_y_ = np.mean(y)
+        
+        X = self._prep_input(X)        
         if self.task == 'regression':
             self._assert_input(X, y, is_binary_clf_asserted=False)
             X0 = self.X0_ = X[y<=np.mean(y),:]
@@ -719,11 +731,18 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
     def get_centered_isotonic_log_odds(self):
         return self.ivs2_
         
-    def _transform(self, X, add_measure_error, is_inverse):
+    def _transform(self, X, add_measure_error, is_inverse, column_idx=None):
+        if column_idx != None:
+            if column_idx in self.ex_colidxs: return X
+            else: return (self.inv0_[column_idx].transform(X) if is_inverse else (
+                self.convex_regressions_0_[column_idx].transform(X)
+                if (column_idx in self.convex_cols)
+                else self.irs0_[column_idx].predict(X)))
         if add_measure_error:
             XT = np.array([self.ensure_total_order(X[:,colidx]) for colidx in range(X.shape[1])])
         else:
             XT = np.array([(X[:,colidx]) for colidx in range(X.shape[1])])
+        assert len(XT) == len(self.irs0_), F'{len(XT)} == {len(self.irs0_)} failed!'
         return np.array([(
             self.inv0_[colidx].transform(xT) if is_inverse else (
             self.convex_regressions_0_[colidx].transform(xT)
@@ -733,7 +752,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #return np.array([self.irs0_[colidx].predict(xT) for colidx,xT in enumerate(XT)]).transpose()
         #return np.array([self.irs0_[colidx].predict((X[:,colidx])) for colidx in range(X.shape[1])]).transpose()
     
-    def transform(self, X1, add_measure_error=None, is_inverse=False):
+    def transform(self, X1, add_measure_error=None, is_inverse=False, column_idx=None):
         """ scikit-learn transform 
             add_measure_error: set to True to add measurement error to prevent overfitting
             is_inverse: set to True to perform inverse transform. Please use the inverse_transform method instead if possible.
@@ -741,6 +760,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         check_is_fitted(self)
         add_measure_error = self.get_default(add_measure_error, self.transform_add_measure_error, False)
         X = np.array(X1)
+        X = self._prep_input(X)
+        if column_idx != None: return self._transform(X, add_measure_error=add_measure_error, is_inverse=is_inverse, column_idx=column_idx)
         inX, exX, inIdxs, exIdxs = self._split(X, True)
         test_orX = self._transform(inX, add_measure_error=add_measure_error, is_inverse=is_inverse)
         X2 = np.zeros((X.shape[0], X.shape[1]))
@@ -748,13 +769,13 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         X2[:,exIdxs] = exX
         return X2
     
-    def inverse_transform(self, X1):
+    def inverse_transform(self, X1, column_idx=None):
         """
         scikit-learn inverse_transform
         caveat: inverse_transform(transform(X)) != X and transform(inverse_transform(X)) != X for a column x of X 
                 if at least one scalar value of x is not within the range in which the transform function of x is monotonically increasing
         """
-        return self.transform(X1, is_inverse=True)
+        return self.transform(X1, column_idx=column_idx, is_inverse=True)
     
     def fit_transform(self, X1, y1, *args, fit_add_measure_error=None, transform_add_measure_error=None, **kwargs):
         """ scikit-learn fit_transform 
@@ -777,6 +798,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         """ scikit-learn predict using logistic regression built on top of isotonic scaler """
         check_is_fitted(self)
         X = np.array(X1)
+        X = self._prep_input(X)
         allfeatures = self._extract_features(X)
         return self._internal_predictor.predict(allfeatures)
 
@@ -784,6 +806,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         """ scikit-learn predict_proba using logistic regression built on top of isotonic scaler """
         check_is_fitted(self)
         X = np.array(X1)
+        X = self._prep_input(X)
         allfeatures = self._extract_features(X)
         if self.task == 'regression':
             ret = self._internal_predictor.predict(allfeatures)
