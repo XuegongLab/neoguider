@@ -30,7 +30,7 @@ conda create -y -n $neoguider
 #   podman can be used to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
 # Please feel free to modify other version sets as needed. 
 $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
-    gcc openjdk parallel perl podman sshpass tcsh \
+    gcc openjdk parallel perl podman screen sshpass tcsh \
     perl-carp-assert psutil pyyaml requests-cache zlib \
     pandas pytorch pytorch-lightning scikit-learn xgboost \
     bcftools blast 'bwa=0.7.17' 'ensembl-vep=109.3' 'kallisto=0.48.0' mosdepth 'optitype=1.3.5' samtools snakemake 'star=2.7.8' 'star-fusion=1.12.0' mhcflurry \
