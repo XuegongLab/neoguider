@@ -21,7 +21,7 @@ prefix: '.'
 # variables that begins with ssh:// requires the NeohunterRemotePassword environment variable to be set and exported
 
 #netmhcpan_cmd: '/mnt/d/code/netMHCpan-4.0/netMHCpan'
-netmhcpan_cmd: '/mnt/d/code/neohunter/netMHCpan-4.1/netMHCpan'
+netmhcpan_cmd: '/home/zhaoxiaofei/software/netMHCpan-4.1/netMHCpan'
 #netmhcstabpan_cmd: 'ssh://zxf@166.111.130.101:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
 netmhcstabpan_cmd: 'ssh://zxf@101.6.41.78:50022/data8t_4/zxf/software/netMHCstabpan-1.0/netMHCstabpan'
 netmhcstabpan_tmp: '/data8t_5/tmp'
