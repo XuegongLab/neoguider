@@ -602,9 +602,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             return MannwhitneyuResult2(statistic=Udiff, pvalue=ret.pvalue)
         self.mannwhitneyu_retval_ = mannwhitneyu2(self.X1_, self.X0_, axis=0)
         self.spearmanr_retval_raw_ = scipy.stats.spearmanr(X, y, axis=0)
-        self.spearmanr_retval_ = SpearmanrResult2(
-            statistic=np.array([self.spearmanr_retval_raw_.statistic[i,-1] for i in range(X.shape[1])]), 
-            pvalue=np.array([self.spearmanr_retval_raw_.pvalue[i,-1] for i in range(X.shape[1])]))
+        logging.debug(F'self.spearmanr_retval_raw_.statistic = {self.spearmanr_retval_raw_.statistic}')
+        if isinstance(self.spearmanr_retval_raw_.statistic, float) or isinstance(self.spearmanr_retval_raw_.statistic, int):
+            self.spearmanr_retval_ = SpearmanrResult2(
+                    statistic=np.array(self.spearmanr_retval_raw_.statistic),
+                    pvalue=np.array([self.spearmanr_retval_raw_.pvalue]))
+        else:
+            self.spearmanr_retval_ = SpearmanrResult2(
+                    statistic=np.array([self.spearmanr_retval_raw_.statistic[i,-1] for i in range(X.shape[1])]), 
+                    pvalue=np.array([self.spearmanr_retval_raw_.pvalue[i,-1] for i in range(X.shape[1])]))
         if self.feat_pvalue_method_ == 'mannwhitneyu':
             self.feat_pvalue_method_retval_ = self.mannwhitneyu_retval_
         elif self.feat_pvalue_method_ == 'spearmanr':
