@@ -134,7 +134,10 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             ft_transform_add_measure_error=None,
             fit_data_clear=False,
             feat_pvalue_method='auto', 
-            feat_pvalue_thres=0.05, feat_pvalue_warn=True, feat_pvalue_drop_irrelevant_feature=True, feat_pvalue_correction='none',
+            feat_pvalue_thres=0.01, 
+            feat_pvalue_warn=True, 
+            feat_pvalue_drop_irrelevant_feature=True, 
+            feat_pvalue_correction='none',
             increasing = 'auto',
             nan_policy = 'raise', # similar to https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
             **kwargs):
