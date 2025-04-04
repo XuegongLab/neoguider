@@ -1,17 +1,18 @@
 species: 'Homo_sapiens' # supports Mus_musculus with strain=C57BL_6NJ_v1 or strain=BALB_cJ_v1
 hetero_nbits: 100.75    # disable the nbits threshold
-hetero_editdist: 1.5    
+hetero_editdist: 0.5    # Set it to 1.5 to enable the generation of heteroclitic peptides (e-mimotopes)
 keep_identical_ET_and_WT: 0
 keep_identical_MT_and_WT: 0
 
-### Section 1: required input and output: one set-up per sample (dot (.) means NotAvailable)
+### Section 1: required input and output: one set-up per sample 
+# dot (.) and empty-string mean NotAvailable, where only empty-string is allowed for fastq files named as *_fq1 and *_fq2
 
-dna_tumor_fq1: '.'
-dna_tumor_fq2: '.'
-dna_normal_fq1: '.'
-dna_normal_fq2: '.'
-rna_tumor_fq1: '.'
-rna_tumor_fq2: '.'
+dna_tumor_fq1: ''
+dna_tumor_fq2: ''
+dna_normal_fq1: ''
+dna_normal_fq2: ''
+rna_tumor_fq1: ''
+rna_tumor_fq2: ''
 tumor_spec_peptide_fasta: '.'
 
 output_directory: '.'
