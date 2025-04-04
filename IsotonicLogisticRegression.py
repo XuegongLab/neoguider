@@ -137,7 +137,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             feat_pvalue_thres=0.01, 
             feat_pvalue_warn=True, 
             feat_pvalue_drop_irrelevant_feature=True, 
-            feat_pvalue_correction='none',
+            feat_pvalue_correction='bonferroni',
             increasing = 'auto',
             nan_policy = 'raise', # similar to https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
             **kwargs):
@@ -445,7 +445,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         check_is_fitted(self)
         return self.feature_names_in_
     
-    def _get_feature_importances(self, analysis, stat_test):
+    def _get_feature_importances(self, analysis, stat_test):        
         if stat_test == 'auto':
             if self.task == 'regression': stat_test = 'spearmanr'
             elif self.task == 'classification': stat_test = 'mannwhitneyu'
@@ -460,6 +460,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                     pvalue=np.array([x for x in self.feat_odds_spearman_pvalues_]))
         else: raise TypeError(F'The statistical test {stat_test} is invalid (only "auto", "spearmanr" and "mannwhitneyu" are valid)!')
         
+        correction_factor = 1.0
+        if self.feat_pvalue_correction = 'bonferroni': correction_factor = float(len(stat_test_retval.pvalue))
+        
         if   analysis == 'f2l2f':
             return self.feature_importances_
         elif analysis == 'f2l':
@@ -469,9 +472,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         elif analysis == 'statistic':
             return stat_test_retval.statistic
         elif analysis == 'pvalue':
-            return stat_test_retval.pvalue
+            return np.clip(stat_test_retval.pvalue * correction_factor, a_max=1.0)
         elif analysis == 'trend':
-            return np.where(stat_test_retval.pvalue < self.feat_pvalue_thres, np.sign(stat_test_retval.statistic), 0)
+            return np.where(np.clip(stat_test_retval.pvalue * correction_factor, a_max=1.0) < self.feat_pvalue_thres, np.sign(stat_test_retval.statistic), 0)
         else:
             raise TypeError(F'The importance type "{analysis}" is invalid, it must be either "f2l", "f2f", "f2l2f", "statistic", "pvalue", or "trend"!')
 
@@ -551,7 +554,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         self.feat_odds_spearman_rs_ = [None for _ in range(X.shape[1])]
         self.feat_odds_spearman_pvalues_     = [None for _ in range(X.shape[1])]
-        self.feat_odds_spearman_trends_      = [None for _ in range(X.shape[1])]
+        # self.feat_odds_spearman_trends_      = [None for _ in range(X.shape[1])]
         if hasattr(inX, 'columns'):
             self.feature_names_in_ = [(colname if colname != '' else colidx) for colidx, colname in enumerate(inX.columns)]
         else:
@@ -560,7 +563,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         assert X.shape[0] > 0, F'The input {X1} does not have any rows'
         assert X.shape[1] > 0, F'The input {X1} does not have any columns'
         
-        if self.feat_pvalue_correction == 'bonferroni': feat_pvalue_thres = feat_pvalue_thres / float(X.shape[1])
+        # if self.feat_pvalue_correction == 'bonferroni': feat_pvalue_thres = feat_pvalue_thres / float(X.shape[1])
 
         raw_log_odds = self.raw_log_odds_ = [None for _ in range(X.shape[1])]
         inv0 = self.inv0_ = [IsotonicRegression(increasing=self.increasings_[i], out_of_bounds='clip') for i in range(X.shape[1])]
@@ -670,11 +673,11 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             self.ixs1_[colidx] = x1
             
             spearman_r, pvalue_observed = spearmanr(x1, y1)
-            is_inc_or_dec = (np.sign(spearman_r) if pvalue_observed < feat_pvalue_thres else 0)
+            #is_inc_or_dec = (np.sign(spearman_r) if pvalue_observed < feat_pvalue_thres else 0)
             #spearman_r, pvalue_observed, is_inc_or_dec = self.check_increasing(x1, y1, feat_pvalue_thres, n_effective_examples)
             self.feat_odds_spearman_rs_[colidx] = spearman_r
             self.feat_odds_spearman_pvalues_[colidx] = pvalue_observed
-            self.feat_odds_spearman_trends_[colidx] = is_inc_or_dec
+            # self.feat_odds_spearman_trends_[colidx] = is_inc_or_dec
             
             test_statistic = self._get_feature_importances('statistic', self.feat_pvalue_method_)[colidx]
             pvalue_observed = self._get_feature_importances('pvalue', self.feat_pvalue_method_)[colidx]
