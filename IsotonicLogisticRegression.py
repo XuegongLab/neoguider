@@ -461,7 +461,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         else: raise TypeError(F'The statistical test {stat_test} is invalid (only "auto", "spearmanr" and "mannwhitneyu" are valid)!')
         
         correction_factor = 1.0
-        if self.feat_pvalue_correction = 'bonferroni': correction_factor = float(len(stat_test_retval.pvalue))
+        if self.feat_pvalue_correction == 'bonferroni': correction_factor = float(len(stat_test_retval.pvalue))
         
         if   analysis == 'f2l2f':
             return self.feature_importances_
@@ -472,9 +472,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         elif analysis == 'statistic':
             return stat_test_retval.statistic
         elif analysis == 'pvalue':
-            return np.clip(stat_test_retval.pvalue * correction_factor, a_max=1.0)
+            return np.clip(stat_test_retval.pvalue * correction_factor, a_min=0.0, a_max=1.0)
         elif analysis == 'trend':
-            return np.where(np.clip(stat_test_retval.pvalue * correction_factor, a_max=1.0) < self.feat_pvalue_thres, np.sign(stat_test_retval.statistic), 0)
+            return np.where(np.clip(stat_test_retval.pvalue * correction_factor, a_min=0.0, a_max=1.0) < self.feat_pvalue_thres, np.sign(stat_test_retval.statistic), 0)
         else:
             raise TypeError(F'The importance type "{analysis}" is invalid, it must be either "f2l", "f2f", "f2l2f", "statistic", "pvalue", or "trend"!')
 
