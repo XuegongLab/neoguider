@@ -130,7 +130,7 @@ def filtdf(df, peplens):
     df = df.loc[is_kept,:]
     return df
 
-def filter_testdf(df):
+def filter_testdf(df, additonal_vars):
     if not ('PepTrace' in df.columns): return df
     is_SNV_detected_from_RNA = df['Identity'].str.startswith('SNV_R')
     is_FSV_detected_from_RNA = df['Identity'].str.startswith('FSV_R')
@@ -138,8 +138,15 @@ def filter_testdf(df):
     is_DEL_detected_from_RNA = df['Identity'].str.startswith('DEL_R')
     is_FUS = (df['Identity'].str.startswith('FU_') | df['Identity'].str.startswith('FUS_'))
     is_SP  = (df['Identity'].str.startswith('SP_') | df['Identity'].str.startswith('SPL_'))
-    is_kept = ~(is_SNV_detected_from_RNA | is_FSV_detected_from_RNA | is_INS_detected_from_RNA | is_DEL_detected_from_RNA | is_FUS | is_SP)
-    df = df.loc[is_kept, :]
+    is_discarded = (
+              (is_SNV_detected_from_RNA & (not 'rna_snv' in additonal_vars.split(',')))
+            | (is_FSV_detected_from_RNA & (not 'rna_fsv' in additonal_vars.split(','))) 
+            | (is_INS_detected_from_RNA & (not 'rna_indel' in additonal_vars.split(','))) 
+            | (is_DEL_detected_from_RNA & (not 'rna_indel' in additonal_vars.split(',')))
+            | (is_FUS & (not 'fusion' in additonal_vars.split(','))) 
+            | (is_SP & (not 'splicing' in additonal_vars.split(',')))
+    )
+    df = df.loc[~is_discarded, :]
     return df
 
 def compute_are_in_cum(df):
@@ -170,7 +177,7 @@ def patientwise_predict_test(tuple_arg):
     logger.info(F'InFile={infile} OutFile={outpref}')
 
 def patientwise_predict(tuple_arg):
-    ilrs, pipeline_names, pipelines, infile, suffix, peplens, baseline, listof_features = tuple_arg
+    ilrs, pipeline_names, pipelines, infile, suffix, peplens, baseline, listof_features, additonal_vars = tuple_arg
     logger = logging.getLogger('Test')
     logging.basicConfig(format=(F'neo-test %(asctime)s - %(message)s'), 
         level=logging.DEBUG)
@@ -179,7 +186,7 @@ def patientwise_predict(tuple_arg):
     logger.info(F'START: infile={infile}')
     df1 = pd.read_csv(infile, sep='\t')
     df1 = filtdf(df1, peplens)
-    df1 = filter_testdf(df1)
+    df1 = filter_testdf(df1, additonal_vars)
     if len(df1) == 0:
         logger.warning(F'Skipping file={infile} because it is empty after filtering. ')
         return -1
@@ -350,7 +357,8 @@ def main():
         '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested',
         '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile'])
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')
-
+    parser.add_argument('-a', '--additonal_vars', help='Additional variants, a string consisting of comma-separated substrings, '
+        'where each substring can be fusion, splicing, rna_snv, rna_indel, or rna_fsv ', default='')
     args = parser.parse_args()
     listof_features = [feature_set.split(',') for feature_set in args.feature_sets]
     peplens = [int(x) for x in args.peplens.split(',')]
@@ -423,7 +431,7 @@ def main():
     
     logger.info(F'Finished fitting IsotonicLogisticRegressions. ')
     
-    map_args = [(ilrs, pipeline_names, pipelines, infile, args.suffix, peplens, args.baseline, listof_features) for infile in args.test]
+    map_args = [(ilrs, pipeline_names, pipelines, infile, args.suffix, peplens, args.baseline, listof_features, args.additonal_vars) for infile in args.test]
     if args.ncores == -2:
         ret = list(map(patientwise_predict, map_args))
     else:

@@ -38,7 +38,9 @@ tumor_abundance_filt_thres = config['tumor_abundance_filt_thres']
 
 agretopicity_thres = config['agretopicity_thres']
 foreignness_thres = config['foreignness_thres']
-alteration_type = config['alteration_type']
+alteration_type = config['detection_alteration_type']
+prio_alteration_type = config['rna_only_prio_alteration_type']
+prio_alteration_type_cmdline_param = (F'-a {prio_alteration_type}' if prio_alteration_type else '')
 more_alteration_type = config['more_alteration_type']
 if more_alteration_type: alteration_type = more_alteration_type + ',' + alteration_type
 netmhc_ncores = config['netmhc_ncores']
@@ -807,20 +809,20 @@ rule Model_training:
     input: traindata_tsv
     output: trained_model
     run:
-        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens 8,9,10,11,12 --train {traindata_tsv}')
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens 8,9,10,11,12 --train {traindata_tsv} {prio_alteration_type_cmdline_param}')
 
 rule Prioritization_with_all_TCRs_from_reads:
     input: features_extracted_from_reads_tsv, trained_model
     output: pipeline_out_from_reads
     run:
-        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_reads_tsv} --suffix prioritized')
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_reads_tsv} --suffix prioritized {prio_alteration_type_cmdline_param}')
         shell('cp {features_extracted_from_reads_tsv}.prioritized {pipeline_out_from_reads}')
 
 rule Prioritization_with_all_TCRs_from_pMHCs:
     input: features_extracted_from_pmhcs_tsv, trained_model
     output: pipeline_out_from_pmhcs
     run:
-        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_pmhcs_tsv} --suffix prioritized')
+        shell('python {script_basedir}/neopredictor.py --model {trained_model} --peplens {kept_peplens} --test {features_extracted_from_pmhcs_tsv} --suffix prioritized {prio_alteration_type_cmdline_param}')
         shell('cp {features_extracted_from_pmhcs_tsv}.prioritized {pipeline_out_from_pmhcs}')
 
 ### validation rules to construct ground truth that can be subsequently used for machine learning
