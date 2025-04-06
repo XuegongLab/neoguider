@@ -93,7 +93,7 @@ def pairplot_showing_pretrans_feat_vals(df1, df2, feature_transformer):
             ax.set_xlim(intmin-0.25, intmax+0.25)
 
             if i == j:
-                ax.hist([df1.iloc[:, i], df2.iloc[:, i]], bins=10, alpha=0.7)
+                ax.hist([df1.iloc[:, i], df2.iloc[:, i]], bins=10, alpha=0.7, label=['Negative', 'Positive'])
                 ax.legend()
             else:
                 ax.scatter(df1.iloc[:, j], df1.iloc[:, i], alpha=0.5)
