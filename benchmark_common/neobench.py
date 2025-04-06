@@ -244,7 +244,7 @@ else:
 if increasing in [True, False]: feat_pvalue_drop_irrelevant_feature = False
 else: feat_pvalue_drop_irrelevant_feature = True
 increasing = 'auto'
-feat_pvalue_drop_irrelevant_feature = False
+feat_pvalue_drop_irrelevant_feature = True
 
 isopath = args.isolib.split('#')[0]
 isolibname = args.isolib.split('#')[1]
@@ -578,7 +578,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
             assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
             labelcol = labels[0]
             if hlacols: hlacol = hlacols[0]
-            in_df, added_feats = prepare_df(in_df, labelcol, na_op='drop')
+            in_df, added_feats = prepare_df(in_df, labelcol, na_op='zero')
             if added_feats: features.extend(added_feats)
         else:
             in_df, _ = prepare_df(in_df, labelcol)
