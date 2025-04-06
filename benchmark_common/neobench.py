@@ -216,7 +216,7 @@ parser.add_argument('--seed', default=43, help='seed for random number generatio
 parser.add_argument('--tasks', nargs='+', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='+', default=[], help='Features analyzed, auto infer if not provided')
 parser.add_argument('--label', default='', help='The label analyzed, auto infer if not provided')
-parser.add_argument('-uf', '--untest_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then treat NA label values as zeros for training, test, and cross-validation. ')
+parser.add_argument('-uf', '--untest_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
 parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 
 args = parser.parse_args()
@@ -314,8 +314,8 @@ def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     plt.close()
     return matrix
 
-def compute_ranked_df(df, labelcol, patientcol='Patient', predcol='NG/LR'):
-    df = df.sort_values(predcol, ascending=False)
+def compute_ranked_df(df, labelcol, patientcol='Patient', predcol='NG/LR', ranking_mult=1):
+    df = df.sort_values(predcol, ascending=(ranking_mult==-1))
     ranks = []
     patient2rank = collections.defaultdict(int)
     for patient in df[patientcol]:
@@ -377,10 +377,10 @@ def assert_prob_arr(prob_pred):
 
 def drop_feat_from_X(ml_pipename, X):
     X = X.copy()
-    for colname in X.columns:
-        if colname in ASCENDING_FEATURES: 
-            X.loc[:,colname] = -X[colname]
-            logging.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
+    #for colname in X.columns:
+    #    if colname in ASCENDING_FEATURES: 
+    #        X.loc[:,colname] = -X[colname]
+    #        logging.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
     if (not 'ln_NumTested' in X.columns):
         return X.copy()
     elif ('withoutNumTested'.lower() in ml_pipename.lower()) or (not 'neoguider' in ml_pipename.lower() and not ml_pipename.startswith('NG')): # and not 'NG_' in ml_pipename:
@@ -416,8 +416,8 @@ def cv_ml_pipe(ml_pipename, ml_pipe, X, y, partitions):
     assert_prob_arr(prob_pred)
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def compute_topN(df, labelcol, patientcol='Patient', predcol='NG/LR', topN=20):
-    df = compute_ranked_df(df, labelcol, patientcol, predcol)
+def compute_topN(df, labelcol, patientcol='Patient', predcol='NG/LR', topN=20, ranking_mult=1):
+    df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=1)
     return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1])
 '''
 def compute_topN(y_true, y_pred, y_patient, topN):
@@ -463,13 +463,14 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
                 roc_auc = np.mean(colname2rocauc[colname])
                 roc_auc_std = np.std(colname2rocauc[colname])
             else:
-                logging.info(F'Computing the ROC_AUC of {colname}')
+                ranking_mult = (-1 if colname in ASCENDING_FEATURES else 1)
+                logging.info(F'Computing the ROC_AUC of {colname} with ranking_mult={ranking_mult} (-1 and +1 denote negative and positive correlations between the feature and the label, respetively.)')
                 #y_true = np.where(df_in[labelcol], 1 , 0)
                 if metric_name == 'top':
-                    roc_auc = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val)
+                    roc_auc = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
                     #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
-                else:
-                    roc_auc = roc_auc_score(df_in[labelcol], df_in[colname])
+                else:                    
+                    roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
                 #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
                 #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
                 roc_auc_std = np.nan
@@ -576,9 +577,9 @@ def get_filenames(filepaths):
     return [x.split('/')[-1].split('.')[0] for x in filepaths]
 
 def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs, classifiers, csvsep, tasks, feature_names, label_name, untest_flag, peplen_flag):
-    untest_ops_training_examples = ('zero' if (untest_flag & 0x1) else 'drop')
-    untest_ops_test_examples = ('zero' if (untest_flag & 0x2) else 'drop')
-    untest_ops_cv_examples = ('zero' if (untest_flag & 0x4) else 'drop')
+    untest_ops_training_examples = ('drop' if (untest_flag & 0x1) else 'zero')
+    untest_ops_test_examples = ('drop' if (untest_flag & 0x2) else 'zero')
+    untest_ops_cv_examples = ('drop' if (untest_flag & 0x4) else 'zero')
     
     peplen_max_training_examples = (11 if (peplen_flag & 0x1) else 9999)
     peplen_max_test_examples = (11 if (peplen_flag & 0x2) else 9999)
