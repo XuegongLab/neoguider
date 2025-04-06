@@ -563,16 +563,16 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     # setup
     ft_preproc_techs = {x: THE_FEAT_PREPROC_TECHS[x] for x in ft_preproc_techs}
     classifiers = {x: THE_CLASSIFIERS[x] for x in classifiers}
-    features = (LISTOF_FEATURES[0] if len(feature_names) == 0 else feature_names.split(','))
-    labels = (LISTOF_LABELS[0] if label_name == '' else label_name)
+    features_superset1 = (LISTOF_FEATURES[0] if len(feature_names) == 0 else feature_names.split(','))
+    labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else label_name)
     labelcol = None
     hlacol = ''
     in_dfs = []
     for i, train_fname in enumerate(train_fnames):
         in_df = pd.read_csv(train_fname, sep=csvsep)
         if i == 0:
-            features = [colname for colname in in_df.columns if colname in features]
-            labels = [colname for colname in in_df.columns if colname in labels]
+            features = [colname for colname in in_df.columns if colname in features_superset1]
+            labels = [colname for colname in in_df.columns if colname in labels_superset1]
             hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
             assert len(labels) == 1
             assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
@@ -748,8 +748,17 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     pipename2score_list = []
     for fidx, fname in enumerate(cv_fnames):
         fidx += 1
-        df = pd.read_csv(fname, sep=csvsep)
-        df, added_feats = prepare_df(df, labelcol, na_op='drop')
+        in_df = pd.read_csv(fname, sep=csvsep)
+
+        features = [colname for colname in in_df.columns if colname in features_superset1]
+        labels = [colname for colname in in_df.columns if colname in labels_superset1]
+        hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
+        assert len(labels) == 1
+        assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
+        labelcol = labels[0]
+        if hlacols: hlacol = hlacols[0]
+        
+        df, added_feats = prepare_df(in_df, labelcol, na_op='drop')
         dfXy = df.loc[:,features + [labelcol]]
         X = dfXy.loc[:, features].copy()
         X = X.fillna({col : np.mean(X[col]) for col in features})
