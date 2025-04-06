@@ -215,6 +215,8 @@ parser.add_argument('--seed', default=43, help='seed for random number generatio
 parser.add_argument('--tasks', nargs='+', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='+', default=[], help='Features analyzed, auto infer if not provided')
 parser.add_argument('--label', default='', help='The label analyzed, auto infer if not provided')
+parser.add_argument('-uf', '--untest_flag', default=0x0, help='If the 0x1, 0x2, and 0x4 bits are set, then treat NA label values as zeros for training, test, and cross-validation. ')
+parser.add_argument('-pf', '--peplen_flag', default=0x0, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 
 args = parser.parse_args()
 
@@ -261,8 +263,6 @@ THE_FEAT_PREPROC_TECHS['NG_withoutNumTested'] = IsotonicLogisticRegression(incre
         feat_pvalue_drop_irrelevant_feature=feat_pvalue_drop_irrelevant_feature, nan_policy=nan_policy)
 
 #THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.0001)'] = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.0001, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.0002)'] = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.0002, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.0005)'] = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.0005, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
 #THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.001)']  = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.001,  nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
 #THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.01)']   = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.01,   nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
 #THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.10)']   = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.10,   nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
@@ -450,6 +450,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
 
         rows = []
         for colname in colnames:
+            if colname not in df_in.columns: continue
             if colname in colname2rocauc:
                 roc_auc = np.mean(colname2rocauc[colname])
                 roc_auc_std = np.std(colname2rocauc[colname])
@@ -494,7 +495,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
         long_df = long_df.sort_values(by='AUROC')
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
-        methclass2desc = {-1: 'Use NeoGuider (NG)', 0: 'Use other techniques', 1: 'Prioritize with single a feature'}
+        methclass2desc = {-1: 'Use NeoGuider (NG)', 0: 'Use other techniques', 1: 'Prioritize with a single feature'}
         hbars_list = []
         for methclass, df in sorted(methclass_df_iterable):
             hbars = ax.barh(df['ypos'], df['AUROC'], align='center', label=methclass2desc[methclass])
@@ -523,16 +524,24 @@ def x_allin_y(X, Y):
         if not x in Y: return False
     return True
 
+
+def match_col(df, colnames):
+    ret = ''
+    for colname in colnames:
+        if colname in df.columns:
+            assert ret == '', F'The columns {ret} and {colname} are both found, aborting!'
+            ret = colname
+    return ret
+
 # We used the logic of Muller et al., 2023, Immunity at https://doi.org/10.1016/j.immuni.2023.09.002
-def prepare_df(df, labelcol, na_op):    
+def prepare_df(df, labelcol, na_op, max_peplen): 
     ret = df.copy()
+    pepcol = match_col(ret, ['MT_pep', 'MT_pep_y', 'Mut_peptide'])
+    if pepcol:
+        ret = ret.loc[ret[pepcol].str.len() <= max_peplen]
     added_feats = []
     #if x_allin_y(IMPROVE_FTS[0:10] + ['Patient', 'Partition'], ret.columns):
-    patientcol = ''
-    for colname in ['Patient', 'PatientID']: 
-        if colname in df.columns:
-            assert patientcol == '', F'The patient-representing columns {patientcol} and {colname} are both found, aborting!'
-            patientcol = colname
+    patientcol = match_col(ret, ['Patient', 'PatientID'])
     if patientcol: # and 'ln_NumTested' not in ret.columns:
         patient2ntested = collections.defaultdict(int)
         for patient, label in zip(ret[patientcol], ret[labelcol]):
@@ -557,8 +566,15 @@ def prepare_df(df, labelcol, na_op):
 def get_filenames(filepaths):
     return [x.split('/')[-1].split('.')[0] for x in filepaths]
 
-def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs, classifiers, csvsep, tasks, feature_names, label_name):
-
+def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs, classifiers, csvsep, tasks, feature_names, label_name, untest_flag, peplen_flag):
+    untest_ops_training_examples = ('zero' if (untest_flag & 0x1) else 'drop')
+    untest_ops_test_examples = ('zero' if (untest_flag & 0x2) else 'drop')
+    untest_ops_cv_examples = ('zero' if (untest_flag & 0x4) else 'drop')
+    
+    peplen_max_training_examples = (11 if (peplen_flag & 0x1) else 9999)
+    peplen_max_test_examples = (11 if (peplen_flag & 0x2) else 9999)
+    peplen_max_cv_examples = (11 if (peplen_flag & 0x4) else 9999)
+    
     HLA_COLS= ['HLA_type', 'HLA_type_y', 'HLA_allele'] # HLA_type_x can contain comma
     # setup
     ft_preproc_techs = {x: THE_FEAT_PREPROC_TECHS[x] for x in ft_preproc_techs}
@@ -578,10 +594,10 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
             assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
             labelcol = labels[0]
             if hlacols: hlacol = hlacols[0]
-            in_df, added_feats = prepare_df(in_df, labelcol, na_op='zero')
+            in_df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
             if added_feats: features.extend(added_feats)
         else:
-            in_df, _ = prepare_df(in_df, labelcol)
+            in_df, _ = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
         if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
             logging.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
         in_dfs.append(in_df)
@@ -720,7 +736,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         if test_fname in train_fnames: train_or_test = 'train'
         else: train_or_test = 'test'
         df = pd.read_csv(test_fname, sep=csvsep)
-        df, added_feats = prepare_df(df, labelcol, na_op='zero')
+        df, added_feats = prepare_df(df, labelcol, na_op=untest_ops_test_examples, max_peplen=peplen_max_test_examples)
         dfXy = df.loc[:,features + [labelcol]]
         #assert (train_df.columns == test_df.columns).all(), F'{train_df.columns} == {test_df.columns} failed for the column names of the inputs {train_fnames} and {test_fname}'
         # test phase
@@ -758,7 +774,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         labelcol = labels[0]
         if hlacols: hlacol = hlacols[0]
         
-        df, added_feats = prepare_df(in_df, labelcol, na_op='drop')
+        df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_cv_examples, max_peplen=peplen_max_cv_examples)
+
         dfXy = df.loc[:,features + [labelcol]]
         X = dfXy.loc[:, features].copy()
         X = X.fillna({col : np.mean(X[col]) for col in features})
@@ -784,8 +801,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         pipename2score = {ml_pipename : results[i] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
     if cv_fnames:
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], titles=get_filenames(cv_fnames))
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features, labelcol, pipename2score_list, titles=get_filenames(cv_fnames))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, [{}], titles=get_filenames(cv_fnames))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, pipename2score_list, titles=get_filenames(cv_fnames))
 
 if __name__ == '__main__':
     tr_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'tr' in args.input[i-1].split(','))]
@@ -798,5 +815,5 @@ if __name__ == '__main__':
         infofile.write(F'Train: {tr_filenames}')
         infofile.write(F'Benchmark (test): {tr_filenames}')
         infofile.write(F'CrossValidate: {cv_filenames}')
-    train_test_cv(tr_filenames, te_filenames, cv_filenames, args.output, args.ft_preproc_techs, args.classifiers, csvsep, args.tasks, args.features, args.label)
+    train_test_cv(tr_filenames, te_filenames, cv_filenames, args.output, args.ft_preproc_techs, args.classifiers, csvsep, args.tasks, args.features, args.label, args.untest_flag, args.peplen_flag)
 
