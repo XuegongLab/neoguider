@@ -176,11 +176,12 @@ SOFTS = 'atm-tcr,attntap_VDJDB,bertrand,dlptcr_BETA,epitcr_WITH_MHC,ergo-i_AE_VD
 IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim Prime PropHydroAro HydroCore PropSmall PropAro PropBasic PropAcidic DAI Stability Foreigness CelPrev PrioScore CYT HLAexp MCPmean'.split()
 # response prediction_rf
 
-FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
+# The following were already quantile-normalized and therefore not used: PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
+FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.split(',')
 
 LISTOF_FEATURES = [SOFTS60+SOFTS+IMPROVE_FTS+FEATS]
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED']]
-ASCENDING_FEATURES = ('MT_BindAff,BindStab,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
+ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
     + 'Expression Foreigness DAI NetMHCExp pI PropBasic Inst Stability PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
 
 scriptdir = (os.path.dirname(os.path.realpath(__file__)))
@@ -374,8 +375,11 @@ def assert_prob_arr(prob_pred):
         assert 1-1e-9 < (x + y) and (x + y) < 1+1e-9, F'The probabilities {x} and {y} do not sum to one!'
 
 def drop_feat_from_X(ml_pipename, X):
+    X = X.copy()
     for colname in X.columns:
-        if colname in ASCENDING_FEATURES: X[colname] = -X[colname]
+        if colname in ASCENDING_FEATURES: 
+            X.loc[:,colname] = -X[colname]
+            logigng.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
     if (not 'ln_NumTested' in X.columns):
         return X.copy()
     elif ('withoutNumTested'.lower() in ml_pipename.lower()) or (not 'neoguider' in ml_pipename.lower() and not ml_pipename.startswith('NG')): # and not 'NG_' in ml_pipename:
