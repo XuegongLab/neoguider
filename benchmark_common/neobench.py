@@ -275,7 +275,8 @@ except TypeError as err:
     pass
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(pathname)s:%(lineno)d %(levelname)s - %(message)s')
+def config_logging(function_name=''): logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s {function_name} - %(message)s')
+config_logging()
 
 def comb(name1, name2, sep='/'): return name1 + sep + name2
 def decomb(name, sep='/'): return name.split(sep)
@@ -388,6 +389,7 @@ def drop_feat_from_X(ml_pipename, X):
         return X.copy()
 
 def train_ml_pipe(ml_pipename, ml_pipe, X, y):
+    config_logging('TRAIN')
     logging.info(F'Start training {ml_pipename}')
     X = drop_feat_from_X(ml_pipename, X)
     ml_pipe.fit(X, y)
@@ -397,12 +399,14 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y):
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
 def test_ml_pipe(ml_pipename, ml_pipe, X):
+    config_logging('TEST')
     X = drop_feat_from_X(ml_pipename, X)
     prob_pred = ml_pipe.predict_proba(X)
     assert_prob_arr(prob_pred)
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
 def cv_ml_pipe(ml_pipename, ml_pipe, X, y, partitions):
+    config_logging('CROSS_VAL')
     random.seed(args.seed)
     np.random.seed(args.seed)
 
