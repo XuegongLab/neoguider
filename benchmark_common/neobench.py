@@ -94,6 +94,7 @@ def pairplot_showing_pretrans_feat_vals(df1, df2, feature_transformer):
 
             if i == j:
                 ax.hist([df1.iloc[:, i], df2.iloc[:, i]], bins=10, alpha=0.7)
+                ax.legend()
             else:
                 ax.scatter(df1.iloc[:, j], df1.iloc[:, i], alpha=0.5)
                 ax.scatter(df2.iloc[:, j], df2.iloc[:, i], alpha=0.5)
@@ -448,7 +449,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
     if len(metric_vals) < n_subfigs: metric_vals = [metric_vals[0]] * n_subfigs
     #if len(titles) < n_subfigs:
 
-    fig_1, ax_1 = plt.subplots(figsize=(8*n_subfigs, 8*2.5))
+    fig_1, ax_1 = plt.subplots(figsize=(6*n_subfigs, 6*3))
     ax_1.set_axis_off()
     gs = GridSpec(2, n_subfigs, height_ratios=[1, 25])
     legend_ax = fig_1.add_subplot(gs[0,:])
@@ -519,7 +520,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
         ax.set_yticks(long_df['ypos'], labels=long_df['Method'])
         xmin, xmax = np.min(long_df['AUROC']), np.max(long_df['AUROC'])
         ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
-        ax.set_xlabel(titles[ax_idx])
+        ax.set_xlabel(titles[ax_idx], fontsize=14)
         #ax.legend(fontsize=14)
         def get_ncols(n_labels, n_cols):
             n_cols = int(round(min((n_cols, n_labels))))
@@ -527,7 +528,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
             return n_cols
         if ax_idx == 0: legend_ax.legend(hbars_list, [v for k,v in sorted(methclass2desc.items())], title='Feature-preprocessing techniques',
                 ncol=get_ncols(len(methclass2desc), n_subfigs),
-                loc='center', fontsize=14, title_fontsize=16)
+                loc='center', fontsize=16, title_fontsize=18)
 
     plt.tight_layout()
     plt.savefig(out_fname_fmt.format('with_both')+'.pdf')
@@ -775,7 +776,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
             analyze_performance_per_hla(df, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_bench.pdf')
             logging.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
     if test_dfs:
-        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with feature_set='))
+        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
 
     cv_pred_dfs = []
     pipename2score_list = []
@@ -818,8 +819,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         pipename2score = {ml_pipename : results[i] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
     if cv_fnames:
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with feature_set='))
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with feature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
 
 if __name__ == '__main__':
     tr_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'tr' in args.input[i-1].split(','))]
