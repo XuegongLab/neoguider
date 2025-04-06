@@ -55,6 +55,8 @@ snakemake --configfile config.yaml --config \
 ```
 After a successful run, you should be able check neoantigen prioritization results at: ${NeoOutDir}/${patientID}_prioritization_from_reads.tsv
 
+Example test input and its expected output, as well as the commands to generate the output from the input, are at https://figshare.com/articles/dataset/SRR7890830-SRR7890845-SRR9134697_neo_peps_fasta/28738355
+
 ### How to use a peptide FASTA file as input
 
 Example shell command to run NeoGuider on a peptide FASTA file and a string of HLA alleles as input:
@@ -88,10 +90,9 @@ Each peptide sequence specified by the MT or WT tag must occurs exactly once in 
 
 If comma_sep_hla_list (a string of comma-separated HLA alleles) is not specified when running snakemake,
 then the HLA key=value pair must be specified in the ${tumorSpecificPeptideFasta} file.
-Otherwise,
-the HLA key=value pair can be omitted in the ${tumorSpecificPeptideFasta} file.
+Otherwise, the HLA key=value pair can be omitted in the `${tumorSpecificPeptideFasta}` file.
 
-Example test input and its expected output are at https://figshare.com/articles/dataset/SRR7890830-SRR7890845-SRR9134697_neo_peps_fasta/28738355
+Example test input and its expected output, as well as the commands to generate the output from the input, are at https://figshare.com/articles/dataset/SRR7890830-SRR7890845-SRR9134697_neo_peps_fasta/28738355
 
 ### How to use any feature (e.g., neoepitope feature) TSV file as input
 
@@ -100,9 +101,17 @@ In brief, neopredictor.py perform training, testing, or both.
 The option --train specifies the TSV file containing training data. 
 The option --test specifies the TSV file containing test data. 
 The option --feature-sets specifies the set of columns of the training and/or test TSV files. 
+The option --label specify the name of the column that has the label (by default, it is 'VALIDATED'). 
+The option --sep specify the ascii-character that separates column (comma for CSV and tab for TSV, by default it is tab). 
 
 The python script ```neopredictor.py``` can take any TSV file containing numerical values as input, so the tabular output of tools such as pVAC-seq and LENS (documented at https://pvactools.readthedocs.io/en/latest/pvacseq/output_files.html and https://uselens.io/en/lens-v1.6/lens_report.html) can be the input to this script. 
 Most tools generate a table as output, so this script is very generic and can complement many other such tools. 
+
+Example command is: 
+```
+python neopredictor.py --train from_improve/pred_df_Simple.txt --test from_improve/pred_df_Simple.txt --model from_improve/pred_df_Simple.pickle --feature-sets 'Aro,pI,CysRed,RankBA,Expression' --label response --sep " "
+```
+Please be aware that the above command uses the same data for training and test, which should be avoided in real applications due to overfitting (the command is only used to show how to use neopredictor.py). 
 
 ### How to use this repository as a scikit-learn machine-learning library
 
