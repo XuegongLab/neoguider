@@ -155,8 +155,8 @@ def compute_are_in_cum(df):
     else:
         # are_in_cum = np.where(df['%Rank_EL'] < 2.0, 1, 0) # this is supposed to be better but is not common practice yet
         are_in_cum = np.where(df['MT_BindAff'] < 500.0, 1, 0)
-    df['InTested_RankEL_LT0.5_frac'] = ((sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
-    df['InTested_RankEL_LT2.0_frac'] = ((sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
+    #df['InTested_RankEL_LT0.5_frac'] = ((sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
+    #df['InTested_RankEL_LT2.0_frac'] = ((sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
     df['ln_NumTested'] = (np.log(sum(are_in_cum)) if sum(are_in_cum) else 0)
     #for idx, selector in enumerate([[1] * len(df), are_in_cum]):
     #    res = stats.spearmanr(
@@ -311,6 +311,7 @@ def patientwise_predict(tuple_arg):
     df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=1, index=0, na_rep='NA')
 
     if 'VALIDATED' in df.columns:
+        print(df)
         evalres = assess_top20_top50_top100_ttif_fr_auprc(df)
         evalres2 = evalres._asdict()
         evalres2['ML_pipeline'] = 'default_ML_pipe'
@@ -341,21 +342,22 @@ def mapfunc(tuple_arg):
 
 def main():
     
+    # PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
     parser = argparse.ArgumentParser(description='ML classifier for neoepitopes', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--train',  help='Train .validation files. ', required=False, nargs='*', default=[])
     parser.add_argument('--test',   help='Test  .validation files. ', required=False, nargs='*', default=[])
     parser.add_argument('--model',  help='Trained model file. ', required=False)
     parser.add_argument('--suffix', help='Suffix of the result files containing prediction. The format of the prediction file is <--test filename>.<--suffix>). ', 
         required = False, default = 'prediction')
-    parser.add_argument('--peplens',help='Peptide length for keeping peptides. ', required=False, default='8,9,10,11,12')
+    parser.add_argument('--peplens',help='Peptide length for keeping peptides. ', required=False, default='8,9,10,11')
     parser.add_argument('--ncores', help='Number of CPU cores to use for --train and --test. The special numbers -2 and 0 mean using one and all CPUs, respectively. ', required=False, type=int, default=16)
     parser.add_argument('--baseline', help='Comma-separated keywords. Keyword feature: test other feature sets. Keyword method: test other methods. ', required = False, default = 'feature')
     parser.add_argument('--feature-sets', help= 
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
         required=False, nargs='+', default=[
-        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested',
-        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile'])
+        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
+        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity'])
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')
     parser.add_argument('-a', '--additonal_vars', help='Additional variants, a string consisting of comma-separated substrings, '
         'where each substring can be fusion, splicing, rna_snv, rna_indel, or rna_fsv ', default='')
@@ -383,6 +385,7 @@ def main():
         big_train_df = pd.concat(dfs)
         big_train_df['VALIDATED'] = big_train_df['VALIDATED'].astype(int)
         big_train_df = filtdf(big_train_df, peplens)
+        #big_train_df.loc[:,'VALIDATED'] = [(0 if (-1==v) else v) for v in big_train_df['VALIDATED']]
         are_validated = ((big_train_df['VALIDATED'] == 0) | (big_train_df['VALIDATED'] == 1))
         big_train_df = big_train_df.loc[are_validated,:]
         big_train_y = big_train_df['VALIDATED'].astype(int)
