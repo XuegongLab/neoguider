@@ -182,7 +182,7 @@ FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.
 LISTOF_FEATURES = [SOFTS60+SOFTS+IMPROVE_FTS+FEATS]
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED']]
 ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
-    + 'Expression Foreigness DAI NetMHCExp pI PropBasic Inst Stability PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
+    + 'DAI NetMHCExp pI PropBasic Inst PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
 
 scriptdir = (os.path.dirname(os.path.realpath(__file__)))
 parser = argparse.ArgumentParser(description='This script analyzes features (the features are typically the output of relevant software packages, such as kallisto, netMHCpan, mhcflurry, PRIME, ERGO, and netTCR). ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -216,10 +216,16 @@ parser.add_argument('--seed', default=43, help='seed for random number generatio
 parser.add_argument('--tasks', nargs='+', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='+', default=[], help='Features analyzed, auto infer if not provided')
 parser.add_argument('--label', default='', help='The label analyzed, auto infer if not provided')
-parser.add_argument('-uf', '--untest_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
+
+# Maintain consistency with Muller et al. 2023, Immunity
+parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
 parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
+parser.add_argument('--add', nargs='+', default=[], help='Additional features, like mhcflurry or prime, to be added to the list of features. ')
 
 args = parser.parse_args()
+
+if 'mhcflurry' in args.add: LISTOF_FEATURES[0].extend(['mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile'])
+if 'prime' in args.add: LISTOF_FEATURES[0].extend(['PRIME_BArank', 'PRIME_rank'])
 
 random.seed(args.seed)
 np.random.seed(args.seed)
@@ -417,7 +423,7 @@ def cv_ml_pipe(ml_pipename, ml_pipe, X, y, partitions):
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
 def compute_topN(df, labelcol, patientcol='Patient', predcol='NG/LR', topN=20, ranking_mult=1):
-    df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=1)
+    df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
     return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1])
 '''
 def compute_topN(y_true, y_pred, y_patient, topN):
@@ -504,7 +510,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
         long_df = long_df.sort_values(by='AUROC')
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
-        methclass2desc = {-1: 'Use NeoGuider (NG)', 0: 'Use other techniques', 1: 'Prioritize with a single feature'}
+        methclass2desc = {-1: 'Use NeoGuider (NG) or its variant', 0: 'Use other techniques', 1: 'Prioritize with a single feature'}
         hbars_list = []
         for methclass, df in sorted(methclass_df_iterable):
             hbars = ax.barh(df['ypos'], df['AUROC'], align='center', label=methclass2desc[methclass])
@@ -512,8 +518,8 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
             hbars_list.append(hbars)
         ax.set_yticks(long_df['ypos'], labels=long_df['Method'])
         xmin, xmax = np.min(long_df['AUROC']), np.max(long_df['AUROC'])
-        ax.set_xlim(xmin - (xmax - xmin) * 0.2, xmax + (xmax - xmin) * 0.2)
-        ax.set_title(titles[ax_idx])
+        ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
+        ax.set_xlabel(titles[ax_idx])
         #ax.legend(fontsize=14)
         def get_ncols(n_labels, n_cols):
             n_cols = int(round(min((n_cols, n_labels))))
@@ -573,8 +579,8 @@ def prepare_df(df, labelcol, na_op, max_peplen):
     print(F'prep_df=\n{ret}\n')
     return ret, added_feats
 
-def get_filenames(filepaths):
-    return [x.split('/')[-1].split('.')[0] for x in filepaths]
+def get_filenames(filepaths, prefix=''):
+    return [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
 
 def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs, classifiers, csvsep, tasks, feature_names, label_name, untest_flag, peplen_flag):
     untest_ops_training_examples = ('drop' if (untest_flag & 0x1) else 'zero')
@@ -769,7 +775,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
             analyze_performance_per_hla(df, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_bench.pdf')
             logging.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
     if test_dfs:
-        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], titles=get_filenames(test_fnames))
+        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with feature_set='))
 
     cv_pred_dfs = []
     pipename2score_list = []
@@ -812,8 +818,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         pipename2score = {ml_pipename : results[i] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
     if cv_fnames:
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, [{}], titles=get_filenames(cv_fnames))
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, pipename2score_list, titles=get_filenames(cv_fnames))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with feature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with feature_set='))
 
 if __name__ == '__main__':
     tr_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'tr' in args.input[i-1].split(','))]
