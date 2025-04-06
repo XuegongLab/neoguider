@@ -152,9 +152,11 @@ def filter_testdf(df, additonal_vars):
 def compute_are_in_cum(df):
     if 'VALIDATED' in df.columns: 
         are_in_cum = np.where(df['VALIDATED'] >= 0, 1, 0)
-    else:
+    elif 'MT_BindAff' in df.columns:
         # are_in_cum = np.where(df['%Rank_EL'] < 2.0, 1, 0) # this is supposed to be better but is not common practice yet
         are_in_cum = np.where(df['MT_BindAff'] < 500.0, 1, 0)
+    else:
+        are_in_cum = np.array([1]*len(df))
     #df['InTested_RankEL_LT0.5_frac'] = ((sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
     #df['InTested_RankEL_LT2.0_frac'] = ((sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
     df['ln_NumTested'] = (np.log(sum(are_in_cum)) if sum(are_in_cum) else 0)
@@ -177,14 +179,14 @@ def patientwise_predict_test(tuple_arg):
     logger.info(F'InFile={infile} OutFile={outpref}')
 
 def patientwise_predict(tuple_arg):
-    ilrs, pipeline_names, pipelines, infile, suffix, peplens, baseline, listof_features, additonal_vars = tuple_arg
+    ilrs, pipeline_names, pipelines, infile, suffix, peplens, baseline, listof_features, additonal_vars, sep = tuple_arg
     logger = logging.getLogger('Test')
     logging.basicConfig(format=(F'neo-test %(asctime)s - %(message)s'), 
         level=logging.DEBUG)
 
     outpref = infile + '.' + suffix
     logger.info(F'START: infile={infile}')
-    df1 = pd.read_csv(infile, sep='\t')
+    df1 = pd.read_csv(infile, sep=sep)
     df1 = filtdf(df1, peplens)
     df1 = filter_testdf(df1, additonal_vars)
     if len(df1) == 0:
@@ -358,6 +360,8 @@ def main():
         required=False, nargs='+', default=[
         '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
         '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity'])
+    parser.add_argument('--label', help='Name of the column denoting the label. ', required=False, default='')
+    parser.add_argument('--sep', help='Column-separator character (e.g., tab). ', required=False, default='\t')
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')
     parser.add_argument('-a', '--additonal_vars', help='Additional variants, a string consisting of comma-separated substrings, '
         'where each substring can be fusion, splicing, rna_snv, rna_indel, or rna_fsv ', default='')
@@ -378,7 +382,8 @@ def main():
     if args.train:
         dfs = []
         for infile in args.train:
-            df = pd.read_csv(infile, sep='\t')
+            df = pd.read_csv(infile, sep=args.sep)
+            if args.label: df['VALIDATED'] = df[args.label]
             df, are_in_cum = compute_are_in_cum(df)
             if len(df) > 0: dfs.append(df)
             logger.info(F'Finished reading {infile}')
@@ -396,7 +401,7 @@ def main():
         pipelines = []
         big_train_X = big_train_df.loc[:, listof_features[0]].copy()
         if args.mintrain:
-            pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep='\t', header=1, index=0, na_rep='NA')
+            pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=1, index=0, na_rep='NA')
         big_train_X = big_train_X.round(5)
         big_train_X = pd.DataFrame(big_train_X)
         big_train_y = pd.Series(big_train_y)
@@ -434,7 +439,7 @@ def main():
     
     logger.info(F'Finished fitting IsotonicLogisticRegressions. ')
     
-    map_args = [(ilrs, pipeline_names, pipelines, infile, args.suffix, peplens, args.baseline, listof_features, args.additonal_vars) for infile in args.test]
+    map_args = [(ilrs, pipeline_names, pipelines, infile, args.suffix, peplens, args.baseline, listof_features, args.additonal_vars, args.sep) for infile in args.test]
     if args.ncores == -2:
         ret = list(map(patientwise_predict, map_args))
     else:
