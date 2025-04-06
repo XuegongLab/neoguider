@@ -91,6 +91,8 @@ then the HLA key=value pair must be specified in the ${tumorSpecificPeptideFasta
 Otherwise,
 the HLA key=value pair can be omitted in the ${tumorSpecificPeptideFasta} file.
 
+Example test input and its expected output are at https://figshare.com/articles/dataset/SRR7890830-SRR7890845-SRR9134697_neo_peps_fasta/28738355
+
 ### How to use any feature (e.g., neoepitope feature) TSV file as input
 
 Please run ```neopredictor.py --help``` to see how to run with an example-by-feature table containing numerical values as input. 
