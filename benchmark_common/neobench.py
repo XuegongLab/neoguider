@@ -216,8 +216,8 @@ parser.add_argument('--seed', default=43, help='seed for random number generatio
 parser.add_argument('--tasks', nargs='+', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='+', default=[], help='Features analyzed, auto infer if not provided')
 parser.add_argument('--label', default='', help='The label analyzed, auto infer if not provided')
-parser.add_argument('-uf', '--untest_flag', default=0x0, help='If the 0x1, 0x2, and 0x4 bits are set, then treat NA label values as zeros for training, test, and cross-validation. ')
-parser.add_argument('-pf', '--peplen_flag', default=0x0, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
+parser.add_argument('-uf', '--untest_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then treat NA label values as zeros for training, test, and cross-validation. ')
+parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 
 args = parser.parse_args()
 
@@ -379,7 +379,7 @@ def drop_feat_from_X(ml_pipename, X):
     for colname in X.columns:
         if colname in ASCENDING_FEATURES: 
             X.loc[:,colname] = -X[colname]
-            logigng.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
+            logging.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
     if (not 'ln_NumTested' in X.columns):
         return X.copy()
     elif ('withoutNumTested'.lower() in ml_pipename.lower()) or (not 'neoguider' in ml_pipename.lower() and not ml_pipename.startswith('NG')): # and not 'NG_' in ml_pipename:
