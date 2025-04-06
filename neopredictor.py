@@ -311,7 +311,7 @@ def patientwise_predict(tuple_arg):
     df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=1, index=0, na_rep='NA')
 
     if 'VALIDATED' in df.columns:
-        print(df)
+        #print(df)
         evalres = assess_top20_top50_top100_ttif_fr_auprc(df)
         evalres2 = evalres._asdict()
         evalres2['ML_pipeline'] = 'default_ML_pipe'
