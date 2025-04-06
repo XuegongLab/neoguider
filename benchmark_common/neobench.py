@@ -558,6 +558,7 @@ def prepare_df(df, labelcol, na_op, max_peplen):
         if 'ln_NumTested' not in ret.columns:
             ret['ln_NumTested'] = newcol
             added_feats.append('ln_NumTested')
+            logging.info(F'Added the column ln_NumTested')
         else:
             assert np.allclose(ret['ln_NumTested'], np.array(newcol))
     if not ('Patient' in ret.columns): ret['Patient'] = ret[patientcol]
@@ -745,6 +746,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         else: train_or_test = 'test'
         df = pd.read_csv(test_fname, sep=csvsep)
         df, added_feats = prepare_df(df, labelcol, na_op=untest_ops_test_examples, max_peplen=peplen_max_test_examples)
+        for f in added_feats: assert f in features, F'{f} in {features} failed!'
         dfXy = df.loc[:,features + [labelcol]]
         #assert (train_df.columns == test_df.columns).all(), F'{train_df.columns} == {test_df.columns} failed for the column names of the inputs {train_fnames} and {test_fname}'
         # test phase
@@ -783,7 +785,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         if hlacols: hlacol = hlacols[0]
         
         df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_cv_examples, max_peplen=peplen_max_cv_examples)
-
+        features.extend(added_feats)
         dfXy = df.loc[:,features + [labelcol]]
         X = dfXy.loc[:, features].copy()
         X = X.fillna({col : np.mean(X[col]) for col in features})
