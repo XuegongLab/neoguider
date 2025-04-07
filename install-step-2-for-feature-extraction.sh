@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+
 rootdir="$(dirname -- "$0";)"
 rootdir="$(cd "$rootdir"; pwd;)"
 
@@ -32,7 +33,7 @@ pushd    ${rootdir}/software/prime
     git clone https://github.com/GfellerLab/MixMHCpred.git
     pushd MixMHCpred && git checkout 0a7f9b9
         chmod +x MixMHCpred
-        chmod +x install_packages && ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)
+        chmod +x install_packages && conda install mafft # ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)
         # chmod +x setup_path && ./setup_path # recommended by the authors of MixMHCpred but not needed here
     popd
 popd
