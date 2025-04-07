@@ -37,7 +37,7 @@ $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
     'biopython<=1.79' pybiomart pyfaidx pysam
     # bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
 
-mhcflurry-downloads fetch
+mhcflurry-downloads fetch || true # We can manually download the mhcflurry data if this command fails
 
 # Currently, edit-distance based on blosum alignment instead of edit-distance based on edlib is used
 # note: if you have encountered the error: *** is not installable because it requires __cuda, which is missing on the system,
@@ -52,7 +52,7 @@ conda run -n $neoguider pip install sj2psi # for ASNEO.py
 # > First work-around for https://github.com/FRED-2/OptiType/issues/125 : use podman to run OptiType
 #   Please set IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK=True in the Snakefile to enable this work-around.
 #   On some platforms, the error '''Error: command required for rootless mode with multiple IDs: exec: "newuidmap": executable file not found in $PATH''' pop up for this work-around. 
-conda run -n $neoguider podman pull quay.io/biocontainers/optitype:1.3.2--py27_3
+conda run -n $neoguider podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 || true # Docker runs into error here
 
 # > Second work-around for https://github.com/FRED-2/OptiType/issues/125 : use another conda env to run OptiType
 #   Please set OTITYPE_CONDA_ENV=optitype_env in the Snakefile to enable this work-around.
