@@ -157,15 +157,7 @@ def compute_are_in_cum(df):
         are_in_cum = np.where(df['MT_BindAff'] < 500.0, 1, 0)
     else:
         are_in_cum = np.array([1]*len(df))
-    #df['InTested_RankEL_LT0.5_frac'] = ((sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
-    #df['InTested_RankEL_LT2.0_frac'] = ((sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)) if sum(are_in_cum) else -1)
     df['ln_NumTested'] = (np.log(sum(are_in_cum)) if sum(are_in_cum) else 0)
-    #for idx, selector in enumerate([[1] * len(df), are_in_cum]):
-    #    res = stats.spearmanr(
-    #        [x for (x,y) in zip(df['%Rank_EL'],     selector) if y],
-    #        [x for (x,y) in zip(df['Agretopicity'], selector) if y])
-    #    df[F'F_{idx}_RankEL_agr_SPEARMAN_sgn_inv_P'] = nan_replace(np.sign(res.statistic) / max((1e-100, res.pvalue)), 0)
-    #    df[F'F_{idx}_RankEL_agr_SPEARMAN_statistic'] = nan_replace(res.statistic, 0)
     return df, are_in_cum
 
 def applyF(arr, f=sum):
@@ -231,57 +223,6 @@ def patientwise_predict(tuple_arg):
     
     df = df1
     
-    # These features have been tested for calibrating probabilities, and none of them performs better than ln_NumTested.
-    '''
-    for idx, selector in enumerate([np.array([1] * len(df)), are_in_cum]):
-        res = stats.spearmanr(
-            [x for (x,y) in zip(df['%Rank_EL'],       selector) if y], 
-            [x for (x,y) in zip(df['Quantification'], selector) if y])
-        df[F'{idx}_RankEL_TPM_SPEARMAN_sgnP'] = np.sign(res.statistic) * res.pvalue
-        df[F'{idx}_RankEL_TPM_SPEARMAN_stat'] = res.statistic
-        foreign_selector = np.where(((df['%Rank_EL'] < 0.5) & (df['Foreignness'] > 1e-50)), 1, 0) * selector
-        agretop_selector = np.where(((df['%Rank_EL'] < 0.5) & (df['Agretopicity'] < 1e-1)), 1, 0) * selector
-        df[F'{idx}_RankEL_LT0.5/TCRP_GT0E/medTPM'] = np.median(list(filter(lambda x:(x>0), foreign_selector * (df['Quantification'] + 1e-50))))
-        df[F'{idx}_RankEL_LT0.5/agr_LT0.1/medTPM'] = np.median(list(filter(lambda x:(x>0), agretop_selector * (df['Quantification'] + 1e-50))))
-        df[F'{idx}_RankEL_LT0.5/medTPM']  = np.median(list(filter(lambda x:(x>0), np.where(df['%Rank_EL'] < 0.5, 1, 0) * selector * (df['Quantification'] + 1e-50))))
-        df[F'{idx}_RankEL_LT2.0/medTPM']  = np.median(list(filter(lambda x:(x>0), np.where(df['%Rank_EL'] < 2.0, 1, 0) * selector * (df['Quantification'] + 1e-50))))
-        df[F'{idx}_RankEL_LT100/medTPM']  = np.median(list(filter(lambda x:(x>0), np.where(df['%Rank_EL'] < 100, 1, 0) * selector * (df['Quantification'] + 1e-50))))
-        #df['RankEL_LT0.5_totMedTPM']  = np.median(list(filter(lambda x:(x>0), np.where(df['%Rank_EL'] < 0.5, 1, 0)              * (df['Quantification'] + 1e-50))))
-        #df['RankEL_LT2.0_totMedTPM']  = np.median(list(filter(lambda x:(x>0), np.where(df['%Rank_EL'] < 2.0, 1, 0)              * (df['Quantification'] + 1e-50))))
-        #df['RankEL_LT100_totMedTPM']  = np.median(list(filter(lambda x:(x>0), np.where(df['%Rank_EL'] < 100, 1, 0)              * (df['Quantification'] + 1e-50))))
-
-        n_foreign_peps = applyF(np.where(((df['%Rank_EL'] < 0.5) & (df['Foreignness'] > 1e-50)), 1, 0) * selector)
-        n_agretop_peps = applyF(np.where(((df['%Rank_EL'] < 0.5) & (df['Agretopicity'] < 0.1)), 1, 0) * selector)
-        df[F'{idx}_RankEL_LT0.1_N'] = sum(np.where(df['%Rank_EL'] < 0.1, 1, 0) * selector)
-        n_all_peps = \
-        df[F'{idx}_RankEL_LT0.5_N'] = sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * selector)
-        df[F'{idx}_RankEL_LT2.0_N'] = sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * selector)
-        df[F'{idx}_RankEL_LT6.0_N'] = sum(np.where(df['%Rank_EL'] < 6.0, 1, 0) * selector)
-        
-        df[F'{idx}_RankEL_LT0.5/agr_LT0.1_N'] = n_agretop_peps
-        df[F'{idx}_RankEL_LT0.5/TCRP_GT0E_N'] = n_foreign_peps
-        
-        df[F'{idx}_RankEL_LT0.5_F'] = sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * selector) / sum(selector)
-        df[F'{idx}_RankEL_LT2.0_F'] = sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * selector) / len(selector)
-        df[F'{idx}_RankEL_LT0.5/agr_LT0.1_F'] = n_agretop_peps / n_all_peps
-        df[F'{idx}_RankEL_LT0.5/TCRP_GT0E_F'] = n_foreign_peps / n_all_peps
-        #df['RankEL_LT0.5_totN'] = sum(np.where(df['%Rank_EL'] < 0.5, 1, 0))
-        #df['RankEL_LT2.0_totN'] = sum(np.where(df['%Rank_EL'] < 2.0, 1, 0))
-        # df['Foreignness'] = df['Foreignness'].astype(float)
-        # totnum = applyF(np.where(((df['%Rank_EL'] < 0.5) & (df['Foreignness'] > 1e-50)), 1, 0))        
-        #df['RankEL_LT0.5_AND_TCRP_GT0E_TOTNUM']  = totnum
-        #df['RankEL_LT0.5_AND_TCRP_GT0E_TOTFRAC'] = totnum / df['RankEL_LT0.5_totN']
-
-    sorted_ELs = sorted(df['%Rank_EL'])
-    #rank001_EL = (sorted_ELs[  1-0] if len(sorted_ELs) > (  1-0) else np.nan)
-    rank010_EL = (sorted_ELs[ 10-1] if len(sorted_ELs) > ( 10-1) else np.nan)
-    #rank020_EL = (sorted_ELs[ 20-1] if len(sorted_ELs) > ( 20-1) else np.nan)
-    rank100_EL = (sorted_ELs[100-1] if len(sorted_ELs) > (100-1) else np.nan)
-    #df['RankEL_1st'] = rank001_EL
-    df['0_RankEL_10th'] = rank010_EL
-    #df['RankEL_20st'] = rank020_EL
-    df['0_RankEL_100th'] = rank100_EL
-    '''
     for i, (features, ilr) in enumerate(zip(listof_features, ilrs)):
         if i == 0 or ('feature' in baseline.split(',')):
             y = ilr.predict_proba(df[features])
@@ -301,9 +242,6 @@ def patientwise_predict(tuple_arg):
                     VALID_N_TESTED = -1
                     VALID_CUMSUM = -1
                 PROBA_CUMSUM = np.cumsum(df['PredictedProbability'] * are_in_cum)
-                # df['BindAff_LessThan100_NUM'] = sum(np.where(df['MT_BindAff'] < 100, 1, 0) * are_in_cum) / sum(are_in_cum)
-                # df['RankEL_LT0.5_VALFRAC'] = sum(np.where(df['%Rank_EL'] < 0.5, 1, 0) * are_in_cum) / sum(are_in_cum)
-                # df['RankEL_LT2.0_VALFRAC'] = sum(np.where(df['%Rank_EL'] < 2.0, 1, 0) * are_in_cum) / sum(are_in_cum)
                 df = df.assign(VALID_N_TESTED=VALID_N_TESTED, VALID_CUMSUM=VALID_CUMSUM, PROBA_CUMSUM=PROBA_CUMSUM, ML_pipeline='default_ML_pipe')
     col2last(df, 'SourceAlterationDetail')
     col2last(df, 'PepTrace')
@@ -313,7 +251,6 @@ def patientwise_predict(tuple_arg):
     df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=1, index=0, na_rep='NA')
 
     if 'VALIDATED' in df.columns:
-        #print(df)
         evalres = assess_top20_top50_top100_ttif_fr_auprc(df)
         evalres2 = evalres._asdict()
         evalres2['ML_pipeline'] = 'default_ML_pipe'
