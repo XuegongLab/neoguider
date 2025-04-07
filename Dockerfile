@@ -32,8 +32,14 @@ RUN bash -evx install-step-1-by-conda.sh ng                              # insta
 
 COPY . /app
 WORKDIR /app
-RUN conda run -n ng bash -evx install-step-2-for-feature-extraction.sh && conda install -y -n ng mhcflurry && mhcflurry-downloads fetch # download tools and database for extracting features (in TSV format) from neoepitope candidates
+RUN conda run -n ng bash -evx install-step-2-for-feature-extraction.sh # download tools and database for extracting features (in TSV format) from neoepitope candidates
 
-# This step downlaods a lot of data, so it is not run by default
+# After running the above install-step-2-for-feature-extraction.sh,
+# you still have to manually install the following, inside the docker container, to extract neoepitope features from peptide-MHC:
+#  1 - netMHCpan and netMHCstabpan with the instructions from https://services.healthtech.dtu.dk/ (due to their license requirements)
+#  2 - MHCflurry with ``conda install -y -n ng mhcflurry && mhcflurry-downloads fetch`` (because the automated installation does not work for some unknown reason)
+# Once the manual installation is done, you can use the "docker commit" command to create a new image with the manually installed tools. 
+
+# This step downloads about 60 GB of compressed data: the data involved are too big, so this step is not run by default
 # conda run -n ng sh -evx install-step-2-for-neoepitope-detection.sh # download tools and database for detecting neoepitope candidates (in FASTA format) from sequencing data
 
