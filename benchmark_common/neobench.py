@@ -178,7 +178,7 @@ IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim 
 # response prediction_rf
 
 # The following were already quantile-normalized and therefore not used: PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
-FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.split(',')
+FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,%Rank_EL,ln_NumTested'.split(',')
 
 LISTOF_FEATURES = [SOFTS60+SOFTS+IMPROVE_FTS+FEATS]
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED']]
