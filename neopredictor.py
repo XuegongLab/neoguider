@@ -295,8 +295,8 @@ def main():
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
         required=False, nargs='+', default=[
-        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
-        '%Rank_EL,MT_BindAff,Quantification,BindStab,Agretopicity'])
+        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
+        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity'])
     parser.add_argument('--label', help='Name of the column denoting the label. ', required=False, default='')
     parser.add_argument('--sep', help='Column-separator character (e.g., tab). ', required=False, default='\t')
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')
