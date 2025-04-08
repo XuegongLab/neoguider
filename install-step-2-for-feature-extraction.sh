@@ -15,7 +15,7 @@ if [ -z "$neoguider" ]; then neoguider=ng; fi
 ### (1) software download
 ###
 
-conda run -n $neoguider mhcflurry-downloads fetch # We can manually download the mhcflurry data if this command fails
+conda run -n $neoguider mhcflurry-downloads fetch || true # We can manually download the mhcflurry data if this command fails (e.g. due to problems with the connection to github)
 
 # IMPORTNT-NOTE: netMHCpan and netMHCstabpan are free for non-commercial use only. For commercial use, please contact DTU Health Tech
 # You have to go to the following three web-pages to manually download netMHCpan and netMHCstabpan and manually request for the licenses to use them
