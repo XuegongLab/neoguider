@@ -27,7 +27,7 @@ docker pull quay.io/cndfeifei0/ng:v01
 
 Then, you can run the following command to prepare for a run:
 ```
-docker run -v <DirectoryPathOutsideTheDockerContainer>:<DirectoryPathInsideTheDockerContainer> -it ng # Go inside the container
+docker run --privileged=true -v <DirectoryPathOutsideTheDockerContainer>:<DirectoryPathInsideTheDockerContainer> -it ng # Go inside the container, where --privileged prevents a multi-threading error
 conda activate ng
 ```
 
