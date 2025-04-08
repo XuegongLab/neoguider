@@ -7,6 +7,35 @@ Additionally, NG is able to estimate the probability that each neoantigen candid
 
 The neoguider software is released with the APACHE-II license.
 
+## How to use pre-built docker image
+
+First, please be aware that the functionalities
+to detect neoepitope candidates, 
+to run netMHCpan, 
+to run netMHCstabpan, and
+to download the data from "mhcflurry-downloads fetch" 
+are not available in the pre-built docker image:
+The user must perform manual install. 
+The reason is due to files too big (to detect candidates, about 60 GB), 
+to licensing requirements (to run netMHCpan and netMHCstabpan), 
+and technical issue (to run "mhcflurry-downloads fetch"). 
+
+A pre-built docker image is available at: https://quay.io/repository/cndfeifei0/ng, you can run the following command to use this image
+```
+docker pull quay.io/cndfeifei0/ng:v01
+```
+
+Then, you can run the following command to prepare for a run:
+```
+docker run -v <DirectoryPathOutsideTheDockerContainer>:<DirectoryPathInsideTheDockerContainer> -it ng # Go inside the container
+conda activate ng
+```
+
+To build the docker image from scratch, please run
+```
+docker built -t ng . # where . is the directory that contains this README file
+```
+
 ## How to install
 
 First, follow the instruction at https://bioconda.github.io/ to install bioconda if you haven't done so.
