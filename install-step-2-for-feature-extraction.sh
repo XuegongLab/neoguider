@@ -15,6 +15,8 @@ if [ -z "$neoguider" ]; then neoguider=ng; fi
 ### (1) software download
 ###
 
+conda run -n $neoguider mhcflurry-downloads fetch # We can manually download the mhcflurry data if this command fails
+
 # IMPORTNT-NOTE: netMHCpan and netMHCstabpan are free for non-commercial use only. For commercial use, please contact DTU Health Tech
 # You have to go to the following three web-pages to manually download netMHCpan and netMHCstabpan and manually request for the licenses to use them
 # The netMHCpan and netMHCstabpan software packages should be put under the software directory, as specified in the config.yml file.
@@ -27,10 +29,10 @@ if [ -z "$neoguider" ]; then neoguider=ng; fi
 # IMPORTNT-NOTE: PRIME and MixMHCpred are free for non-commercial use only. For commercial use, please contact the GfellerLab
 mkdir -p ${rootdir}/software/prime
 pushd    ${rootdir}/software/prime
-    git clone https://github.com/GfellerLab/PRIME.git
+    git clone https://gitlab.com/cndfeifei/PRIME.git
     pushd PRIME && git checkout e798aad && popd
     g++ -O3 PRIME/lib/PRIME.cc -o PRIME/lib/PRIME.x
-    git clone https://github.com/GfellerLab/MixMHCpred.git
+    git clone https://gitlab.com/cndfeifei/MixMHCpred.git
     pushd MixMHCpred && git checkout 0a7f9b9
         chmod +x MixMHCpred
         chmod +x install_packages && conda install mafft # ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)

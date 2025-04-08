@@ -25,10 +25,14 @@ RUN apt-get update && apt-get clean
 #WORKDIR ~
 #RUN pwd && ls
 
-RUN mkdir -p /install  # Create directory before using WORKDIR
-COPY install-step-1-by-conda.sh /install
-WORKDIR /install
-RUN bash -evx install-step-1-by-conda.sh ng                              # install all dependencies by conda
+RUN mkdir -p /install
+COPY env/freeze.env_export_no_builds.yml /install 
+RUN conda env create --name ng --file /install/freeze.env_export_no_builds.yml
+
+# Use the following if you would like to install the latest conda packages (caveat: this may not run successfully)
+# CP install-step-1-by-conda.sh /install 
+# WORKDIR /install
+# RUN bash -evx install-step-1-by-conda.sh ng # install all dependencies by conda
 
 COPY . /app
 WORKDIR /app

@@ -32,12 +32,12 @@ conda create -y -n $neoguider
 $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
     gcc openjdk parallel perl podman screen sshpass tcsh \
     perl-carp-assert psutil pyyaml requests-cache zlib \
-    pandas pytorch pytorch-lightning scikit-learn xgboost \
+    joblib numpy scipy pandas pytorch pytorch-lightning scikit-learn xgboost \
     bcftools blast 'bwa=0.7.17' 'ensembl-vep=109.3' 'kallisto=0.48.0' mosdepth 'optitype=1.3.5' samtools snakemake 'star=2.7.8' 'star-fusion=1.12.0' mhcflurry \
     'biopython<=1.79' pybiomart pyfaidx pysam
     # bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
 
-mhcflurry-downloads fetch || true # We can manually download the mhcflurry data if this command fails
+# $conda run -n $neoguider mhcflurry-downloads fetch # We can manually download the mhcflurry data if this command fails
 
 # Currently, edit-distance based on blosum alignment instead of edit-distance based on edlib is used
 # note: if you have encountered the error: *** is not installable because it requires __cuda, which is missing on the system,
@@ -45,7 +45,7 @@ mhcflurry-downloads fetch || true # We can manually download the mhcflurry data 
 #   https://stackoverflow.com/questions/74836151/nothing-provides-cuda-needed-by-tensorflow-2-10-0-cuda112py310he87a039-0 
 #   to solve this error (namely, export CONDA_OVERRIDE_CUDA="11.8" && export CONDA_CUDA_OVERRIDE="11.8").
 
-$conda update numexpr # fix warning from pandas
+$conda run -n $neoguider $conda update numexpr # fix warning from pandas
 
 conda run -n $neoguider pip install sj2psi # for ASNEO.py
 
