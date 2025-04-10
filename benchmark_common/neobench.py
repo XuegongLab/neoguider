@@ -164,9 +164,9 @@ THE_CLASSIFIERS = {
 }
 
 # from https://github.com/SchubertLab/benchmark_TCRprediction
-SOFTS60 = 'predictions_atm-tcr,predictions_attntap_MCPAS,predictions_attntap_VDJDB,predictions_bertrand,predictions_dlptcr_ALPHA,predictions_dlptcr_BETA,predictions_epitcr_WITH_MHC,predictions_epitcr_WO_MHC,predictions_ergo-i_AE_MCPAS,predictions_ergo-i_AE_VDJDB,predictions_ergo-i_LSTM_MCPAS,predictions_ergo-i_LSTM_VDJDB,predictions_ergo-ii_MCPAS,predictions_ergo-ii_VDJDB,predictions_imrex_DOWNSAMPLED,predictions_imrex_FULL,predictions_itcep,predictions_nettcr_t.0.v.1,predictions_nettcr_t.0.v.2,predictions_nettcr_t.0.v.3,predictions_nettcr_t.0.v.4,predictions_nettcr_t.1.v.0,predictions_nettcr_t.1.v.2,predictions_nettcr_t.1.v.3,predictions_nettcr_t.1.v.4,predictions_nettcr_t.2.v.0,predictions_nettcr_t.2.v.1,predictions_nettcr_t.2.v.3,predictions_nettcr_t.2.v.4,predictions_nettcr_t.3.v.0,predictions_nettcr_t.3.v.1,predictions_nettcr_t.3.v.2,predictions_nettcr_t.3.v.4,predictions_nettcr_t.4.v.0,predictions_nettcr_t.4.v.1,predictions_nettcr_t.4.v.2,predictions_nettcr_t.4.v.3,predictions_panpep,predictions_pmtnet,predictions_stapler,predictions_tcellmatch_GRU_CV0,predictions_tcellmatch_GRU_CV1,predictions_tcellmatch_GRU_CV2,predictions_tcellmatch_GRU_SEP_CV0,predictions_tcellmatch_GRU_SEP_CV1,predictions_tcellmatch_GRU_SEP_CV2,predictions_tcellmatch_LINEAR_CV0,predictions_tcellmatch_LINEAR_CV1,predictions_tcellmatch_LINEAR_CV2,predictions_tcellmatch_LSTM_CV0,predictions_tcellmatch_LSTM_CV1,predictions_tcellmatch_LSTM_CV2,predictions_tcellmatch_LSTM_SEP_CV0,predictions_tcellmatch_LSTM_SEP_CV1,predictions_tcellmatch_LSTM_SEP_CV2,predictions_teim,predictions_teinet_LARGE_DS,predictions_teinet_SMALL_DS,predictions_titan,predictions_tulip-tcr'.split(',')
+PMHC_TCR_PRED_60_MODELS = 'predictions_atm-tcr,predictions_attntap_MCPAS,predictions_attntap_VDJDB,predictions_bertrand,predictions_dlptcr_ALPHA,predictions_dlptcr_BETA,predictions_epitcr_WITH_MHC,predictions_epitcr_WO_MHC,predictions_ergo-i_AE_MCPAS,predictions_ergo-i_AE_VDJDB,predictions_ergo-i_LSTM_MCPAS,predictions_ergo-i_LSTM_VDJDB,predictions_ergo-ii_MCPAS,predictions_ergo-ii_VDJDB,predictions_imrex_DOWNSAMPLED,predictions_imrex_FULL,predictions_itcep,predictions_nettcr_t.0.v.1,predictions_nettcr_t.0.v.2,predictions_nettcr_t.0.v.3,predictions_nettcr_t.0.v.4,predictions_nettcr_t.1.v.0,predictions_nettcr_t.1.v.2,predictions_nettcr_t.1.v.3,predictions_nettcr_t.1.v.4,predictions_nettcr_t.2.v.0,predictions_nettcr_t.2.v.1,predictions_nettcr_t.2.v.3,predictions_nettcr_t.2.v.4,predictions_nettcr_t.3.v.0,predictions_nettcr_t.3.v.1,predictions_nettcr_t.3.v.2,predictions_nettcr_t.3.v.4,predictions_nettcr_t.4.v.0,predictions_nettcr_t.4.v.1,predictions_nettcr_t.4.v.2,predictions_nettcr_t.4.v.3,predictions_panpep,predictions_pmtnet,predictions_stapler,predictions_tcellmatch_GRU_CV0,predictions_tcellmatch_GRU_CV1,predictions_tcellmatch_GRU_CV2,predictions_tcellmatch_GRU_SEP_CV0,predictions_tcellmatch_GRU_SEP_CV1,predictions_tcellmatch_GRU_SEP_CV2,predictions_tcellmatch_LINEAR_CV0,predictions_tcellmatch_LINEAR_CV1,predictions_tcellmatch_LINEAR_CV2,predictions_tcellmatch_LSTM_CV0,predictions_tcellmatch_LSTM_CV1,predictions_tcellmatch_LSTM_CV2,predictions_tcellmatch_LSTM_SEP_CV0,predictions_tcellmatch_LSTM_SEP_CV1,predictions_tcellmatch_LSTM_SEP_CV2,predictions_teim,predictions_teinet_LARGE_DS,predictions_teinet_SMALL_DS,predictions_titan,predictions_tulip-tcr'.split(',')
 
-SOFTS = 'atm-tcr,attntap_VDJDB,bertrand,dlptcr_BETA,epitcr_WITH_MHC,ergo-i_AE_VDJDB,ergo-ii_VDJDB,imrex_FULL,itcep,nettcr_t.1.v.0,panpep,pmtnet,stapler,tcellmatch_LINEAR_CV1,teim,teinet_SMALL_DS,titan,tulip-tcr'.split(',')
+PMHC_TCR_PRED_TOOLS = 'atm-tcr,attntap_VDJDB,bertrand,dlptcr_BETA,epitcr_WITH_MHC,ergo-i_AE_VDJDB,ergo-ii_VDJDB,imrex_FULL,itcep,nettcr_t.1.v.0,panpep,pmtnet,stapler,tcellmatch_LINEAR_CV1,teim,teinet_SMALL_DS,titan,tulip-tcr'.split(',')
 
 #cohort Mut_peptide HLA_allele Patient Partition
 IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim Prime PropHydroAro HydroCore PropSmall PropAro PropBasic PropAcidic DAI Stability Foreigness CelPrev PrioScore CYT HLAexp MCPmean'.split()
@@ -175,7 +175,7 @@ IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim 
 # The following were already quantile-normalized and therefore not used: PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
 FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.split(',')
 
-LISTOF_FEATURES = [SOFTS60+SOFTS+IMPROVE_FTS+FEATS]
+LISTOF_FEATURES = [PMHC_TCR_PRED_60_MODELS+PMHC_TCR_PRED_TOOLS+IMPROVE_FTS+FEATS]
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED', 'response_type']]
 ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
     + 'DAI NetMHCExp pI PropBasic Inst PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
@@ -240,16 +240,14 @@ with open(testfile) as file:
 column_names = pd.read_csv(testfile, index_col=0, nrows=0, sep=csvsep).columns.tolist()
 
 if args.inc == None:
-    if sum([(x in column_names) for x in SOFTS]) >= (1 + len(SOFTS)) // 2:
+    if sum([(x in column_names) for x in (PMHC_TCR_PRED_TOOLS + PMHC_TCR_PRED_60_MODELS)]) >= (1 + len(PMHC_TCR_PRED_TOOLS)) // 2:
         increasing = True
     else:
         increasing = 'auto'
 else:
     increasing = args.inc
-if increasing in [True, False]: feat_pvalue_drop_irrelevant_feature = False
-else: feat_pvalue_drop_irrelevant_feature = True
-increasing = 'auto'
-feat_pvalue_drop_irrelevant_feature = True
+if increasing in [True, False]: feat_pvalue_drop = False
+else: feat_pvalue_drop = True
 
 isopath = args.isolib.split('#')[0]
 isolibname = args.isolib.split('#')[1]
@@ -261,9 +259,9 @@ IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolib
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 nan_policy='raise' #'mean'
 THE_FEAT_PREPROC_TECHS['NG']       = IsotonicLogisticRegression(increasing=increasing, random_state=0,
-        feat_pvalue_drop_irrelevant_feature=feat_pvalue_drop_irrelevant_feature, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
+        feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
 THE_FEAT_PREPROC_TECHS['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=0,
-        feat_pvalue_drop_irrelevant_feature=feat_pvalue_drop_irrelevant_feature, nan_policy=nan_policy)
+        feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
 
 #THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.0001)'] = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.0001, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
 
