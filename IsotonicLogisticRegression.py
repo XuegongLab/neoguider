@@ -605,8 +605,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         if self.feat_effect_size_thres not in effect_sizes: effect_sizes.append(self.feat_effect_size_thres)
         effect_sizes = sorted(effect_sizes)
 
-        if feat_pvalue_thres                   == None: feat_pvalue_thres                   = self.feat_pvalue_thres
-        if feat_pvalue_warn                    == None: feat_pvalue_warn                    = self.feat_pvalue_warn
+        if feat_pvalue_thres == None: feat_pvalue_thres = self.feat_pvalue_thres
+        if feat_pvalue_warn == None: feat_pvalue_warn = self.feat_pvalue_warn
         if feat_pvalue_drop == None: feat_pvalue_drop = self.feat_pvalue_drop
         
         if self.final_predictor:
@@ -780,8 +780,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         self.irrelevant_feature_indexes_ = []
         effect_size_to_pvals = self._get_feature_importances('h0_assume_correlation_pvalue', self.feat_pvalue_method_)
+        effect_size_eq0_pvals = self._get_feature_importances('pvalue', self.feat_pvalue_method_)
         for colidx in range(X.shape[1]):
-            if effect_size_to_pvals[self.feat_effect_size_thres][colidx] < self.feat_pvalue_thres:
+            pvalue = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
+            
+            assuming_some_effect_fails = (effect_size_to_pvals[self.feat_effect_size_thres][colidx] < self.feat_pvalue_thres)
+            assuming_zero_effect_fails = (effect_size_eq0_pvals[colidx] > self.feat_pvalue_thres)
+            assumption_fails = (assuming_zero_effect_fails if self.feat_effect_size_thres == 0 else assuming_some_effect_fails)
+            
+            if assumption_fails:
                 self.irrelevant_feature_indexes_.append(colidx)
                 if feat_pvalue_warn:
                     colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
