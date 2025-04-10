@@ -138,14 +138,9 @@ THE_FEAT_PREPROC_TECHS = {
      # 'StandardTransformer' : QuantileTransformer(random_state=0, output_distribution='normal'),
     'NG'                  : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
     'NG_withoutNumTested' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-
     #'NeoGuider(P<0.0001)' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
     #'NeoGuider(P<0.0002)' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
     #'NeoGuider(P<0.0005)' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<0.001)'  : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<0.01)'   : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<0.10)'   : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<=1.0)'   : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
 }
 
 # https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
@@ -181,7 +176,7 @@ IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim 
 FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.split(',')
 
 LISTOF_FEATURES = [SOFTS60+SOFTS+IMPROVE_FTS+FEATS]
-LISTOF_LABELS = [['Label', 'response', 'VALIDATED']]
+LISTOF_LABELS = [['Label', 'response', 'VALIDATED', 'response_type']]
 ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
     + 'DAI NetMHCExp pI PropBasic Inst PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
 
@@ -271,10 +266,6 @@ THE_FEAT_PREPROC_TECHS['NG_withoutNumTested'] = IsotonicLogisticRegression(incre
         feat_pvalue_drop_irrelevant_feature=feat_pvalue_drop_irrelevant_feature, nan_policy=nan_policy)
 
 #THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.0001)'] = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.0001, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.001)']  = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.001,  nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.01)']   = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.01,   nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.10)']   = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.10,   nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<=1.0)']   = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=1.01,   nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
 
 try:
     sklearn.set_config(enable_metadata_routing=False)
@@ -557,7 +548,7 @@ def prepare_df(df, labelcol, na_op, max_peplen):
         ret = ret.loc[ret[pepcol].str.len() <= max_peplen]
     added_feats = []
     #if x_allin_y(IMPROVE_FTS[0:10] + ['Patient', 'Partition'], ret.columns):
-    patientcol = match_col(ret, ['Patient', 'PatientID'])
+    patientcol = match_col(ret, ['Patient', 'PatientID', 'patient'])
     if patientcol: # and 'ln_NumTested' not in ret.columns:
         patient2ntested = collections.defaultdict(int)
         for patient, label in zip(ret[patientcol], ret[labelcol]):
@@ -592,12 +583,12 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     peplen_max_test_examples = (11 if (peplen_flag & 0x2) else 9999)
     peplen_max_cv_examples = (11 if (peplen_flag & 0x4) else 9999)
     
-    HLA_COLS= ['HLA_type', 'HLA_type_y', 'HLA_allele'] # HLA_type_x can contain comma
+    HLA_COLS= ['HLA_type', 'HLA_type_y', 'HLA_allele', 'mutant_best_alleles_netMHCpan'] # HLA_type_x can contain comma
     # setup
     ft_preproc_techs = {x: THE_FEAT_PREPROC_TECHS[x] for x in ft_preproc_techs}
     classifiers = {x: THE_CLASSIFIERS[x] for x in classifiers}
-    features_superset1 = (LISTOF_FEATURES[0] if len(feature_names) == 0 else feature_names.split(','))
-    labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else label_name)
+    features_superset1 = (LISTOF_FEATURES[0] if len(feature_names) == 0 else feature_names) # (.split(','))
+    labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else [label_name])
     labelcol = None
     hlacol = ''
     in_dfs = []
@@ -640,7 +631,11 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     ft_preproc_tech_feature_importances_3 = ft_preproc_tech.get_feature_importances('f2l2f')
 
     ft_preproc_tech_feature_importances_p1 = ft_preproc_tech.get_feature_importances('pvalue', 'mannwhitneyu')
+    ft_preproc_tech_feature_importancesH01 = ft_preproc_tech.get_feature_importances('h0_assume_correlation_pvalue', 'mannwhitneyu')
+
     ft_preproc_tech_feature_importances_p2 = ft_preproc_tech.get_feature_importances('pvalue', 'spearmanr')
+    ft_preproc_tech_feature_importancesH02 = ft_preproc_tech.get_feature_importances('h0_assume_correlation_pvalue', 'spearmanr')
+
     ft_preproc_tech_feature_importances_p3 = ft_preproc_tech.get_feature_importances('pvalue', 'odds_spearmanr')
     ft_preproc_tech_feature_importances_s1 = ft_preproc_tech.get_feature_importances('statistic', 'mannwhitneyu')
     ft_preproc_tech_feature_importances_s2 = ft_preproc_tech.get_feature_importances('statistic', 'spearmanr')
@@ -654,16 +649,22 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
             'feat_to_label_importances': ft_preproc_tech_feature_importances_1,
             'feat_to_feat_importances' : ft_preproc_tech_feature_importances_2,
             'feat_to_lab_to_feat_imps' : ft_preproc_tech_feature_importances_3,
-            'pvalue_mannwhitneyu': ft_preproc_tech_feature_importances_p1,
-            'pvalue_spearmanr': ft_preproc_tech_feature_importances_p2,
-            'pvalue_odds_spearmanr': ft_preproc_tech_feature_importances_p3,
-            'statistic_mannwhitneyu': ft_preproc_tech_feature_importances_s1,
-            'statistic_spearmanr': ft_preproc_tech_feature_importances_s2,
-            'statistic_odds_spearmanr': ft_preproc_tech_feature_importances_s3,
-            'trend_mannwhitneyu': ft_preproc_tech_feature_importances_t1,
-            'trend_spearmanr': ft_preproc_tech_feature_importances_t2,
-            'trend_odds_spearmanr': ft_preproc_tech_feature_importances_t3,
+            'effectSize=0_H0_mannwhitR_pvalue': ft_preproc_tech_feature_importances_p1,
+            'effectSize=0_H0_spearmanR_pvalue': ft_preproc_tech_feature_importances_p2,
+            'effectSize=0_H0_odds_spearmanR_pvalue': ft_preproc_tech_feature_importances_p3,
+            'statistic_mannwhitR': ft_preproc_tech_feature_importances_s1,
+            'statistic_spearmanR': ft_preproc_tech_feature_importances_s2,
+            'statistic_odds_spearmanR': ft_preproc_tech_feature_importances_s3,
+            'trend_mannwhitR': ft_preproc_tech_feature_importances_t1,
+            'trend_spearmanR': ft_preproc_tech_feature_importances_t2,
+            'trend_odds_spearmanR': ft_preproc_tech_feature_importances_t3,
     })
+
+    for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH01.items()):
+        feat_importance_df[F'effectSize>={effect_size}_H0_mannwhitR_pvalue'] = p_values
+    for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH02.items()):
+        feat_importance_df[F'effectSize>={effect_size}_H0_spearmanR_pvalue'] = p_values
+
     feat_importance_df.to_csv(f'{output}_feat_imp.tsv', index='feature_names', sep='\t')
 
     ilr = ft_preproc_tech
