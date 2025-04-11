@@ -50,6 +50,12 @@ from sklearn.preprocessing import (
 
 from xgboost import XGBClassifier
 
+logger = logging.getLogger(__name__)
+def config_logging(function_name=''): logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s {function_name} - %(message)s')
+config_logging()
+
+NG_default = 'NG'
+
 def prep_input(self, X):
     arr = copy.deepcopy(X)
     col_means = np.nanmean(arr, axis=0)
@@ -135,12 +141,9 @@ THE_FEAT_PREPROC_TECHS = {
     'QuantileTransformer' : QuantileTransformer(random_state=0),
     'RobustScaler'        : RobustScaler(),
     'StandardScaler'      : StandardScaler(),
-     # 'StandardTransformer' : QuantileTransformer(random_state=0, output_distribution='normal'),
-    'NG'                  : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
+    # 'NormalTransformer' : QuantileTransformer(random_state=0, output_distribution='normal'), # not used with default value
+    F'{NG_default}'       : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
     'NG_withoutNumTested' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<0.0001)' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<0.0002)' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    #'NeoGuider(P<0.0005)' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
 }
 
 # https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
@@ -175,7 +178,14 @@ IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim 
 # The following were already quantile-normalized and therefore not used: PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
 FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.split(',')
 
-LISTOF_FEATURES = [PMHC_TCR_PRED_60_MODELS+PMHC_TCR_PRED_TOOLS+IMPROVE_FTS+FEATS]
+MULLER_NEOPEP_FTS = 'CCF Clonality rnaseq_TPM rnaseq_alt_support CSCAPE_score mutant_other_significant_alleles mutant_rank mutant_rank_PRIME mutant_rank_netMHCpan Sample_Tissue_expression_GTEx GTEx_all_tissues_expression_mean TCGA_Cancer_expression gene_driver_Intogen nb_same_mutation_Intogen mutation_driver_statement_Intogen bestWTMatchScore_I bestWTMatchOverlap_I bestMutationScore_I bestWTMatchType_I  bestWTPeptideCount_I mut_Rank_Stab mut_netchop_score_ct TAP_score mut_is_binding_pos mut_binding_score mut_aa_coeff seq_len DAI_NetMHC DAI_MixMHC DAI_NetStab DAI_MixMHC_mbp'.strip().split()
+
+MULLER_NEOMUT_FTS = 'CCF Clonality Zygosity Sample_Tissue_expression_GTEx TCGA_Cancer_expression rnaseq_TPM rnaseq_alt_support MIN_MUT_RANK_CI_MIXMHC COUNT_MUT_RANK_CI_MIXMHC WT_BEST_RANK_CI_MIXMHC MIN_MUT_RANK_CI_PRIME COUNT_MUT_RANK_CI_PRIME WT_BEST_RANK_CI_PRIME COUNT_MUT_RANK_CI_netMHCpan CSCAPE_score gene_driver_Intogen nb_mutations_in_gene_Intogen nb_same_mutation_Intogen mutation_driver_statement_Intogen GTEx_all_tissues_expression_mean bestWTMatchScore_I bestWTMatchOverlap_I bestMutationScore_I bestWTPeptideCount_I mut_Rank_EL_0 wt_Rank_EL_0 mut_Rank_EL_1 wt_Rank_EL_1 mut_Rank_EL_2 wt_Rank_EL_2 mut_Rank_Stab_0 mut_Rank_Stab_1 mut_Rank_Stab_2 mut_netchop_score mut_TAP_score_0 next_best_BA_mut_ranks DAI_0 DAI_1 DAI_2'.strip().split()
+
+#LISTOF_FEATURES = [PMHC_TCR_PRED_60_MODELS+PMHC_TCR_PRED_TOOLS+IMPROVE_FTS+FEATS]
+
+LISTOF_FEATURES = [FEATS, PMHC_TCR_PRED_60_MODELS, PMHC_TCR_PRED_TOOLS, IMPROVE_FTS, MULLER_NEOPEP_FTS, MULLER_NEOMUT_FTS]
+
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED', 'response_type']]
 ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
     + 'DAI NetMHCExp pI PropBasic Inst PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
@@ -249,6 +259,8 @@ else:
 if increasing in [True, False]: feat_pvalue_drop = False
 else: feat_pvalue_drop = True
 
+logging.info(F'feat_pvalue_drop={feat_pvalue_drop}')
+
 isopath = args.isolib.split('#')[0]
 isolibname = args.isolib.split('#')[1]
 ISO_DIR = os.path.dirname(isopath)
@@ -258,21 +270,34 @@ sys.path.append(ISO_DIR)
 IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 nan_policy='raise' #'mean'
-THE_FEAT_PREPROC_TECHS['NG']       = IsotonicLogisticRegression(increasing=increasing, random_state=0,
-        feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
-THE_FEAT_PREPROC_TECHS['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=0,
-        feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
+kwargs = {
+    'increasing': increasing,
+    'random_state': 0, 
+    'feat_pvalue_drop': feat_pvalue_drop, 
+    'nan_policy': nan_policy,
+    'excluded_cols': ['ln_NumTested']}
 
-#THE_FEAT_PREPROC_TECHS['NeoGuider(P<0.0001)'] = IsotonicLogisticRegression(increasing='auto', random_state=0, feat_pvalue_thres=0.0001, nan_policy=nan_policy, excluded_cols=['ln_NumTested'])
+THE_FEAT_PREPROC_TECHS[F'{NG_default}']       = IsotonicLogisticRegression(**kwargs)
+THE_FEAT_PREPROC_TECHS['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=0, feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
+
+'''
+THE_FEAT_PREPROC_TECHS2 = {}
+THE_FEAT_PREPROC_TECHS2['NG_P<=1e-0'] = IsotonicLogisticRegression(feat_pvalue_thres=0.50, **kwargs)
+THE_FEAT_PREPROC_TECHS2['NG_P<=1e-1'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-1, **kwargs)
+THE_FEAT_PREPROC_TECHS2['NG_P<=5e-2'] = IsotonicLogisticRegression(feat_pvalue_thres=5e-2, **kwargs)
+THE_FEAT_PREPROC_TECHS2['NG_P<=2e-2'] = IsotonicLogisticRegression(feat_pvalue_thres=2e-2, **kwargs)
+THE_FEAT_PREPROC_TECHS2['NG_P<=1e-2'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-2, **kwargs)
+THE_FEAT_PREPROC_TECHS2['NG_P<=1e-3'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-3, **kwargs)
+THE_FEAT_PREPROC_TECHS2['NG_P<=1e-4'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-4, **kwargs) 
+
+THE_FEAT_PREPROC_TECHS.update(THE_FEAT_PREPROC_TECHS2)
+args.ft_preproc_techs.extend(THE_FEAT_PREPROC_TECHS2.keys())
+'''
 
 try:
     sklearn.set_config(enable_metadata_routing=False)
 except TypeError as err:
     pass
-
-logger = logging.getLogger(__name__)
-def config_logging(function_name=''): logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s {function_name} - %(message)s')
-config_logging()
 
 def comb(name1, name2, sep='/'): return name1 + sep + name2
 def decomb(name, sep='/'): return name.split(sep)
@@ -310,7 +335,7 @@ def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     plt.close()
     return matrix
 
-def compute_ranked_df(df, labelcol, patientcol='Patient', predcol='NG/LR', ranking_mult=1):
+def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/LR', ranking_mult=1):
     df = df.sort_values(predcol, ascending=(ranking_mult==-1))
     ranks = []
     patient2rank = collections.defaultdict(int)
@@ -320,7 +345,7 @@ def compute_ranked_df(df, labelcol, patientcol='Patient', predcol='NG/LR', ranki
     df['rank'] = ranks
     return df
 
-def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol='NG/LR'):
+def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{NG_default}/LR'):
     matrix = compute_hla_mat(df, hlacol, labelcol, patientcol)
     df = compute_ranked_df(df, labelcol)
     top20df = df.loc[df['rank']<=20]
@@ -412,7 +437,7 @@ def cv_ml_pipe(ml_pipename, ml_pipe, X, y, partitions):
     assert_prob_arr(prob_pred)
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def compute_topN(df, labelcol, patientcol='Patient', predcol='NG/LR', topN=20, ranking_mult=1):
+def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/LR', topN=20, ranking_mult=1):
     df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
     return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1])
 '''
@@ -585,7 +610,10 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     # setup
     ft_preproc_techs = {x: THE_FEAT_PREPROC_TECHS[x] for x in ft_preproc_techs}
     classifiers = {x: THE_CLASSIFIERS[x] for x in classifiers}
-    features_superset1 = (LISTOF_FEATURES[0] if len(feature_names) == 0 else feature_names) # (.split(','))
+    ALL_FEATURES = []
+    for fts in LISTOF_FEATURES:
+        ALL_FEATURES.extend(fts)
+    features_superset1 = (ALL_FEATURES if len(feature_names) == 0 else feature_names) # (.split(','))
     labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else [label_name])
     labelcol = None
     hlacol = ''
@@ -594,14 +622,21 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         in_df = pd.read_csv(train_fname, sep=csvsep)
         if i == 0:
             features = [colname for colname in in_df.columns if colname in features_superset1]
+            ft_weights = [len(set(fts) & set(features)) for fts in LISTOF_FEATURES]
+            features_2 = LISTOF_FEATURES[np.argmax(ft_weights)]
+            features = [colname for colname in in_df.columns if colname in features_2]
+            assert len(features) >= len(features_2) / 2, (F'The features {features} and {features_2} share less than 50% names in common! '
+                    'Please use the --features cmd-line option to specify the exact feature (column) names to used. ')
             labels = [colname for colname in in_df.columns if colname in labels_superset1]
             hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
-            assert len(labels) == 1
+            assert len(labels) == 1, F'Multiple label names ({labels}) are found, please use the --label cmd-line option to specify the exact label (column) name to use. '
             assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
             labelcol = labels[0]
             if hlacols: hlacol = hlacols[0]
             in_df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
             if added_feats: features.extend(added_feats)
+            features_superset1 = features
+            labels_superset1 = labels
         else:
             in_df, _ = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
         if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
@@ -619,7 +654,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     train_X = train_X.apply(pd.to_numeric)
     big_y   = big_y.apply(pd.to_numeric)
 
-    ft_preproc_tech = ft_preproc_techs['NG']
+    ft_preproc_tech = ft_preproc_techs[F'{NG_default}']
     #train_X = QuantileTransformer(random_state=0).fit_transform(train_X)
     #train_X = pd.DataFrame(train_X, columns=features)
     big_transformed_X = ft_preproc_tech.fit_transform(train_X, big_y)
