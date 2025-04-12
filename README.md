@@ -148,6 +148,10 @@ The novel feature transformation is implemented in the IsotonicLogisitcRegressio
 The IsotonicLogisitcRegression class in this file implements the fit, transform, fit_transform, predict, and predict_proba methods. 
 Hence, this file conforms to the API specification of scikit-learn estimators and can be used as a general-purpose machine learning library. 
 
+The script benchmark_common/neobench.py demonstrates some typical usage of our library on some machine-learning tasks. 
+These tasks may not be related to neoepitope prediction. 
+For example, this script shows how we can do pMHC-TCR recongition prediction with this library (caveat: we did not evaluate the perfomance of pMHC-TCR recongition). 
+
 ### Description of the columns generates by the pipeline by default
 
 The columns are classified into two groups:
