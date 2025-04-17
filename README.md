@@ -286,3 +286,13 @@ If you have encountered an error with snakemake, please show us the full stdout 
 Most of the third-party tools that this pipeline uses were not developed by us,
 so we are not guaranteed to find the root causes of the errors that are specific to these tools.
 
+## LICENSE
+
+There are two licensing options:
+
+- GNU AFFERO GENERAL PUBLIC LICENSE, Version 3, 19 November 2007. 
+  We impose the additional restriction that you cannot use the code in this repository commercially with this license. 
+
+- Commercial license. For commercial licensing options, please contact weilei92 AT tsinghua DOT edu DOT cn
+
+
