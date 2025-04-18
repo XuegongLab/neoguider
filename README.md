@@ -1,11 +1,24 @@
 # NeoGuider
 
-NeoGuider (NG, ng) is a neoantigen prioritization pipeline and machine-learning algorithm.
+NeoGuider (NG, ng) is a neoantigen (more specifically, neoepitope) prioritization pipeline and machine-learning algorithm.
 NG is able to sensitively detect and accurately rank neoantigen candidates.
 Additionally, NG is able to estimate the probability that each neoantigen candidate is immunogenic
   (i.e., tested and thus validated to be positive by an immnoassay such as MHC-I multimer or IFN-gamma ELISpot).
 
-## Our license
+NeoGuider is flexible to accept many types of data as its input. 
+For example, the input to NeoGuider can be raw sequencing data in FASTQ format, peptide sequence data in FASTA format, and tablular data in any format (e.g., CSV and TSV). 
+Moreover, you can use NeoGuider as a general-purpose machine learning tool and library (because NeoGuider followed the specifications of the scikit-learn API). 
+
+We only benchmarked the performance of NeoGuider for prioritizing MHC-I neoepitopes. 
+However, you can run NeoGuider to prioritize all types of epitopes (e.g., viral epitopes).
+In theory, NeoGuider can prioritize MHC II epitopes too if you have trained NeoGuider with the corresponding table (with each row denoting a candidate and with each column denoting a MHC II feature). 
+
+## License
+
+NeoGuider (including all the third-party tools that NeoGuider uses) can be used, free of any charges, for academic and educational purpose.
+For NeoGuider and some of the third-party tools, you have to apply for its commercial license in order to use the corresponding tool for commercial (for-profit) purpose.
+
+### Our license
 
 There are two licensing options:
 
@@ -14,7 +27,7 @@ There are two licensing options:
 
 - Commercial license. For commercial licensing options, please contact weilei92 AT tsinghua DOT edu DOT cn
 
-## Third-party licenses
+### Third-party licenses
 
 NeoGuider uses some third-party tools that have their own licenses. 
 More specifically, the third-party tools UVC, netMHCpan, netMHCstabpan, PRIME, and MixCR are free for academic use but require commercial licensing for for-profit use. 
