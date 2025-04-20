@@ -294,7 +294,7 @@ The columns are classified into two groups:
 By default, the pipeline also uses star-fusion and ASNEO to detect fusion and splicing variants (as specified by alteration_type='snv,indel,fsv,fusion,splicing' in the config.yaml). 
 However, the pipeline does not prioritize the detected fusion and splicing variants. 
 To enabled the prioritization of fusion and splicing variants, please set rna_only_prio_alteration_type=fusion,splicing from either the Snakemake command line or from the config.yaml file. 
-To disable the generation of fusion and splicing variants, please pass the params --config alteration_type='snv,indel,fsv' from the snakemake command or modify alteration_type to 'snv,indel,fsv,fusion,splicing' in the config.yaml file. 
+To disable the generation of fusion and splicing variants, please pass the params --config alteration_type='snv,indel,fsv' from the snakemake command or modify alteration_type to 'snv,indel,fsv' in the config.yaml file. 
 Here, snv, indel, fsv, fusion and splicing denote single-nucleotide variant, insertion-deletion variant, frameshift variant (can be caused by either snv or indel), fusion variant, and splicing variant.
 
 If the trained model in Python pickle format is not found in the model directory, then training is done automatically by snakemake. 
