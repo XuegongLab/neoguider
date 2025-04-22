@@ -479,7 +479,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
     if len(metric_vals) < n_subfigs: metric_vals = [metric_vals[0]] * n_subfigs
     #if len(titles) < n_subfigs:
 
-    fig_1, ax_1 = plt.subplots(figsize=(6.5*n_subfigs, 6*3))
+    fig_1, ax_1 = plt.subplots(figsize=(6.75*n_subfigs, 6*3))
     ax_1.set_axis_off()
     gs = GridSpec(2, n_subfigs, height_ratios=[1, 25])
     legend_ax = fig_1.add_subplot(gs[0,:])
@@ -571,7 +571,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
             return n_cols
         if ax_idx == 0: legend_ax.legend(hbars_list, [v for k,v in sorted(methclass2desc.items())], title='Feature-preprocessing techniques used',
                 ncol=get_ncols(len(long_df['MethClass'].unique()), n_subfigs),
-                loc='center', fontsize=16, title_fontsize=18)
+                loc='center', fontsize=14, title_fontsize=18)
 
     plt.tight_layout()
     logging.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
