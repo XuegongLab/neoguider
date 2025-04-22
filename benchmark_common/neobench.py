@@ -65,6 +65,13 @@ SOFT_NAME_TO_MANUSCRIPT_NAME = {
     'ln_NumTested' : 'NumTested',
 }
 
+SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS = {
+    'ln_NumTested' : 'NumTested',
+    'mhcflurry_aff_percentile'         : 'MHCflurry_aff_%',
+    'mhcflurry_presentation_percentile': 'MHCflurry_presentation_%',
+    'DeepHLApan_immunogenic_score'     : 'DeepHLApan_immuno_score'
+}
+
 def prep_input(self, X):
     arr = copy.deepcopy(X)
     col_means = np.nanmean(arr, axis=0)
@@ -478,10 +485,10 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
     legend_ax = fig_1.add_subplot(gs[0,:])
     legend_ax.set_axis_off()
     axes = [fig_1.add_subplot(gs[1,j]) for j in range(n_subfigs)]
-    for ax_idx, (df_in, colname2rocauc, metric_val, title) in enumerate(zip(df_ins, colname2rocauc_list, metric_vals, titles)):
-        auc_series2 = pd.Series(np.nan, feats2)
+    for ax_idx, (df_in, colname2rocauc, metric_val, title) in enumerate(zip(df_ins, colname2rocauc_list, metric_vals, titles)):        
         auc_series = pd.Series(np.nan, features)
-       
+        auc_series2 = pd.Series(np.nan, feats2)
+
         auc_df = pd.DataFrame(data=np.nan,
                 index   = [ft_preproc_name for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items()],
                 columns = [classifier_name for classifier_name, classifier in classifiers.items()])
@@ -507,10 +514,10 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
                 #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
                 roc_auc_std = np.nan            
             rows.append((colname, roc_auc))
-            if colname in feats2:
-                auc_series2[colname] = roc_auc
-            elif colname in features:
+            if   colname in features:
                 auc_series[colname] = roc_auc
+            elif colname in feats2:
+                auc_series2[colname] = roc_auc
             else:
                 ft_preproc_name, classifier_name = decomb(colname)
                 auc_df.loc[ft_preproc_name, classifier_name] = roc_auc
@@ -545,11 +552,13 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
             hbars = ax.barh(df['ypos'], df['AUROC'], align='center', label=methclass2desc[methclass])
             ax.bar_label(hbars, fmt=barh_fmt, padding=2)
             hbars_list.append(hbars)
+        
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME.get(x, x) for x in long_df['Method']]
         for x in SOFT_NAME_TO_MANUSCRIPT_NAME:
             if x not in features: 
                 methodnames = long_df['Method']
                 break
+        methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS.get(x, x) for x in methodnames]
         ax.set_yticks(long_df['ypos'], labels=methodnames)
         ax.set_ylim(-1, len(long_df))
         xmin, xmax = np.min(long_df['AUROC']), np.max(long_df['AUROC'])
@@ -557,7 +566,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
         ax.set_xlabel(titles[ax_idx], fontsize=14)
         #ax.legend(fontsize=14)
         def get_ncols(n_labels, n_cols):
-            n_cols = int(round(min((n_cols, n_labels))))
+            n_cols = int(round(min((1.499*n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
         if ax_idx == 0: legend_ax.legend(hbars_list, [v for k,v in sorted(methclass2desc.items())], title='Feature-preprocessing techniques used',
@@ -615,21 +624,24 @@ def prepare_df(df, labelcol, na_op, max_peplen):
     print(F'prep_df=\n{ret}\n')
     return ret, added_feats
 
-DHP_FEATS = ['DeepHLApan/binding score', 'DeepHLApan/immunogenic score']
+DHP_FEATS = ['DeepHLApan_binding_score', 'DeepHLApan_immunogenic_score']
 def add_more(df, fpath):
-    fdir = os.path.dirname(fpath)
-    fbase = os.path.basename(fpath)
-    fname, fext = os.path.splitext(fbase)
+    fpath = os.path.abspath(fpath)
+    #fdir = os.path.dirname(fpath)
+    #fbase = os.path.basename(fpath)
+    fbase, fext = os.path.splitext(fpath)
     # Add DeepHLpan results
-    dhp_fname = fname + '_predicted_result.csv'
+    dhp_fname = fbase + '_predicted_result.csv'
     ret = df
     if os.path.exists(dhp_fname):
-        df2 = pd.read_csv(fdir + '/' + dhp_fname, header=0)
-        assert df2.columns == 'Annotation,HLA,Peptide,binding score,immunogenic score'.split(',')
-        assert len(df2) == len(df1), F'{len(df2)} == {len(df1)} failed!'
+        df2 = pd.read_csv(dhp_fname, header=0)
+        assert list(df2.columns) == 'Annotation,HLA,Peptide,binding score,immunogenic score'.split(',')
+        assert len(df2) == len(df), F'{len(df2)} == {len(df1)} failed!'
         df3 = df2[['binding score', 'immunogenic score']]
         df3.columns = DHP_FEATS
-        ret = pd.concat([df, df2], axis=1)
+        ret = pd.concat([df, df3], axis=1)
+        logging.info(F'Concatenate with {dhp_fname} to return {ret}')
+    else: logging.warning(F'The filepath {dhp_fname} does not exist. ')
     return ret
 
 def get_filenames(filepaths, prefix=''):
