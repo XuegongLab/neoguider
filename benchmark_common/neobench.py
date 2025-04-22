@@ -56,6 +56,15 @@ config_logging()
 
 NG_default = 'NG'
 
+SOFT_NAME_TO_MANUSCRIPT_NAME = {
+    'Score_EL': 'ScoreEL',
+    'MT_BindAff': 'ICfiftyBA',
+    'BindStab': 'BindStab',
+    'Quantification': 'NeoAbundance',
+    'Agretopicity' : 'Agretop',
+    'ln_NumTested' : 'NumTested',
+}
+
 def prep_input(self, X):
     arr = copy.deepcopy(X)
     col_means = np.nanmean(arr, axis=0)
@@ -133,7 +142,7 @@ def pairplot_showing_pretrans_feat_vals(df1, df2, feature_transformer):
 
 # https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
 THE_FEAT_PREPROC_TECHS = {
-    'Identity'            : ColumnTransformer([], remainder='passthrough'),
+    'IdentityTransformer' : ColumnTransformer([], remainder='passthrough'),
     'MaxAbsScaler'        : MaxAbsScaler(),
     'MinMaxScaler'        : MinMaxScaler(),
     'Normalizer'          : Normalizer(),
@@ -452,7 +461,7 @@ def compute_topN(y_true, y_pred, y_patient, topN):
 '''
 
 from matplotlib.gridspec import GridSpec
-def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features, labelcol, colname2rocauc_list=[{}], metric_name='roc_auc', metric_vals=[0], titles=[''], barh_fmt='%.4g'):
+def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features, feats2, labelcol, colname2rocauc_list=[{}], metric_name='roc_auc', metric_vals=[0], titles=[''], barh_fmt='%.4g'):
     n_subfigs = max((len(df_ins), len(colname2rocauc_list), len(metric_vals), len(titles)))
     assert len(df_ins) in [1, n_subfigs], F'Found {len(df_ins)} df_ins but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
     assert len(colname2rocauc_list) in [1, n_subfigs], F'Found {len(colname2rocauc_list)} colname2rocauc_list but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
@@ -463,19 +472,21 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
     if len(metric_vals) < n_subfigs: metric_vals = [metric_vals[0]] * n_subfigs
     #if len(titles) < n_subfigs:
 
-    fig_1, ax_1 = plt.subplots(figsize=(6*n_subfigs, 6*3))
+    fig_1, ax_1 = plt.subplots(figsize=(6.5*n_subfigs, 6*3))
     ax_1.set_axis_off()
     gs = GridSpec(2, n_subfigs, height_ratios=[1, 25])
     legend_ax = fig_1.add_subplot(gs[0,:])
     legend_ax.set_axis_off()
     axes = [fig_1.add_subplot(gs[1,j]) for j in range(n_subfigs)]
     for ax_idx, (df_in, colname2rocauc, metric_val, title) in enumerate(zip(df_ins, colname2rocauc_list, metric_vals, titles)):
+        auc_series2 = pd.Series(np.nan, feats2)
         auc_series = pd.Series(np.nan, features)
+       
         auc_df = pd.DataFrame(data=np.nan,
                 index   = [ft_preproc_name for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items()],
                 columns = [classifier_name for classifier_name, classifier in classifiers.items()])
         auc_std_df = pd.DataFrame(auc_df)
-        colnames = features + [comb(ft_preproc_name, classifier_name) for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items() for classifier_name, classifier in classifiers.items()]
+        colnames = features + feats2 + [comb(ft_preproc_name, classifier_name) for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items() for classifier_name, classifier in classifiers.items()]
 
         rows = []
         for colname in colnames:
@@ -494,9 +505,11 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
                     roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
                 #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
                 #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
-                roc_auc_std = np.nan
+                roc_auc_std = np.nan            
             rows.append((colname, roc_auc))
-            if colname in features:
+            if colname in feats2:
+                auc_series2[colname] = roc_auc
+            elif colname in features:
                 auc_series[colname] = roc_auc
             else:
                 ft_preproc_name, classifier_name = decomb(colname)
@@ -504,6 +517,7 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
                 auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std
         long_df = pd.DataFrame(rows, columns=['Method', 'AUROC'])
         long_df.to_csv(out_fname_fmt.format('with_both'), sep='\t', index=True)
+        auc_series2.to_csv(out_fname_fmt.format('with_add_features'), sep='\t', index=True)
         auc_series.to_csv(out_fname_fmt.format('with_raw_features'), sep='\t', index=True)
         auc_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs'), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
         auc_std_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs_std'), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
@@ -521,17 +535,23 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
         ax.set_yticklabels([])
         ypos = list(range(len(long_df)))
         #auroc_method_class_list = zip(long_df['AUROC'], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
-        long_df['MethClass'] = long_df['Method'].apply(lambda x: (-1 if (x.startswith('NG') or x.lower().startswith('neoguider')) else (1 if x in features else 0)))
+        long_df['MethClass'] = long_df['Method'].apply(lambda x: (-1 if (x.startswith('NG') or x.lower().startswith('neoguider')) else (1 if x in features else (2 if x in feats2 else 0))))
         long_df = long_df.sort_values(by='AUROC')
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
-        methclass2desc = {-1: 'Use NeoGuider (NG) or its variant', 0: 'Use other techniques', 1: 'Prioritize with a single feature'}
+        methclass2desc = {-1: 'NeoGuider (NG) or its variant', 0: 'Other techniques', 1: 'Single feature (included in model)', 2: 'Single feature (not included in model)'}
         hbars_list = []
         for methclass, df in sorted(methclass_df_iterable):
             hbars = ax.barh(df['ypos'], df['AUROC'], align='center', label=methclass2desc[methclass])
             ax.bar_label(hbars, fmt=barh_fmt, padding=2)
             hbars_list.append(hbars)
-        ax.set_yticks(long_df['ypos'], labels=long_df['Method'])
+        methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME.get(x, x) for x in long_df['Method']]
+        for x in SOFT_NAME_TO_MANUSCRIPT_NAME:
+            if x not in features: 
+                methodnames = long_df['Method']
+                break
+        ax.set_yticks(long_df['ypos'], labels=methodnames)
+        ax.set_ylim(-1, len(long_df))
         xmin, xmax = np.min(long_df['AUROC']), np.max(long_df['AUROC'])
         ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
         ax.set_xlabel(titles[ax_idx], fontsize=14)
@@ -540,11 +560,12 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
             n_cols = int(round(min((n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
-        if ax_idx == 0: legend_ax.legend(hbars_list, [v for k,v in sorted(methclass2desc.items())], title='Feature-preprocessing techniques',
-                ncol=get_ncols(len(methclass2desc), n_subfigs),
+        if ax_idx == 0: legend_ax.legend(hbars_list, [v for k,v in sorted(methclass2desc.items())], title='Feature-preprocessing techniques used',
+                ncol=get_ncols(len(long_df['MethClass'].unique()), n_subfigs),
                 loc='center', fontsize=16, title_fontsize=18)
 
     plt.tight_layout()
+    logging.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
     plt.savefig(out_fname_fmt.format('with_both')+'.pdf')
     plt.savefig(out_fname_fmt.format('with_both')+'.png', dpi=600)
     plt.close()
@@ -594,10 +615,30 @@ def prepare_df(df, labelcol, na_op, max_peplen):
     print(F'prep_df=\n{ret}\n')
     return ret, added_feats
 
+DHP_FEATS = ['DeepHLApan/binding score', 'DeepHLApan/immunogenic score']
+def add_more(df, fpath):
+    fdir = os.path.dirname(fpath)
+    fbase = os.path.basename(fpath)
+    fname, fext = os.path.splitext(fbase)
+    # Add DeepHLpan results
+    dhp_fname = fname + '_predicted_result.csv'
+    ret = df
+    if os.path.exists(dhp_fname):
+        df2 = pd.read_csv(fdir + '/' + dhp_fname, header=0)
+        assert df2.columns == 'Annotation,HLA,Peptide,binding score,immunogenic score'.split(',')
+        assert len(df2) == len(df1), F'{len(df2)} == {len(df1)} failed!'
+        df3 = df2[['binding score', 'immunogenic score']]
+        df3.columns = DHP_FEATS
+        ret = pd.concat([df, df2], axis=1)
+    return ret
+
 def get_filenames(filepaths, prefix=''):
     return [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
 
+OTHER_FEATS = ['%Rank_EL', 'PRIME_rank', 'PRIME_score', 'PRIME_BArank', 'mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile']
 def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs, classifiers, csvsep, tasks, feature_names, label_name, untest_flag, peplen_flag):
+    feats2 = DHP_FEATS + OTHER_FEATS
+
     untest_ops_training_examples = ('drop' if (untest_flag & 0x1) else 'zero')
     untest_ops_test_examples = ('drop' if (untest_flag & 0x2) else 'zero')
     untest_ops_cv_examples = ('drop' if (untest_flag & 0x4) else 'zero')
@@ -620,6 +661,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     in_dfs = []
     for i, train_fname in enumerate(train_fnames):
         in_df = pd.read_csv(train_fname, sep=csvsep)
+        in_df = add_more(in_df, train_fname)
         if i == 0:
             features = [colname for colname in in_df.columns if colname in features_superset1]
             ft_weights = [len(set(fts) & set(features)) for fts in LISTOF_FEATURES]
@@ -787,6 +829,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         if test_fname in train_fnames: train_or_test = 'train'
         else: train_or_test = 'test'
         df = pd.read_csv(test_fname, sep=csvsep)
+        df = add_more(df, test_fname)
         df, added_feats = prepare_df(df, labelcol, na_op=untest_ops_test_examples, max_peplen=peplen_max_test_examples)
         for f in added_feats: assert f in features, F'{f} in {features} failed!'
         dfXy = df.loc[:,features + [labelcol]]
@@ -803,21 +846,21 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         test_dfs.append(df2)
         if 'Patient' in df2.columns:
-            build_auc_df([df2], F'{output}_{fidx}_{train_or_test}_'+'topN_{}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], metric_name='top', metric_vals=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
+            build_auc_df([df2], F'{output}_{fidx}_{train_or_test}_'+'topN_{}.tsv', ft_preproc_techs, classifiers, features, feats2, labelcol, [{}], metric_name='top', metric_vals=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
         if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_stats.pdf')
         if 'hla2' in tasks:
             logging.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
             analyze_performance_per_hla(df, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_bench.pdf')
             logging.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
     if test_dfs:
-        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, feats2, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
 
     cv_pred_dfs = []
     pipename2score_list = []
     for fidx, fname in enumerate(cv_fnames):
         fidx += 1
         in_df = pd.read_csv(fname, sep=csvsep)
-
+        in_df = add_more(in_df, fname)
         features = [colname for colname in in_df.columns if colname in features_superset1]
         labels = [colname for colname in in_df.columns if colname in labels_superset1]
         hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
@@ -853,8 +896,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         pipename2score = {ml_pipename : results[i] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
     if cv_fnames:
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, feats2, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, feats2, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
 
 if __name__ == '__main__':
     tr_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'tr' in args.input[i-1].split(','))]
