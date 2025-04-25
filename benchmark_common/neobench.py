@@ -1,40 +1,63 @@
 #!/usr/bin/env python
 
-import argparse, collections, copy, json, itertools, logging, os, pickle, pprint, random, sys
+import argparse, collections, copy, datetime, json, itertools, logging, os, pickle, pprint, random, sys
+from collections import Counter, defaultdict, namedtuple
 
-from joblib import Parallel, delayed # multiprocessing can hang if the virtual memory allocated is too big
+
+scriptpath = (os.path.realpath(__file__))
+scriptdir = (os.path.dirname(os.path.realpath(__file__)))
+# First parser setup and parse
+parser1 = argparse.ArgumentParser()
+parser1.add_argument('-n', '--n_hyper_iter', type=int, default=50)
+parser1.add_argument('-I', '--isolib', default=scriptdir+'/../IsotonicLogisticRegression#IsotonicLogisticRegression',
+        help='The NeoGuider feature transformation library file')
+args1, remaining_argv = parser1.parse_known_args()
+
 
 import numpy as np
 import pandas as pd
-
-from collections import defaultdict, namedtuple
-
+from joblib import Parallel, delayed # multiprocessing can hang if the virtual memory allocated is too big
 from scipy import stats
 
 import matplotlib
 import matplotlib.gridspec as gridspec
+
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib import pyplot as plt
 matplotlib.use('Agg')  # Use a non-GUI backend
-
 import seaborn as sns
 
+import imblearn
+#from imblearn.pipeline import Pipeline
+from imblearn.under_sampling import RandomUnderSampler
+
+# From https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
+#  and https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
 import sklearn
+
 from sklearn import metrics
-from sklearn.metrics import roc_auc_score
-from sklearn.pipeline import make_pipeline, Pipeline
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.compose import ColumnTransformer
-# Modified from https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
+
 from sklearn.discriminant_analysis import (LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis)
 from sklearn.ensemble import (AdaBoostClassifier, ExtraTreesClassifier, GradientBoostingClassifier, RandomForestClassifier,)
+
+from sklearn.exceptions import NotFittedError
+
 from sklearn.feature_selection import VarianceThreshold
+
 from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
 from sklearn.linear_model import LogisticRegression
+
+from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import cross_val_predict, cross_val_score, GroupKFold
+
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.tree import DecisionTreeClassifier
+
+#from sklearn.pipeline import make_pipeline, Pipeline
 
 from sklearn.preprocessing import (
     MaxAbsScaler,
@@ -48,13 +71,248 @@ from sklearn.preprocessing import (
     # FunctionTransformer # using user-implemented custom function
 )
 
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+
+from sklearn.utils import resample
+from sklearn.utils.validation import check_is_fitted
+
 from xgboost import XGBClassifier
+
+# https://www.kaggle.com/code/sivasaiyadav8143/10-hyperparameter-optimization-frameworks/notebook#9.-Scikit-Optimize
+from skopt import BayesSearchCV
+from skopt.space import Real, Categorical, Integer
+
+isopath = args1.isolib.split('#')[0]
+isolibname = args1.isolib.split('#')[1]
+ISO_DIR = os.path.dirname(isopath)
+ISO_NAME = os.path.basename(isopath)
+ISO_MODULE, ISO_EXT = os.path.splitext(ISO_NAME)
+sys.path.append(ISO_DIR)
+logging.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} ISO_NAME={ISO_NAME} ISO_MODULE={ISO_MODULE} ISO_EXT={ISO_EXT}')
+IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
+IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
+NG_default = 'NG'
+
+HYPERPARAM_EPS = 1e-5
+
+# All categorical and numerical hyperparams from https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html
+grid_param_AB = {
+    'n_estimators' : Integer(100//10, 100*10, prior='log-uniform'),
+    'learning_rate' : Real(1/10.0, 1*10.0, prior='log-uniform'),
+}
+
+# All categorical and numerical hyperparams from https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
+grid_param_RF = {
+    'n_estimators'            : Integer(100//10, 100*10, prior='log-uniform'), # 100
+    'criterion'               : Categorical(['gini', 'entropy', 'log_loss']), # gini
+    #'max_depth_flag'          : Categorical([None, 1]),  # None
+    'max_depth'               : Integer(6-5, 6+5),  # None
+    'min_samples_split'       : Integer(2, 2+2), # 2
+    'min_samples_leaf'        : Integer(1, 1+2), # 1
+    'min_weight_fraction_leaf': Real(HYPERPARAM_EPS, 0.5-HYPERPARAM_EPS, prior='log-uniform'), # 0
+    'max_features'            : Categorical(['sqrt', 'log2', None]), # None
+    'max_leaf_nodes'          : Categorical([2,3,None]), # None
+    # 'min_impurity_decrease' # Added in version 0.19.
+    'bootstrap'               : Categorical([False, True]), # True
+    'class_weight'            : Categorical(['balanced', 'balanced_subsample', None]) # None
+}
+
+grid_param_DT = {
+    'criterion': Categorical(['gini', 'entropy', 'log_loss']),
+    'splitter': Categorical(['best', 'random']), 
+    'max_depth': Integer(6-5, 6+5),
+    'min_samples_split'       : Integer(2, 2+2), # 2
+    'min_samples_leaf'        : Integer(1, 1+2), # 1
+    'min_weight_fraction_leaf': Real(HYPERPARAM_EPS, 0.5-HYPERPARAM_EPS, prior='log-uniform'),
+    'max_features'            : Categorical(['sqrt', 'log2', None]),
+    #random_state=None,
+    'max_leaf_nodes'          : Categorical([2,3,None]), # None
+    #min_impurity_decrease=0.0, 
+    #class_weight=None, 
+    #ccp_alpha=0.0,
+}
+
+# All categorical and numerical hyperparams from https://xgboost.readthedocs.io/en/latest/parameter.html
+grid_param_XGB = {
+    'eta' : Real(0.3/10, 0.3*10, prior='log-uniform'),
+    'gamma': Integer(0, 2), # 0
+    'max_depth': Integer(6-5,6+5), # 6
+    'min_child_weight': Real(1/10.0, 1*10.0), # 1
+    'max_delta_step': Integer(0,2), # 0
+    'subsample': Real(0.5, 1), # 1 where 0.5 is the lower limit
+    # Check failed: param.sampling_method == TrainParam::kUniform (1 vs. 0) : Only uniform sampling is supported, gradient-based sampling is only support by GPU Hist.
+    # xgboost.core.XGBoostError: Invalid Input: 'subsample', valid values are: {'gradient_based', 'uniform'}
+    # 'sampling_method': Categorical(['uniform', 'subsample']), # Categorical(['uniform', 'subsample', 'gradient_based']), # uniform
+    'colsample_bytree': Real(0.5, 1), # 1 1 1
+    'colsample_bylevel': Real(0.5, 1),
+    'colsample_bynode': Real(0.5, 1),
+    'lambda': Real(0.1, 10, prior='log-uniform'), # 
+    'alpha': Real(0.0, 0.5), # 0
+    'tree_method': Categorical(['auto', 'exact', 'approx', 'hist']), # Categorical(['auto', 'exact', 'approx', 'hist']), # auto
+    'scale_pos_weight': Real(0.1, 10, prior='log-uniform'), # 1
+    # 'updater' is advanced and should not be set in a typical use case
+    'refresh_leaf' : Integer(0, 1), # 1 (0 or 1)
+    #'process_type' : Categorical(['default', 'update']), # default, because update results in a runtime error
+    'grow_policy'  : Categorical(['depthwise', 'lossguide']), # depthwise
+    'max_leaves'   : Integer(0, 2), # 0
+    'max_bin'      : Integer(256//10, 256*10), # 256
+    'num_parallel_tree' : Integer(1, 1+2), # 1
+    'objective': Categorical(['binary:logistic', 'binary:logitraw', 'binary:hinge']), # reg:squarederror is changed into all binary objectives
+    'eval_metric': Categorical(['logloss', 'auc']), # logloss # auprc is not recognized, resulting in runtime error
+}
+
+grid_param_MLP = {
+    #'hidden_layer_sizes': Categorical([(10,), (100,), (1000,)]),
+    #'hidden_layer_sizes': (Real(1.0, 10.0), pow2intmap),
+    'hidden_layer_sizes': Integer(10, 1000, prior='log-uniform'),
+    'activation' : Categorical(['identity', 'logistic', 'tanh', 'relu']),
+    'solver': Categorical(['lbfgs', 'sgd', 'adam']),
+    'alpha' : Real(0.00001, 0.001, prior='log-uniform'),
+    'batch_size': Integer(20, 2000, prior='log-uniform'),
+    'learning_rate': Categorical(['constant', 'invscaling', 'adaptive']),
+    'learning_rate_init' : Real(0.0001, 0.01, prior='log-uniform'),
+    'power_t' : Real(0.25, 0.75),
+    'max_iter': Integer(20,2000,prior='log-uniform'),
+    'shuffle' : Categorical([True, False]),
+    'tol' : Real(0.00001, 0.001, prior='log-uniform'),
+    #verbose=False, warm_start=False, 
+    'momentum' : Real(0.8, 1.0-HYPERPARAM_EPS),
+    'nesterovs_momentum' : Categorical([True, False]),
+    'early_stopping' : Categorical([True, False]),
+    'validation_fraction' : Real(0.05, 0.20, prior='log-uniform'), # If this number is too slow, then we may encounter a runtime error at validation
+    'beta_1' : Real(0.8, 1.0-HYPERPARAM_EPS),
+    'beta_2' : Real(0.998, 1.0-HYPERPARAM_EPS),
+    'epsilon' : Real(1e-09, 1e-7, prior='log-uniform'),
+    'n_iter_no_change' : Integer(2,100,prior='log-uniform'),
+    'max_fun' : Integer(1500, 150000, prior='log-uniform'),
+}
+
+grid_param_KNN = {
+    'n_neighbors' : Integer(1, 25, prior='log-uniform'),
+    'weights' : Categorical(['uniform', 'distance']), 
+    #algorithm='auto', 'ball_tree', 'kd_tree', 'brute'
+    #leaf_size=30, 
+    'p' : Real(0.2, 20, prior='log-uniform'),
+    'metric' : Categorical(['minkowski', 'cosine', 'nan_euclidean']), # ValueError: Haversine distance only valid in 2 dimensions
+    #'metric_params': NA
+}
+
+# all hyperparams from https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+grid_param_LR = {
+    'penalty' : Categorical(['l1', 'l2', 'elasticnet', None]),
+    #dual=False # only implementd for liblinear solver
+    'tol' : Real(1e-5, 1e-3, prior='log-uniform'),
+    'C'   : Real(0.1, 10, prior='log-uniform'),
+    'fit_intercept' : Categorical([True, False]),
+    'intercept_scaling'   : Real(0.1, 10, prior='log-uniform'),
+    'class_weight' : Categorical(['balanced', None]),
+    'solver'       : Categorical(['saga']), # only this one works for elasticnet
+    'max_iter'     : Integer(10, 1000, prior='log-uniform'),
+    'l1_ratio'     : Real(0, 1),
+}
+
+# all scikit-learn feature preprocessors from https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
+THE_FEAT_PREPROC_TECHS = {
+    'IdentityTransformer' : ColumnTransformer([], remainder='passthrough'),
+    'MaxAbsScaler'        : MaxAbsScaler(),
+    'MinMaxScaler'        : MinMaxScaler(),
+    'Normalizer'          : Normalizer(),
+    'PowerTransformer'    : PowerTransformer(),
+    'QuantileTransformer' : QuantileTransformer(random_state=0),
+    'RobustScaler'        : RobustScaler(),
+    'StandardScaler'      : StandardScaler(),
+    # 'NormalTransformer' : QuantileTransformer(random_state=0, output_distribution='normal'), # not used with default value
+    F'{NG_default}'       : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    'NG_withoutNumTested' : IsotonicLogisticRegression(random_state=0, excluded_cols=[]),
+}
+
+# Let StandardScaler represent IdentityTransformer, MaxAbsScaler, MinMaxScaler, and RobustScaler since they are all linear maps
+# Then, all scikit-learn feature preprocessors, 
+#   mentioned at https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html, 
+# can be represented by the following items:
+HYPEROPT_FEAT_PREPROC_TECHS = {
+    #'IdentityTransformer' : ColumnTransformer([], remainder='passthrough'), # this results in runtime error for hyperparam optimimization for MLP (and possibly for LogReg too)
+    'Normalizer'          : Normalizer(),
+    'PowerTransformer'    : PowerTransformer(),
+    'QuantileTransformer' : QuantileTransformer(random_state=0),
+    'StandardScaler'      : StandardScaler(),
+    F'{NG_default}'       : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    'NG_withoutNumTested' : IsotonicLogisticRegression(random_state=0, excluded_cols=[]),
+}
+
+# All classifiers from https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
+# The classifiers with runtime error are commented out
+THE_CLASSIFIERS = {
+    'hParamDefault_KNN': KNeighborsClassifier(),
+    # 'KN500': KNeighborsClassifier(n_neighbors=500), # Too many ties in probabilities (density of positive examples is too low)
+    'hParamDefault_SVC': SVC(probability=True), # sklearn.svm import SVC is not designed to predict probability and is not designed to handle large sample size (O(n*n) runtime, intractable)
+    #'hParamDefault_GP':  GaussianProcessClassifier(random_state=0), # Error: numpy.core._exceptions._ArrayMemoryError: Unable to allocate 1.25 TiB for ...
+    'hParamDefault_DT':  DecisionTreeClassifier(random_state=0),
+    'hParamDefault_RF':  RandomForestClassifier(random_state=0),
+    'hParamDefault_MLP': MLPClassifier(random_state=0),
+    'hParamDefault_AB':  AdaBoostClassifier(random_state=0),
+    'hParamDefault_GNB': GaussianNB(),
+    #'LDA': LinearDiscriminantAnalysis(),
+    'hParamDefault_QDA': QuadraticDiscriminantAnalysis(),
+    'hParamDefault_LR' : LogisticRegression(random_state=0, max_iter=500),
+    # Tree-based algorithms other than the ones used above:
+    # 'ET': ExtraTreesClassifier(random_state=0), # worse than RF
+    # 'eGB': GradientBoostingClassifier(random_state=0), # similar to XGB but much slower
+    'hParamDefault_XGB': XGBClassifier(random_state=0),
+}
+
+def add_redundant_names(elements, idx=[0,1,2,3]):
+    if isinstance(elements, str):
+        assert isinstance(idx, int)
+        return elements + '_' + str(idx)
+    ret = list(elements)
+    for e in elements:
+        for i in idx:
+            ret.append(e+'_' + str(i))
+    return ret
+
+THE_CLASSIFIER_KEYS = add_redundant_names(THE_CLASSIFIERS.keys())
+
+# Other authors also performed split in patient-unspecific manner (the same patient's peptides are used for both training and assessing hyperparam-goodness)
+# for hypeparam tuning, for example: https://github.com/XuegongLab/NeoRanking/blob/5df3b6c2/Classifier/OptimizationParams.py#L356,
+# We think it is fine because our hyperparam-goodness score is the roc-auc for the ensemble of peptides over multiple patients
+hyperopt_common_params = {
+    'scoring': 'roc_auc', 
+    'random_state': 0, 
+    'n_iter': args1.n_hyper_iter, 
+    'cv': 3,
+    'n_jobs': 12, 
+    'verbose': 9,
+}
+
+# We performed hyperparam tuning to the classifiers that were not used with default hyperparam values at
+# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
+HYPEROPT_CLASSIFIERS = {
+    'hParamTuned_AB' : BayesSearchCV(AdaBoostClassifier    (random_state=0), grid_param_AB , **hyperopt_common_params), # TODO:remove
+    'hParamTuned_DT' : BayesSearchCV(DecisionTreeClassifier(random_state=0), grid_param_DT , **hyperopt_common_params),
+    
+    'hParamTuned_KNN': BayesSearchCV(KNeighborsClassifier  (              ), grid_param_KNN, **hyperopt_common_params),
+    'hParamTuned_SVC': BayesSearchCV(DecisionTreeClassifier(random_state=0), grid_param_DT , **hyperopt_common_params),
+    #'hParamTuned_GP'  BayesSearchCV(GaussianProcessClassifier(random_state=0), grid_param_GP , **hyperopt_common_params),
+
+    'hParamTuned_LR' : BayesSearchCV(LogisticRegression    (random_state=0), grid_param_LR,  **hyperopt_common_params),
+    'hParamTuned_MLP': BayesSearchCV(MLPClassifier         (random_state=0), grid_param_MLP, error_score=0, **hyperopt_common_params),
+    'hParamTuned_RF' : BayesSearchCV(RandomForestClassifier(random_state=0), grid_param_RF , **hyperopt_common_params),
+    'hParamTuned_XGB': BayesSearchCV(XGBClassifier         (random_state=0), grid_param_XGB, **hyperopt_common_params), # TODO:remove
+}
+
+CLASSIFIERS_REQUIRING_STRONG_BALANCE = set([
+    'hParamDefault_KNN', 'hParamTuned_KNN',
+    'hParamDefault_GP' , 'hParamTuned_GP' ,
+    'hParamDefault_SVC', 'hParamTuned_SVC',
+])
+
+CLASSIFIERS_REQUIRING_BALANCE = set(HYPEROPT_CLASSIFIERS.values())
 
 logger = logging.getLogger(__name__)
 def config_logging(function_name=''): logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s {function_name} - %(message)s')
 config_logging()
-
-NG_default = 'NG'
 
 SOFT_NAME_TO_MANUSCRIPT_NAME = {
     'Score_EL': 'ScoreEL',
@@ -147,41 +405,6 @@ def pairplot_showing_pretrans_feat_vals(df1, df2, feature_transformer):
     #plt.show()
     return fig
 
-# https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
-THE_FEAT_PREPROC_TECHS = {
-    'IdentityTransformer' : ColumnTransformer([], remainder='passthrough'),
-    'MaxAbsScaler'        : MaxAbsScaler(),
-    'MinMaxScaler'        : MinMaxScaler(),
-    'Normalizer'          : Normalizer(),
-    'PowerTransformer'    : PowerTransformer(),
-    'QuantileTransformer' : QuantileTransformer(random_state=0),
-    'RobustScaler'        : RobustScaler(),
-    'StandardScaler'      : StandardScaler(),
-    # 'NormalTransformer' : QuantileTransformer(random_state=0, output_distribution='normal'), # not used with default value
-    F'{NG_default}'       : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-    'NG_withoutNumTested' : 'Not-specified-yet', # IsotonicLogisticRegression(random_state=0),
-}
-
-# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-THE_CLASSIFIERS = {
-    'KNN': KNeighborsClassifier(),
-    # 'KN500': KNeighborsClassifier(n_neighbors=500), # Too many ties in probabilities (density of positive examples is too low)
-    # 'SVC': SVC(probability=True), # sklearn.svm import SVC is not designed to predict probability and is not designed to handle large sample size (O(n*n) runtime, intractable)
-    # 'GP': GaussianProcessClassifier(random_state=0), # Error: numpy.core._exceptions._ArrayMemoryError: Unable to allocate 1.25 TiB for ...
-    'DT': DecisionTreeClassifier(random_state=0),
-    'RF': RandomForestClassifier(random_state=0),
-    'MLP': MLPClassifier(random_state=0),
-    'AB': AdaBoostClassifier(random_state=0),
-    'GNB': GaussianNB(),
-    #'LDA': LinearDiscriminantAnalysis(),
-    'QDA': QuadraticDiscriminantAnalysis(),
-    'LR' : LogisticRegression(random_state=0),
-    # Tree-based algorithms other than the ones used above:
-    # 'ET': ExtraTreesClassifier(random_state=0), # worse than RF
-    # 'eGB': GradientBoostingClassifier(random_state=0), # similar to XGB
-    'XGB': XGBClassifier(random_state=0),
-}
-
 # from https://github.com/SchubertLab/benchmark_TCRprediction
 PMHC_TCR_PRED_60_MODELS = 'predictions_atm-tcr,predictions_attntap_MCPAS,predictions_attntap_VDJDB,predictions_bertrand,predictions_dlptcr_ALPHA,predictions_dlptcr_BETA,predictions_epitcr_WITH_MHC,predictions_epitcr_WO_MHC,predictions_ergo-i_AE_MCPAS,predictions_ergo-i_AE_VDJDB,predictions_ergo-i_LSTM_MCPAS,predictions_ergo-i_LSTM_VDJDB,predictions_ergo-ii_MCPAS,predictions_ergo-ii_VDJDB,predictions_imrex_DOWNSAMPLED,predictions_imrex_FULL,predictions_itcep,predictions_nettcr_t.0.v.1,predictions_nettcr_t.0.v.2,predictions_nettcr_t.0.v.3,predictions_nettcr_t.0.v.4,predictions_nettcr_t.1.v.0,predictions_nettcr_t.1.v.2,predictions_nettcr_t.1.v.3,predictions_nettcr_t.1.v.4,predictions_nettcr_t.2.v.0,predictions_nettcr_t.2.v.1,predictions_nettcr_t.2.v.3,predictions_nettcr_t.2.v.4,predictions_nettcr_t.3.v.0,predictions_nettcr_t.3.v.1,predictions_nettcr_t.3.v.2,predictions_nettcr_t.3.v.4,predictions_nettcr_t.4.v.0,predictions_nettcr_t.4.v.1,predictions_nettcr_t.4.v.2,predictions_nettcr_t.4.v.3,predictions_panpep,predictions_pmtnet,predictions_stapler,predictions_tcellmatch_GRU_CV0,predictions_tcellmatch_GRU_CV1,predictions_tcellmatch_GRU_CV2,predictions_tcellmatch_GRU_SEP_CV0,predictions_tcellmatch_GRU_SEP_CV1,predictions_tcellmatch_GRU_SEP_CV2,predictions_tcellmatch_LINEAR_CV0,predictions_tcellmatch_LINEAR_CV1,predictions_tcellmatch_LINEAR_CV2,predictions_tcellmatch_LSTM_CV0,predictions_tcellmatch_LSTM_CV1,predictions_tcellmatch_LSTM_CV2,predictions_tcellmatch_LSTM_SEP_CV0,predictions_tcellmatch_LSTM_SEP_CV1,predictions_tcellmatch_LSTM_SEP_CV2,predictions_teim,predictions_teinet_LARGE_DS,predictions_teinet_SMALL_DS,predictions_titan,predictions_tulip-tcr'.split(',')
 
@@ -192,29 +415,22 @@ IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim 
 # response prediction_rf
 
 # The following were already quantile-normalized and therefore not used: PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
-FEATS = 'MT_BindAff,BindStab,Quantification,Agretopicity,Score_EL,ln_NumTested'.split(',')
+FEATS = 'Quantification,Agretopicity,ln_NumTested'.split(',') # By default, the 'default' of the --add cmd-line option will be added
 
 MULLER_NEOPEP_FTS = 'CCF Clonality rnaseq_TPM rnaseq_alt_support CSCAPE_score mutant_other_significant_alleles mutant_rank mutant_rank_PRIME mutant_rank_netMHCpan Sample_Tissue_expression_GTEx GTEx_all_tissues_expression_mean TCGA_Cancer_expression gene_driver_Intogen nb_same_mutation_Intogen mutation_driver_statement_Intogen bestWTMatchScore_I bestWTMatchOverlap_I bestMutationScore_I bestWTMatchType_I  bestWTPeptideCount_I mut_Rank_Stab mut_netchop_score_ct TAP_score mut_is_binding_pos mut_binding_score mut_aa_coeff seq_len DAI_NetMHC DAI_MixMHC DAI_NetStab DAI_MixMHC_mbp'.strip().split()
 
 MULLER_NEOMUT_FTS = 'CCF Clonality Zygosity Sample_Tissue_expression_GTEx TCGA_Cancer_expression rnaseq_TPM rnaseq_alt_support MIN_MUT_RANK_CI_MIXMHC COUNT_MUT_RANK_CI_MIXMHC WT_BEST_RANK_CI_MIXMHC MIN_MUT_RANK_CI_PRIME COUNT_MUT_RANK_CI_PRIME WT_BEST_RANK_CI_PRIME COUNT_MUT_RANK_CI_netMHCpan CSCAPE_score gene_driver_Intogen nb_mutations_in_gene_Intogen nb_same_mutation_Intogen mutation_driver_statement_Intogen GTEx_all_tissues_expression_mean bestWTMatchScore_I bestWTMatchOverlap_I bestMutationScore_I bestWTPeptideCount_I mut_Rank_EL_0 wt_Rank_EL_0 mut_Rank_EL_1 wt_Rank_EL_1 mut_Rank_EL_2 wt_Rank_EL_2 mut_Rank_Stab_0 mut_Rank_Stab_1 mut_Rank_Stab_2 mut_netchop_score mut_TAP_score_0 next_best_BA_mut_ranks DAI_0 DAI_1 DAI_2'.strip().split()
 
-#LISTOF_FEATURES = [PMHC_TCR_PRED_60_MODELS+PMHC_TCR_PRED_TOOLS+IMPROVE_FTS+FEATS]
-
 LISTOF_FEATURES = [FEATS, PMHC_TCR_PRED_60_MODELS, PMHC_TCR_PRED_TOOLS, IMPROVE_FTS, MULLER_NEOPEP_FTS, MULLER_NEOMUT_FTS]
 
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED', 'response_type']]
+
 ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
     + 'DAI NetMHCExp pI PropBasic Inst PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
 
-scriptdir = (os.path.dirname(os.path.realpath(__file__)))
-parser = argparse.ArgumentParser(description='This script analyzes features (the features are typically the output of relevant software packages, such as kallisto, netMHCpan, mhcflurry, PRIME, ERGO, and netTCR). ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+SKLEARN_PIPE = 'sklearn-pipe'
 
-#TASKS = ['traintest', 'crossval', 'pairwise_traintest']
-#parser.add_argument('--task', nargs='+', default=['traintest', 'crossval'], help='Task, can be any combination of {TASKS}')
-#parser.add_argument('--train', nargs='+', default=[],
-#        help='Training csv files from https://www.biorxiv.org/content/10.1101/2024.11.06.622261v1.supplementary-material')
-#parser.add_argument('--test', default='',
-#        help='Test csv files from https://www.biorxiv.org/content/10.1101/2024.11.06.622261v1.supplementary-material')
+parser = argparse.ArgumentParser(description='This script analyzes features (the features are typically the output of relevant software packages, such as kallisto, netMHCpan, mhcflurry, PRIME, ERGO, and netTCR). ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('-i', '--input', nargs='+', default=[ scriptdir+'/media-2.csv', scriptdir+'/media-4.csv' ],
         help='String list of length 2, 4, 6, etc. denoting task1 file1 task2 file2 task3 file3 etc. \n'
@@ -224,30 +440,44 @@ parser.add_argument('-i', '--input', nargs='+', default=[ scriptdir+'/media-2.cs
         '2 - the validated-neoantigen file from https://github.com/SRHgroup/IMPROVE_paper/blob/main/data.zip, '
         '3 - the predictions on the viral and mutation datasets downloaded from https://www.biorxiv.org/content/10.1101/2024.11.06.622261v1.supplementary-material, '
         '4 - the predictions* results generated by https://github.com/SchubertLab/benchmark_TCRprediction. ')
-parser.add_argument('-o', '--output', default=(scriptdir+'/tmp/default_out'),
+parser.add_argument('-o', '--output', required=True, #(scriptdir+'/tmp/default_out'),
         help='The prefix of the output files')
-parser.add_argument('-I', '--isolib', default=scriptdir+'/../IsotonicLogisticRegression#IsotonicLogisticRegression',
-        help='The NeoGuider feature transformation library file')
-parser.add_argument('-1', '--ft_preproc_techs', nargs='+', default=[x for x in THE_FEAT_PREPROC_TECHS],
+parser.add_argument('-m', '--model',  default=(None),
+        help='The prefix of the directory containing model files in pickle format')
+
+parser.add_argument('-1', '--ft_preproc_techs', nargs='*', default=[x for x in THE_FEAT_PREPROC_TECHS],
         help='Names of the feature preprocessing techniques to be assessed')
-parser.add_argument('-2', '--classifiers', nargs='+', default=[x for x in THE_CLASSIFIERS],
+parser.add_argument('-2', '--classifiers', nargs='*', default=[x for x in THE_CLASSIFIERS],
         help='Names of the machine-learning classifiers to be assessed')
+parser.add_argument('-3', '--hyperopt_ft_preproc_techs', nargs='*', default=[x for x in HYPEROPT_FEAT_PREPROC_TECHS],
+        help='Names of the feature preprocessing techniques to be assessed with hyperparam tuning')
+parser.add_argument('-4', '--hyperopt_classifiers', nargs='*', default=[x for x in HYPEROPT_CLASSIFIERS],
+        help='Names of the machine-learning classifiers with hyperparam tuning')
 parser.add_argument('--inc', default=None, help='Assume that label as a function of each feature is increasing (0, 1, "auto", or None denoting false, true, auto, and inferred)')
 parser.add_argument('--sep', default=None, help='csv column separator')
 parser.add_argument('--seed', default=43, help='seed for random number generation')
-parser.add_argument('--tasks', nargs='+', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
-parser.add_argument('--features', nargs='+', default=[], help='Features analyzed, auto infer if not provided')
+parser.add_argument('--tasks', nargs='*', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
+parser.add_argument('--features', nargs='*', default=[], help='Features analyzed, auto infer if not provided')
 parser.add_argument('--label', default='', help='The label analyzed, auto infer if not provided')
+parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {SKLEARN_PIPE}: test sklearn pipeline. ')
 
 # Maintain consistency with Muller et al. 2023, Immunity
 parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
 parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
-parser.add_argument('--add', nargs='+', default=[], help='Additional features, like mhcflurry or prime, to be added to the list of features. ')
+parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
+para_n_jobs = 16
 
-args = parser.parse_args()
+args = parser.parse_args(remaining_argv)
+
+if args.output and not args.model: model_dir_prefix = args.output
+elif args.model: model_dir_prefix = args.model
+else: raise RuntimeError(F'Cannot infer the directory that contains (or will contain) the trained models from the parsed args: {args}!')
 
 if 'mhcflurry' in args.add: LISTOF_FEATURES[0].extend(['mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile'])
-if 'prime' in args.add: LISTOF_FEATURES[0].extend(['PRIME_BArank', 'PRIME_rank'])
+if 'prime' in args.add: LISTOF_FEATURES[0].extend(['PRIME_BArank', 'PRIME_rank', 'PRIME_score'])
+if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['%Rank_EL', 'Score_EL', 'MT_BindAff', 'BindStab'])
+elif 'default' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', 'MT_BindAff', 'BindStab'])
+LISTOF_FEATURES[0] = sorted(set(LISTOF_FEATURES[0]))
 
 random.seed(args.seed)
 np.random.seed(args.seed)
@@ -277,14 +507,6 @@ else: feat_pvalue_drop = True
 
 logging.info(F'feat_pvalue_drop={feat_pvalue_drop}')
 
-isopath = args.isolib.split('#')[0]
-isolibname = args.isolib.split('#')[1]
-ISO_DIR = os.path.dirname(isopath)
-ISO_NAME = os.path.basename(isopath)
-ISO_MODULE, ISO_EXT = os.path.splitext(ISO_NAME)
-sys.path.append(ISO_DIR)
-IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
-IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 nan_policy='raise' #'mean'
 kwargs = {
     'increasing': increasing,
@@ -293,22 +515,9 @@ kwargs = {
     'nan_policy': nan_policy,
     'excluded_cols': ['ln_NumTested']}
 
-THE_FEAT_PREPROC_TECHS[F'{NG_default}']       = IsotonicLogisticRegression(**kwargs)
-THE_FEAT_PREPROC_TECHS['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=0, feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
-
-'''
-THE_FEAT_PREPROC_TECHS2 = {}
-THE_FEAT_PREPROC_TECHS2['NG_P<=1e-0'] = IsotonicLogisticRegression(feat_pvalue_thres=0.50, **kwargs)
-THE_FEAT_PREPROC_TECHS2['NG_P<=1e-1'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-1, **kwargs)
-THE_FEAT_PREPROC_TECHS2['NG_P<=5e-2'] = IsotonicLogisticRegression(feat_pvalue_thres=5e-2, **kwargs)
-THE_FEAT_PREPROC_TECHS2['NG_P<=2e-2'] = IsotonicLogisticRegression(feat_pvalue_thres=2e-2, **kwargs)
-THE_FEAT_PREPROC_TECHS2['NG_P<=1e-2'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-2, **kwargs)
-THE_FEAT_PREPROC_TECHS2['NG_P<=1e-3'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-3, **kwargs)
-THE_FEAT_PREPROC_TECHS2['NG_P<=1e-4'] = IsotonicLogisticRegression(feat_pvalue_thres=1e-4, **kwargs) 
-
-THE_FEAT_PREPROC_TECHS.update(THE_FEAT_PREPROC_TECHS2)
-args.ft_preproc_techs.extend(THE_FEAT_PREPROC_TECHS2.keys())
-'''
+#for tech in [HYPEROPT_FEAT_PREPROC_TECHS, THE_FEAT_PREPROC_TECHS]:
+#    tech[F'{NG_default}']       = IsotonicLogisticRegression(**kwargs)
+#    tech['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=0, feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
 
 try:
     sklearn.set_config(enable_metadata_routing=False)
@@ -351,7 +560,7 @@ def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     plt.close()
     return matrix
 
-def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/LR', ranking_mult=1):
+def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR', ranking_mult=1):
     df = df.sort_values(predcol, ascending=(ranking_mult==-1))
     ranks = []
     patient2rank = collections.defaultdict(int)
@@ -361,7 +570,7 @@ def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}
     df['rank'] = ranks
     return df
 
-def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{NG_default}/LR'):
+def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR'):
     matrix = compute_hla_mat(df, hlacol, labelcol, patientcol)
     df = compute_ranked_df(df, labelcol)
     top20df = df.loc[df['rank']<=20]
@@ -396,21 +605,72 @@ def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patien
     plt.close()
     return matrix2
 
-def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict):
+def between(x, lower, upper): return min((max((lower, x)), upper))
+
+def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
+    if classifier_name in CLASSIFIERS_REQUIRING_STRONG_BALANCE:
+        new_n_pos = min((n_positives, 1e3))
+        new_n_neg = between(n_negatives, n_positives, 1e3) # 1e3 is to avoid out-of-mem error
+    elif classifier_name in CLASSIFIERS_REQUIRING_BALANCE:
+        # In order to limit computation time during Hyperopt training on neo-peptides, 
+        # the size of NCI-train_neo-pep was limited by randomly sampling 100,000 non-immunogenic neo-peptides from NCI-train_neo-pep,
+        # while all immunogenic neo-peptides in NCI-train_neo-pep were retained
+        # 1e5 is from https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
+        new_n_pos = min((n_positives, 1e5))
+        new_n_neg = between(n_negatives, n_positives, 1e5)
+    else:
+        logging.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
+        return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=0)
+    if new_n_neg > new_n_pos:
+        logging.info(F'Classifier {classifier_name} went through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
+        return 1, RandomUnderSampler(sampling_strategy=(new_n_pos/new_n_neg), random_state=0)
+    else:
+        logging.info(F'Classifier {classifier_name} was not through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
+        return 0, 'passthrough' # VarianceThreshold()
+
+def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hyperopt_ft_preproc_tech_dict, hyperopt_classifier_dict, y):
     ret = []
+    n_positives, n_negatives = len([v for v in y if v == 1]), len([v for v in y if v == 0])
+    assert n_positives + n_negatives == len(y), F'The vector y containing elements {set(y)} is not binary!'
+    for ft_preproc_name, ft_preproc_tech, in sorted(hyperopt_ft_preproc_tech_dict.items()):
+        for classifier_name, classifier in sorted(hyperopt_classifier_dict.items()):
+            if (ft_preproc_name, classifier) in [('IdentityTransformer', 'hParamTuned_MLP')]: continue
+            ml_pipename = comb(ft_preproc_name, classifier_name)            
+            was_balancing_performed, imbalearn_selector = make_imbalearn_selector(classifier_name, n_positives, n_negatives)
+            ml_pipe = imblearn.pipeline.Pipeline([
+                ('balance', imbalearn_selector), 
+                ('preproc_feat', copy.deepcopy(ft_preproc_tech)), 
+                ('remove_constant', VarianceThreshold()), 
+                ('classify', copy.deepcopy(classifier))
+            ])
+            ret.append((ml_pipename, ml_pipe))
     for ft_preproc_name, ft_preproc_tech, in sorted(ft_preproc_tech_dict.items()):
         for classifier_name, classifier in sorted(classifier_dict.items()):
             ml_pipename = comb(ft_preproc_name, classifier_name)
-            ml_pipe = make_pipeline(copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier))
+            was_balancing_performed, imbalearn_selector = make_imbalearn_selector(classifier_name, n_positives, n_negatives)
+            '''
+            ml_pipe = imblearn.pipeline.Pipeline([
+                ('balance', imbalearn_selector),
+                ('preproc_feat', copy.deepcopy(ft_preproc_tech)),
+                ('remove_constant', VarianceThreshold()), 
+                ('classify', copy.deepcopy(classifier))
+            ])'''
+            ml_pipe = imblearn.pipeline.make_pipeline(imbalearn_selector, copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier))
             ret.append((ml_pipename, ml_pipe))
+            if SKLEARN_PIPE in args.debug and not was_balancing_performed:
+                ml_pipe = sklearn.pipeline.make_pipeline('passthrough',       copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier))
+                ret.append((add_redundant_names(ml_pipename, 1), ml_pipe))
+                ml_pipe = sklearn.pipeline.make_pipeline(VarianceThreshold(), copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier))
+                ret.append((add_redundant_names(ml_pipename, 2), ml_pipe))
     return ret
 
-def assert_prob_arr(prob_pred):
-    assert prob_pred.shape[1] == 2, F'The predicted result {prob_pred} does not have two columns denoting two columns!'
+def assert_prob_arr(prob_pred, ml_pipename):
+    if ml_pipename.endswith('hParamTuned_XGB'): return 1
+    assert prob_pred.shape[1] == 2, F'The predicted result {prob_pred} does not have two columns denoting two columns for {ml_pipename}!'
     for x, y in prob_pred:
-        assert 0 <= x and x <= 1, F'The probability {x} must be between zero and one!'
-        assert 0 <= y and y <= 1, F'The probability {y} must be between zero and one!'
-        assert 1-1e-9 < (x + y) and (x + y) < 1+1e-9, F'The probabilities {x} and {y} do not sum to one!'
+        assert 0 <= x and x <= 1, F'The probability {x} must be between zero and one for {ml_pipename}!'
+        assert 0 <= y and y <= 1, F'The probability {y} must be between zero and one for {ml_pipename}!'
+        assert 1-1e-9 < (x + y) and (x + y) < 1+1e-9, F'The probabilities {x} and {y} do not sum to one for {ml_pipename}!'
 
 def drop_feat_from_X(ml_pipename, X):
     X = X.copy()
@@ -420,40 +680,89 @@ def drop_feat_from_X(ml_pipename, X):
     #        logging.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
     if (not 'ln_NumTested' in X.columns):
         return X.copy()
-    elif ('withoutNumTested'.lower() in ml_pipename.lower()) or (not 'neoguider' in ml_pipename.lower() and not ml_pipename.startswith('NG')): # and not 'NG_' in ml_pipename:
+    elif ('withoutNumTested'.lower() in ml_pipename.lower()) or (not 'neoguider' in ml_pipename.lower() and not ml_pipename.startswith(NG_default)): # and not 'NG_' in ml_pipename:
         return X.drop(columns=['ln_NumTested'])
     else:
         return X.copy()
 
-def train_ml_pipe(ml_pipename, ml_pipe, X, y):
+def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     config_logging('TRAIN')
-    logging.info(F'Start training {ml_pipename}')
+    logging.info(F'Start training {ml_pipename} with input_shape={X.shape}')
     X = drop_feat_from_X(ml_pipename, X)
-    ml_pipe.fit(X, y)
+    
+    ml_pipename_in_fname = ml_pipename.replace('/', '_')
+    prefilename = F'{modeldir}/{ml_pipename_in_fname}_model.pickle'
+    if os.path.exists(prefilename):
+        with open(prefilename, 'rb') as file:
+            ml_pipe = pickle.load(file)
+        logging.info(F'Used already-trained {ml_pipename}')
+    else:
+        try:
+            ml_pipe.fit(X, y)
+        except Exception as err:
+            err_filename = F'{modeldir}/{ml_pipename_in_fname}_model_error.pickle'
+            with open(err_filename, 'wb') as file:
+                pickle.dump(ml_pipe, file)
+            logging.info(F'Saved the ML pipeline {ml_pipename} with its runtime training error at {err_filename}')
+            raise err        
+        with open(prefilename, 'wb') as file:
+            pickle.dump(ml_pipe, file)
+        logging.info(F'Performed training of {ml_pipename}')
     prob_pred = ml_pipe.predict_proba(X)
-    assert_prob_arr(prob_pred)
+    assert_prob_arr(prob_pred, ml_pipename)
     logging.info(F'End training {ml_pipename}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def test_ml_pipe(ml_pipename, ml_pipe, X):
+def test_ml_pipe(ml_pipename, ml_pipe, X, modeldir):
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     config_logging('TEST')
+    logging.info(F'Start testing {ml_pipename} with input_shape={X.shape}')
     X = drop_feat_from_X(ml_pipename, X)
-    prob_pred = ml_pipe.predict_proba(X)
-    assert_prob_arr(prob_pred)
+    
+    ml_pipename_in_fname = ml_pipename.replace('/', '_')
+    with open(F'{modeldir}/{ml_pipename_in_fname}_model.pickle', 'rb') as file:
+        ml_pipe2 = pickle.load(file)
+        check_is_fitted(ml_pipe2)
+        X2 = X.head(n=100)
+        try:
+            check_is_fitted(ml_pipe)
+            y21 = ml_pipe.predict_proba(X2)
+            y22 = ml_pipe2.predict_proba(X2)
+            assert np.allclose(y21, y22), F'The ML pipeline {ml_pipename} was not saved properly because {y21} is not all-approx-equal to {y22}!'
+        except NotFittedError as exc:
+            logging.info(f"Model {ml_pipename} is not fitted in this run. ")
+    prob_pred = ml_pipe2.predict_proba(X)
+    
+    assert_prob_arr(prob_pred, ml_pipename)
+    logging.info(F'End testing {ml_pipename}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def cv_ml_pipe(ml_pipename, ml_pipe, X, y, partitions):
+def cv_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
     config_logging('CROSS_VAL')
+    logging.info(F'Start cross_validating {ml_pipename} with input_shape={X.shape}')
     random.seed(args.seed)
     np.random.seed(args.seed)
 
     cv = GroupKFold() #(random_state=0)
     X = drop_feat_from_X(ml_pipename, X)
-    prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=cv, method='predict_proba')
-    assert_prob_arr(prob_pred)
+    ml_pipename_in_fname = ml_pipename.replace('/', '_')
+    prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_cross_val_predict_results.pickle'
+    if os.path.exists(prefilename):
+        with open(prefilename, 'rb') as file:
+            prob_pred = pickle.load(file)
+    else:
+        prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=cv, method='predict_proba')
+        with open(prefilename, 'wb') as file:
+            pickle.dump(prob_pred, file)
+
+    assert_prob_arr(prob_pred, ml_pipename)
+    logging.info(F'End cross_validating {ml_pipename}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/LR', topN=20, ranking_mult=1):
+def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR', topN=20, ranking_mult=1):
     df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
     return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1])
 '''
@@ -467,7 +776,6 @@ def compute_topN(y_true, y_pred, y_patient, topN):
     return sum(ret.values()), ret
 '''
 
-from matplotlib.gridspec import GridSpec
 def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features, feats2, labelcol, colname2rocauc_list=[{}], metric_name='roc_auc', metric_vals=[0], titles=[''], barh_fmt='%.4g'):
     n_subfigs = max((len(df_ins), len(colname2rocauc_list), len(metric_vals), len(titles)))
     assert len(df_ins) in [1, n_subfigs], F'Found {len(df_ins)} df_ins but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
@@ -479,13 +787,17 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
     if len(metric_vals) < n_subfigs: metric_vals = [metric_vals[0]] * n_subfigs
     #if len(titles) < n_subfigs:
 
-    fig_1, ax_1 = plt.subplots(figsize=(6.75*n_subfigs, 6*3))
+    fig_1, ax_1 = plt.subplots(figsize=(6*max((1.5,n_subfigs)), 6*3))
     ax_1.set_axis_off()
-    gs = GridSpec(2, n_subfigs, height_ratios=[1, 25])
+    gs = gridspec.GridSpec(2, n_subfigs, height_ratios=[1, 25])
     legend_ax = fig_1.add_subplot(gs[0,:])
     legend_ax.set_axis_off()
     axes = [fig_1.add_subplot(gs[1,j]) for j in range(n_subfigs)]
     for ax_idx, (df_in, colname2rocauc, metric_val, title) in enumerate(zip(df_ins, colname2rocauc_list, metric_vals, titles)):        
+        def replace_non_alphanumeric(text): return ''.join([c if c.isalnum() else '_' for c in text])
+        title_in_fname = '_' + replace_non_alphanumeric(title)
+        title_in_colname = title_in_fname
+
         auc_series = pd.Series(np.nan, features)
         auc_series2 = pd.Series(np.nan, feats2)
 
@@ -493,8 +805,13 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
                 index   = [ft_preproc_name for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items()],
                 columns = [classifier_name for classifier_name, classifier in classifiers.items()])
         auc_std_df = pd.DataFrame(auc_df)
-        colnames = features + feats2 + [comb(ft_preproc_name, classifier_name) for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items() for classifier_name, classifier in classifiers.items()]
-
+        
+        colnames1 = [
+            comb(ft_preproc_name, classifier_name) 
+            for ft_preproc_name, ft_preproc_tech in ft_preproc_techs.items() for classifier_name, classifier in classifiers.items()]
+        colnames = add_redundant_names(colnames1)
+        colnames = sorted(set(features + feats2 + colnames))
+        
         rows = []
         for colname in colnames:
             if colname not in df_in.columns: continue
@@ -503,7 +820,8 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
                 roc_auc_std = np.std(colname2rocauc[colname])
             else:
                 ranking_mult = (-1 if colname in ASCENDING_FEATURES else 1)
-                logging.info(F'Computing the ROC_AUC of {colname} with ranking_mult={ranking_mult} (-1 and +1 denote negative and positive correlations between the feature and the label, respetively.)')
+                sign2corr = {-1: 'negative', 1: 'positive'}
+                logging.info(F'Computing the ({title_in_colname}) of {colname} with {sign2corr[ranking_mult]} feature-label correlation')
                 #y_true = np.where(df_in[labelcol], 1 , 0)
                 if metric_name == 'top':
                     roc_auc = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
@@ -521,13 +839,13 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
             else:
                 ft_preproc_name, classifier_name = decomb(colname)
                 auc_df.loc[ft_preproc_name, classifier_name] = roc_auc
-                auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std
-        long_df = pd.DataFrame(rows, columns=['Method', 'AUROC'])
-        long_df.to_csv(out_fname_fmt.format('with_both'), sep='\t', index=True)
-        auc_series2.to_csv(out_fname_fmt.format('with_add_features'), sep='\t', index=True)
-        auc_series.to_csv(out_fname_fmt.format('with_raw_features'), sep='\t', index=True)
-        auc_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs'), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
-        auc_std_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs_std'), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
+                auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std        
+        long_df = pd.DataFrame(rows, columns=['Method', title_in_colname]) # AUROC -> title_in_colname
+        long_df.to_csv(out_fname_fmt.format('with_both' + title_in_fname), sep='\t', index=True)
+        auc_series2.to_csv(out_fname_fmt.format('with_add_features' + title_in_fname), sep='\t', index=True)
+        auc_series.to_csv(out_fname_fmt.format('with_raw_features' + title_in_fname), sep='\t', index=True)
+        auc_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs' + title_in_fname), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
+        auc_std_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs_std' + title_in_fname), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
 
         if False:
             fig_heat, ax_heat = plt.subplots(figsize=(9, 4))
@@ -541,37 +859,53 @@ def build_auc_df(df_ins, out_fname_fmt, ft_preproc_techs, classifiers, features,
         ax.set_xticklabels([])
         ax.set_yticklabels([])
         ypos = list(range(len(long_df)))
-        #auroc_method_class_list = zip(long_df['AUROC'], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
-        long_df['MethClass'] = long_df['Method'].apply(lambda x: (-1 if (x.startswith('NG') or x.lower().startswith('neoguider')) else (1 if x in features else (2 if x in feats2 else 0))))
-        long_df = long_df.sort_values(by='AUROC')
+        #auroc_method_class_list = zip(long_df[title_in_colname], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
+        def meth2id(x):
+            if x.startswith(NG_default): return (0 if '/hParamTuned_' in x else 1)
+            if x in features: return 4
+            if x in feats2: return 5
+            return (2 if '/hParamTuned_' in x else 3)
+        methclass2desc = {
+            0: ('NeoGuider with tuned'   ' hyperparameters'),
+            1: ('NeoGuider with default' ' hyperparameters'),
+            2:    ('Others with tuned'   ' hyperparameters'),
+            3:    ('Others with default' ' hyperparameters'),
+            4: ('Single feature (included in model)'),
+            5: ('Single feature (not included in model)')
+        }
+        long_df['MethClass'] = long_df['Method'].apply(meth2id)
+        long_df = long_df.sort_values(by=title_in_colname)
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
-        methclass2desc = {-1: 'NeoGuider (NG) or its variant', 0: 'Other techniques', 1: 'Single feature (included in model)', 2: 'Single feature (not included in model)'}
         hbars_list = []
-        for methclass, df in sorted(methclass_df_iterable):
-            hbars = ax.barh(df['ypos'], df['AUROC'], align='center', label=methclass2desc[methclass])
-            ax.bar_label(hbars, fmt=barh_fmt, padding=2)
+        methclass_list = []
+        cmap = matplotlib.colormaps['tab20']
+        smallest_fontsize = min((9, 900.0 / (1.0 + len(long_df))))
+        for classidx, (methclass, df) in enumerate(sorted(methclass_df_iterable)):
+            hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=methclass2desc[methclass], color=cmap.colors[classidx])
+            ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
             hbars_list.append(hbars)
-        
+            methclass_list.append(methclass)
+
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME.get(x, x) for x in long_df['Method']]
         for x in SOFT_NAME_TO_MANUSCRIPT_NAME:
             if x not in features: 
                 methodnames = long_df['Method']
                 break
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS.get(x, x) for x in methodnames]
-        ax.set_yticks(long_df['ypos'], labels=methodnames)
+        ax.set_yticks(long_df['ypos'], labels=methodnames, fontsize=smallest_fontsize)
         ax.set_ylim(-1, len(long_df))
-        xmin, xmax = np.min(long_df['AUROC']), np.max(long_df['AUROC'])
+        xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname])
         ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
         ax.set_xlabel(titles[ax_idx], fontsize=14)
         #ax.legend(fontsize=14)
         def get_ncols(n_labels, n_cols):
-            n_cols = int(round(min((1.499*n_cols, n_labels))))
+            n_cols = int(round(min((1.0*n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
-        if ax_idx == 0: legend_ax.legend(hbars_list, [v for k,v in sorted(methclass2desc.items())], title='Feature-preprocessing techniques used',
+        if ax_idx == 0: legend_ax.legend(hbars_list, [methclass2desc[i] for i in sorted(methclass_list)], title='Feature-preprocessing techniques used',
                 ncol=get_ncols(len(long_df['MethClass'].unique()), n_subfigs),
-                loc='center', fontsize=14, title_fontsize=18)
+                loc='center', fontsize=12, title_fontsize=18)
 
     plt.tight_layout()
     logging.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
@@ -663,6 +997,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
     # setup
     ft_preproc_techs = {x: THE_FEAT_PREPROC_TECHS[x] for x in ft_preproc_techs}
     classifiers = {x: THE_CLASSIFIERS[x] for x in classifiers}
+    hyperopt_ft_preproc_techs = {x: HYPEROPT_FEAT_PREPROC_TECHS[x] for x in args.hyperopt_ft_preproc_techs}
+    hyperopt_classifiers = {x: HYPEROPT_CLASSIFIERS[x] for x in args.hyperopt_classifiers}
     ALL_FEATURES = []
     for fts in LISTOF_FEATURES:
         ALL_FEATURES.extend(fts)
@@ -820,20 +1156,26 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
             plt.savefig(f'{output}_pairwiseLogOdds_mhcflurry_presentation_5perc.pdf')
             plt.close()
 
-    ml_pipes = construct_ml_pipes(ft_preproc_techs, classifiers)
-
+    ml_pipes = construct_ml_pipes(ft_preproc_techs, classifiers, hyperopt_ft_preproc_techs, hyperopt_classifiers, big_y)
+   
+    all_ft_preproc_techs = {}
+    all_ft_preproc_techs.update(ft_preproc_techs)
+    all_ft_preproc_techs.update(hyperopt_ft_preproc_techs)
+    all_classifiers = {}
+    all_classifiers.update(classifiers)
+    all_classifiers.update(hyperopt_classifiers)
     # train phase
     train_X = train_df.loc[:, features].copy()
     train_y = train_df.loc[:, labelcol].copy()
     train_X = train_X.fillna({col : np.mean(train_X[col]) for col in features})
-
+    
     logging.info(F'Start training')
-    train_results = Parallel(n_jobs=24)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y) for ml_pipename, ml_pipe in ml_pipes)
+    train_results = Parallel(n_jobs=24)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir) for ml_pipename, ml_pipe in ml_pipes)
     logging.info(F'End training')
     for result in train_results:
         ml_pipename, ml_pipe, ml_pipe_predicted = result
         train_df[ml_pipename] = ml_pipe_predicted
-    train_df.to_csv(f'{output}_train.csv', sep=',', index=None)
+    train_df.to_csv(f'{output}_train.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
 
     test_dfs = []
     for fidx, test_fname in enumerate(test_fnames):
@@ -849,23 +1191,23 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
         # test phase
         X = dfXy.loc[:, features].copy()
         X = X.fillna({col : np.mean(X[col]) for col in features})
-        test_results = Parallel(n_jobs=24)(delayed(test_ml_pipe)(ml_pipename, ml_pipe, X) for ml_pipename, ml_pipe, _, in train_results)
+        test_results = Parallel(n_jobs=para_n_jobs)(delayed(test_ml_pipe)(ml_pipename, ml_pipe, X, modeldir) for ml_pipename, ml_pipe, _, in train_results)
         for result in test_results:
             ml_pipename, ml_pipe, ml_pipe_predicted = result
             assert not np.isnan(ml_pipe_predicted).any()
             df[ml_pipename] = ml_pipe_predicted
-        df.to_csv(F'{output}_{fidx}_test.csv', sep=',', index=None)
+        df.to_csv(F'{output}_{fidx}_test.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         test_dfs.append(df2)
         if 'Patient' in df2.columns:
-            build_auc_df([df2], F'{output}_{fidx}_{train_or_test}_'+'topN_{}.tsv', ft_preproc_techs, classifiers, features, feats2, labelcol, [{}], metric_name='top', metric_vals=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
+            build_auc_df([df2], F'{output}_{fidx}_{train_or_test}_'+'topN_{}.tsv', all_ft_preproc_techs, all_classifiers, features, feats2, labelcol, [{}], metric_name='top', metric_vals=[10,20,50,100], titles=['Top-10 #True', 'Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
         if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_stats.pdf')
         if 'hla2' in tasks:
             logging.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
             analyze_performance_per_hla(df, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_bench.pdf')
             logging.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
     if test_dfs:
-        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', ft_preproc_techs, classifiers, features, feats2, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}.tsv', all_ft_preproc_techs, all_classifiers, features, feats2, labelcol, [{}], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
 
     cv_pred_dfs = []
     pipename2score_list = []
@@ -895,23 +1237,44 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames, output, ft_preproc_techs
                     logging.error(F'The partition names {partition_name} and {partition_name_1} cannot co-exist in the tabular file {fname}, keep using {partition_name}! ')
                 else: partition_name = partition_name_1
         assert partition_name != None, F'The file {fname} does not contain any of the partitions names {THE_PARTITION_NAMES} as its column name! '
-
-        results = Parallel(n_jobs=24)(delayed(cv_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name]) for ml_pipename, ml_pipe in ml_pipes)
+        
+        results = Parallel(n_jobs=para_n_jobs)(delayed(cv_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx) for ml_pipename, ml_pipe in ml_pipes)
+        
+        assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
         for result in results:
             ml_pipename, ml_pipe, ml_pipe_predicted = result
             df[ml_pipename] = ml_pipe_predicted
-        df.to_csv(F'{output}_{fidx}_'+'cv.csv', sep=',', index=None)
+        df.to_csv(F'{output}_{fidx}_cv_predict.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         cv_pred_dfs.append(df2)
-        results = Parallel(n_jobs=24)(delayed(cross_val_score)(ml_pipe, drop_feat_from_X(ml_pipename, X), y, groups=df[partition_name], cv=GroupKFold(), scoring='roc_auc', n_jobs=-1)
-            for ml_pipename, ml_pipe in ml_pipes)
+        prefilename = F'{output}_{fidx}_cv_score.pickle'
+        if os.path.exists(prefilename):
+            with open(prefilename, 'rb') as file:
+                results = pickle.load(file)
+        else:
+            results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_score)(ml_pipe, drop_feat_from_X(ml_pipename, X), y, groups=df[partition_name], cv=GroupKFold(), scoring='roc_auc', n_jobs=-1)
+                for ml_pipename, ml_pipe in ml_pipes)
+            with open(prefilename, 'wb') as file:
+                pickle.dump(results, file)
+        assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
+
         pipename2score = {ml_pipename : results[i] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
     if cv_fnames:
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, feats2, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
-        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', ft_preproc_techs, classifiers, features_superset1, feats2, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_predict_roc_auc_{}.tsv', all_ft_preproc_techs, all_classifiers, features_superset1, feats2, labelcol, [{}], titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+        build_auc_df(cv_pred_dfs, F'{output}_0_'+'cv_score_roc_auc_{}.tsv', all_ft_preproc_techs, all_classifiers, features_superset1, feats2, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
 
 if __name__ == '__main__':
+    output = args.output
+    modeldir = f'{model_dir_prefix}.dir'
+    os.makedirs(modeldir, exist_ok=True)
+    os.system(F'cp {scriptpath} {modeldir}')
+    with open(modeldir + '/logged_cmd.sh', 'w') as file:
+        file.write(F'#DATETIME={datetime.datetime.now().isoformat()}\n')
+        file.write(F'#SCRIPT_DIR={scriptdir}\n')
+        file.write(F'#CURRENT_WORKING_DIR={os.getcwd()}\n')
+        for a in sys.argv: file.write(a + ' \\\n')
+
     tr_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'tr' in args.input[i-1].split(','))]
     te_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'te' in args.input[i-1].split(','))]
     cv_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'cv' in args.input[i-1].split(','))]
