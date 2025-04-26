@@ -525,16 +525,10 @@ testfile = args.input[1]
 with open(testfile) as file:
     firstline = file.readline()
     if not args.sep:
-        trial_chars = ['\t', ',', ' ']
-        char2count = {char: firstline.count(char) for char in trial_chars}
-        countmax = max(char2count.values())
-        countthres = max((3, countmax))
-        csvsep = ''
-        for char in trial_chars:
-            if char2count[char] >= countthres:
-                csvsep = char
-                break
-        if not csvsep: raise RuntimeError(F'Cannot infer the column separator string from the first line of the file {testfile}!')
+        if   firstline.count('\t') > 3: csvsep = '\t'
+        elif firstline.count(',')  > 3: csvsep = ','
+        elif firstline.count(' ')  > 3: csvsep = ' '
+        else: raise RuntimeError(F'Cannot infer the column separator string from the first line of the file {testfile}!')    
     else:
         csvsep = args.sep
 column_names = pd.read_csv(testfile, index_col=0, nrows=0, sep=csvsep).columns.tolist()
