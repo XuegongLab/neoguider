@@ -1,6 +1,7 @@
 # This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
+# created-by: conda 25.3.1
 _libgcc_mutex=0.1=conda_forge
 _openmp_mutex=4.5=2_kmp_llvm
 _py-xgboost-mutex=2.0=gpu_0
@@ -131,6 +132,7 @@ humanfriendly=10.0=pyhd8ed1ab_6
 icu=73.2=h59595ed_0
 idna=3.6=pyhd8ed1ab_0
 igv-reports=1.12.0=pyh7cba7a3_0
+imbalanced-learn=0.13.0=pyhd8ed1ab_0
 importlib-metadata=7.1.0=pyha770c72_0
 importlib_resources=6.4.0=pyhd8ed1ab_0
 iniconfig=2.0.0=pyhd8ed1ab_0
@@ -400,6 +402,7 @@ pthread-stubs=0.4=h36c2ea0_1001
 pulp=2.7.0=py310hff52083_1
 py-cpuinfo=9.0.0=pyhd8ed1ab_1
 py-xgboost=2.0.3=cuda118_pyhedeaf28_1
+pyaml=25.1.0=pyhd8ed1ab_0
 pyasn1=0.5.1=pyhd8ed1ab_0
 pyasn1-modules=0.3.0=pyhd8ed1ab_0
 pybiomart=0.2.0=pyh864c0ab_1
@@ -443,6 +446,7 @@ runc=1.1.0=h77c71de_0
 s3transfer=0.10.1=pyhd8ed1ab_0
 samtools=1.6=hc3601fc_10
 scikit-learn=1.4.1.post1=py310h1fdf081_0
+scikit-optimize=0.10.2=pyhd8ed1ab_0
 scipy=1.12.0=py310hb13e2d6_2
 screen=4.8.0=h46c0cb4_1
 seaborn=0.13.2=hd8ed1ab_3
@@ -452,6 +456,7 @@ setuptools=69.2.0=pyhd8ed1ab_0
 setuptools-scm=8.0.4=pyhd8ed1ab_1
 simplejson=3.20.1=py310ha75aee5_0
 six=1.16.0=pyh6c4a22f_0
+sklearn-compat=0.1.3=pyhd8ed1ab_0
 slacker=0.14.0=py_0
 slclust=02022010=1
 sleef=3.8=h1b44611_0
