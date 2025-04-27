@@ -920,10 +920,10 @@ def benchmark_perf_2(
             if x in ex_feats: return 5
             return (2 if '/hParamTuned_' in x else 3)
         methclass2desc = {
-            0: ('NeoGuider/classifier with tuned'   ' hyperparameters'),
-            1: ('NeoGuider/classifier with default' ' hyperparameters'),
-            2:     ('Other/classifier with tuned'   ' hyperparameters'),
-            3:     ('Other/classifier with default' ' hyperparameters'),
+            0: ('NeoGuider/hyperparameter-tuned classifier'),
+            1: ('NeoGuider/default-hyperparameter classifier'),
+            2:     ('Other/hyperparameter-tuned classifier'),
+            3:     ('Other/default-hyperparameter classifier'),
             4: ('Single feature (included in model)'),
             5: ('Single feature (not included in model)')
         }
