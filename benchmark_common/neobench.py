@@ -273,7 +273,7 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamDefault_QDA': QuadraticDiscriminantAnalysis(),
     
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
-    'hParamDefault_LR' : LogisticRegression(random_state=args1.rand, max_iter=500), # Not listed in plot_classifier_comparison.html
+    'hParamDefault_LR' : LogisticRegression(random_state=args1.rand), # Not listed in plot_classifier_comparison.html
     'hParamDefault_XGB': XGBClassifier(random_state=args1.rand), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
 
     # 'ET': ExtraTreesClassifier(random_state=args1.rand)      , # Not listed in plot_classifier_comparison.html and performs worse than RF
@@ -650,7 +650,7 @@ def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
         new_n_pos = min((n_positives, 1e3))
         new_n_neg = between(n_negatives, n_positives, 1e3) # 1e3 is to avoid out-of-mem error
     elif classifier_name in CLASSIFIERS_REQUIRING_BALANCE:
-        # In order to limit computation time during Hyperopt training on neo-peptides, 
+        # In order to limit computation time during Hyperopt training on neo-peptides,
         # the size of NCI-train_neo-pep was limited by randomly sampling 100,000 non-immunogenic neo-peptides from NCI-train_neo-pep,
         # while all immunogenic neo-peptides in NCI-train_neo-pep were retained
         # 1e5 is from https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
@@ -920,10 +920,10 @@ def benchmark_perf_2(
             if x in ex_feats: return 5
             return (2 if '/hParamTuned_' in x else 3)
         methclass2desc = {
-            0: ('NeoGuider with tuned'   ' hyperparameters'),
-            1: ('NeoGuider with default' ' hyperparameters'),
-            2:    ('Others with tuned'   ' hyperparameters'),
-            3:    ('Others with default' ' hyperparameters'),
+            0: ('NeoGuider/classifier with tuned'   ' hyperparameters'),
+            1: ('NeoGuider/classifier with default' ' hyperparameters'),
+            2:     ('Other/classifier with tuned'   ' hyperparameters'),
+            3:     ('Other/classifier with default' ' hyperparameters'),
             4: ('Single feature (included in model)'),
             5: ('Single feature (not included in model)')
         }
@@ -957,7 +957,7 @@ def benchmark_perf_2(
             n_cols = int(round(min((1.0*n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
-        if ax_idx == 0: legend_ax.legend(hbars_list, [methclass2desc[i] for i in sorted(methclass_list)], title='Feature-preprocessing techniques used',
+        if ax_idx == 0: legend_ax.legend(hbars_list, [methclass2desc[i] for i in sorted(methclass_list)], title='Feature-preprocessing-technique/classifier combinations',
                 ncol=get_ncols(len(long_df['MethClass'].unique()), n_subfigs),
                 loc='center', fontsize=12, title_fontsize=18)
 
