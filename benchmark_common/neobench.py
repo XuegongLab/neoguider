@@ -338,11 +338,11 @@ CLASSIFIERS_REQUIRING_STRONG_BALANCE = set([
 CLASSIFIERS_REQUIRING_BALANCE = set(HPARAM_TUNED_CLASSIFIER_NAME2TECH.values())
 
 SOFT_NAME_TO_MANUSCRIPT_NAME = {
-    'Score_EL': 'ScoreEL',
-    'MT_BindAff': 'ICfiftyBA',
-    'BindStab': 'BindStab',
-    'Quantification': 'NeoAbundance',
-    'Agretopicity' : 'Agretop',
+    'Score_EL': 'NetMHCpan ScoreEL',
+    'MT_BindAff': 'NetMHCpan ICfiftyBA',
+    'BindStab': 'NetMHCstabpan BindStab',
+    'Quantification': 'KallistoTPM NeoAbundance',
+    'Agretopicity' : 'ICfiftyBA Agretop',
     'ln_NumTested' : 'NumTested',
 }
 
@@ -460,7 +460,7 @@ LISTOF_FEATURES = [FEATS, PMHC_TCR_PRED_60_MODELS, PMHC_TCR_PRED_TOOLS, IMPROVE_
 
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED', 'response_type']]
 
-ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
+ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,%Rank_BA,PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile,ln_NumTested'.split(',')
     + 'DAI NetMHCExp pI PropBasic Inst PropAcidic RankEL PropSmall ln_NumTested RankBA'.split())
 
 DEBUG_SKLEARN_PIPE = 'sklearn-pipe'
@@ -513,7 +513,7 @@ modeldir = f'{model_dir_prefix}.dir'
 
 if 'mhcflurry' in args.add: LISTOF_FEATURES[0].extend(['mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile'])
 if 'prime' in args.add: LISTOF_FEATURES[0].extend(['PRIME_BArank', 'PRIME_rank', 'PRIME_score'])
-if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['%Rank_EL', 'Score_EL', 'MT_BindAff', 'BindStab'])
+if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', '%Rank_EL', 'Score_BA', '%Rank_BA', 'MT_BindAff', 'BindStab'])
 elif 'default' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', 'MT_BindAff', 'BindStab'])
 LISTOF_FEATURES[0] = sorted(set(LISTOF_FEATURES[0]))
 
@@ -935,7 +935,7 @@ def benchmark_perf_2(
             5: ('Single feature (not included in model)')
         }
         long_df['MethClass'] = long_df['Method'].apply(meth2id)
-        long_df = long_df.sort_values(by=title_in_colname)
+        long_df = long_df.sort_values(by=[title_in_colname,'MethClass','Method'])
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
         hbars_list = []
@@ -1073,7 +1073,7 @@ def add_more(df, fpath):
 def get_filenames(filepaths, prefix=''):
     return [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
 
-OTHER_FEATS = ['%Rank_EL', 'PRIME_rank', 'PRIME_score', 'PRIME_BArank', 'mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile']
+OTHER_FEATS = ['%Rank_EL', 'Score_BA', '%Rank_BA', 'PRIME_rank', 'PRIME_score', 'PRIME_BArank', 'mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile']
 def train_test_cv(train_fnames, test_fnames, cv_fnames):
     output = args.output # csvsep from global
     tasks = args.tasks
