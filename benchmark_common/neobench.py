@@ -871,7 +871,13 @@ def benchmark_perf_2(
                 print(F'colname2rocauc[{colname}]={colname2rocauc[colname]}')
                 print(F'rocauclist={colname2rocauc[colname]}=')
                 roc_auc = np.mean(colname2rocauc[colname])
-                roc_auc_std = np.std(colname2rocauc[colname])
+                roc_auc_std = np.std(colname2rocauc[colname], ddof=1)
+                sample_std = roc_auc_std
+                n = len(colname2rocauc[colname])
+                alpha = 1.0 - 0.9 # 90% confidence interval                
+                dof = n - 1
+                t_critical = stats.t.ppf(1 - alpha/2, dof)  # Two-tailed critical t-value
+                moe = t_critical * (sample_std / np.sqrt(n)) # margin of error
             else:
                 ranking_mult = (-1 if colname in ASCENDING_FEATURES else 1)
                 sign2corr = {-1: 'negative', 1: 'positive'}
@@ -884,8 +890,9 @@ def benchmark_perf_2(
                     roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
                 #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
                 #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
-                roc_auc_std = np.nan            
-            rows.append((colname, roc_auc, roc_auc_std))
+                roc_auc_std = np.nan
+                moe = np.nan
+            rows.append((colname, roc_auc, moe))
             if   colname in features:
                 auc_series[colname] = roc_auc
             elif colname in ex_feats:
@@ -894,7 +901,7 @@ def benchmark_perf_2(
                 ft_preproc_name, classifier_name = decomb(colname)
                 auc_df.loc[ft_preproc_name, classifier_name] = roc_auc
                 auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std        
-        long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_std']) # AUROC -> title_in_colname
+        long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_moe']) # AUROC -> title_in_colname
         long_df.to_csv(out_fname_fmt.format('with_both' + title_in_fname), sep='\t', index=True)
         auc_series2.to_csv(out_fname_fmt.format('with_add_features' + title_in_fname), sep='\t', index=True)
         auc_series.to_csv(out_fname_fmt.format('with_raw_features' + title_in_fname), sep='\t', index=True)
@@ -936,7 +943,7 @@ def benchmark_perf_2(
         cmap = matplotlib.colormaps['tab20']
         smallest_fontsize = min((9, 900.0 / (1.0 + len(long_df))))
         for classidx, (methclass, df) in enumerate(sorted(methclass_df_iterable)):
-            xerr = (df[title_in_colname+'_std']).fillna(0)
+            xerr = (df[title_in_colname+'_moe']).fillna(0)
             hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=methclass2desc[methclass], color=cmap.colors[classidx], xerr=xerr)
             ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
             hbars_list.append(hbars)
@@ -950,7 +957,7 @@ def benchmark_perf_2(
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS.get(x, x) for x in methodnames]
         ax.set_yticks(long_df['ypos'], labels=methodnames, fontsize=smallest_fontsize)
         ax.set_ylim(-1, len(long_df))
-        xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname])
+        xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname] + long_df[title_in_colname+'_moe'].fillna(0))
         ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
         ax.set_xlabel(titles[ax_idx], fontsize=14)
         #ax.legend(fontsize=14)
