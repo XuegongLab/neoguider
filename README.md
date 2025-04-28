@@ -15,30 +15,30 @@ In theory, NeoGuider can prioritize MHC II epitopes too if you have trained NeoG
 
 ## License
 
-NeoGuider (including all the third-party tools that NeoGuider uses) can be used, free of any charges, for academic and educational purpose.
-For NeoGuider and some of the third-party tools, you have to apply for its commercial license in order to use the corresponding tool for commercial (for-profit) purpose.
+NeoGuider (including all the third-party tools that NeoGuider uses) can be used, free of any charges, for non-profit use (e.g., for academic and educational purpose).
+For NeoGuider and some of the third-party tools, you have to pay some licensing fee in order to use the corresponding tool for any for-profit purpose.
 
 ### Our license
 
 There are two licensing options for NeoGuider:
 
 - GNU AFFERO GENERAL PUBLIC LICENSE, Version 3, 19 November 2007.
-  We impose the additional restriction that you cannot use the code in this repository commercially with this license.
+  We impose the additional restriction that you cannot use the code in this repository for-profit with this license.
 
-- Commercial license. For commercial licensing options, please contact weilei92 AT tsinghua DOT edu DOT cn
+- License allowing for-profit use. For this licensing option, please contact weilei92 AT tsinghua DOT edu DOT cn
 
 ### Third-party licenses
 
 NeoGuider uses some third-party tools that have their own licenses.
-More specifically, the third-party tools UVC, netMHCpan, netMHCstabpan (and optionally PRIME^1 and MixCR^1) are free for academic use but require commercial licensing for for-profit use. 
-Although this repository internally uses these tools, we do not have the licenses to use them commercially. 
+More specifically, the third-party tools UVC, netMHCpan, netMHCstabpan (and optionally PRIME^1 and MixCR^1) are free of charges for non-profit use but require paid licences for any for-profit use. 
+Although this repository internally uses these tools, we do not have the licenses to use them for-profit. 
 For more information about the licensing options for these tools, please contact their organizations. 
 
-^1: NeoGuider runs MixCR and PRIME but does not use their results in the final prediction of NeoGuider. If you would like to use their results for commercial purpose, then you should get their commercial licenses. 
+^1: NeoGuider runs MixCR and PRIME but does not use their results in the final prediction of NeoGuider. If you would like to use their results for-profit, then you should get their corresponding for-profit licenses. 
 
 Notably, if you used NeoGuider to perform a task that does not use a given third-party tool,
 then the license of this third-party tool (which you did not use) is irrelevant to you.
-The tasks performed by the third-party tools that require commercial licensing for for-profit use are as follows:
+The tasks performed by the third-party tools that require paid licenses for any for-profit use are as follows:
 UVC: detection of neoepitope candidates;
 netMHCpan, netMHCstabpan, and PRIME: feature extraction from pre-detected candidates;
 MixCR: TCR clonotype detection.
@@ -97,8 +97,6 @@ The tools netMHCpan, netMHCstabpan, and MixCR can only be manually downloaded an
 After doing so, please set the full paths of netMHCpan and netMHCstabpan in the config.yaml file accordingly.
 
 (2) For using MixCR (TCR-clonotype detector), please obtain a license from https://licensing.milaboratories.com/ and then run the command ```software/mixcr activate-license``` to activate MixCR.
-
-Last but no the least, please be aware that UVC, netMHCpan, netMHCstabpan, PRIME, and MixCR are free for academic use but require commercial licensing for for-profit use.
 
 ## How to run
 
