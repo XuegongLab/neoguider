@@ -100,6 +100,9 @@ IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolib
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 NG_default = 'NG'
 
+sys.path.append(ISO_DIR + '/benchmark_common/')
+from custom_models import FixedOneLogisticRegression  # Now pickleable!
+
 HYPERPARAM_EPS = 1e-5
 
 # All categorical and numerical hyperparams from https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html
@@ -275,7 +278,8 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
     'hParamDefault_LR' : LogisticRegression(random_state=args1.rand), # Not listed in plot_classifier_comparison.html
     'hParamDefault_XGB': XGBClassifier(random_state=args1.rand), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
-
+    
+    'UnitCoefficient_LR': FixedOneLogisticRegression(),
     # 'ET': ExtraTreesClassifier(random_state=args1.rand)      , # Not listed in plot_classifier_comparison.html and performs worse than RF
     # 'GB': GradientBoostingClassifier(random_state=args1.rand), # Not listed in plot_classifier_comparison.html and similar to XGB but runs much slower
 }
@@ -320,7 +324,10 @@ HPARAM_TUNED_CLASSIFIER_NAME2TECH = {
 # These are the classifiers at https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 # that did not run into any errors (including excessive runtime, i.e., O(n^2) runtime where n is the size of training set)
 # plus LogisticRegression (LR)
-HPARAM_DEFLT_CLASSIFIER_LIST = ['hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF',  'hParamDefault_LR']
+HPARAM_DEFLT_CLASSIFIER_LIST = ['hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF', 
+    'hParamDefault_LR',
+    'UnitCoefficient_LR', # from Comment 5-2
+    ]
 
 # These are the classifiers from HPARAM_DEFLT_CLASSIFIER_LIST that were not used with their default hyperparameter values at
 # https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
