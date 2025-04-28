@@ -885,7 +885,7 @@ def benchmark_perf_2(
                 #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
                 #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
                 roc_auc_std = np.nan            
-            rows.append((colname, roc_auc))
+            rows.append((colname, roc_auc, roc_auc_std))
             if   colname in features:
                 auc_series[colname] = roc_auc
             elif colname in ex_feats:
@@ -894,7 +894,7 @@ def benchmark_perf_2(
                 ft_preproc_name, classifier_name = decomb(colname)
                 auc_df.loc[ft_preproc_name, classifier_name] = roc_auc
                 auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std        
-        long_df = pd.DataFrame(rows, columns=['Method', title_in_colname]) # AUROC -> title_in_colname
+        long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_std']) # AUROC -> title_in_colname
         long_df.to_csv(out_fname_fmt.format('with_both' + title_in_fname), sep='\t', index=True)
         auc_series2.to_csv(out_fname_fmt.format('with_add_features' + title_in_fname), sep='\t', index=True)
         auc_series.to_csv(out_fname_fmt.format('with_raw_features' + title_in_fname), sep='\t', index=True)
@@ -936,7 +936,8 @@ def benchmark_perf_2(
         cmap = matplotlib.colormaps['tab20']
         smallest_fontsize = min((9, 900.0 / (1.0 + len(long_df))))
         for classidx, (methclass, df) in enumerate(sorted(methclass_df_iterable)):
-            hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=methclass2desc[methclass], color=cmap.colors[classidx])
+            xerr = (df[title_in_colname+'_std']).fillna(0)
+            hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=methclass2desc[methclass], color=cmap.colors[classidx], xerr=xerr)
             ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
             hbars_list.append(hbars)
             methclass_list.append(methclass)
