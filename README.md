@@ -20,7 +20,7 @@ For NeoGuider and some of the third-party tools, you have to apply for its comme
 
 ### Our license
 
-There are two licensing options:
+There are two licensing options for NeoGuider:
 
 - GNU AFFERO GENERAL PUBLIC LICENSE, Version 3, 19 November 2007.
   We impose the additional restriction that you cannot use the code in this repository commercially with this license.
@@ -29,10 +29,19 @@ There are two licensing options:
 
 ### Third-party licenses
 
-NeoGuider uses some third-party tools that have their own licenses. 
-More specifically, the third-party tools UVC, netMHCpan, netMHCstabpan, PRIME, and MixCR are free for academic use but require commercial licensing for for-profit use. 
+NeoGuider uses some third-party tools that have their own licenses.
+More specifically, the third-party tools UVC, netMHCpan, netMHCstabpan (and optionally PRIME^1 and MixCR^1) are free for academic use but require commercial licensing for for-profit use. 
 Although this repository internally uses these tools, we do not have the licenses to use them commercially. 
 For more information about the licensing options for these tools, please contact their organizations. 
+
+^1: NeoGuider runs MixCR and PRIME but does not use their results in the final prediction of NeoGuider. If you would like to use their results for commercial purpose, then you should get their commercial licenses. 
+
+Notably, if you used NeoGuider to perform a task that does not use a given third-party tool,
+then the license of this third-party tool (which you did not use) is irrelevant to you.
+The tasks performed by the third-party tools that require commercial licensing for for-profit use are as follows:
+UVC: detection of neoepitope candidates;
+netMHCpan, netMHCstabpan, and PRIME: feature extraction from pre-detected candidates;
+MixCR: TCR clonotype detection.
 
 ## How to use pre-built docker image
 
