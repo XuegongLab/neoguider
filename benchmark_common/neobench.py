@@ -338,11 +338,11 @@ CLASSIFIERS_REQUIRING_STRONG_BALANCE = set([
 CLASSIFIERS_REQUIRING_BALANCE = set(HPARAM_TUNED_CLASSIFIER_NAME2TECH.values())
 
 SOFT_NAME_TO_MANUSCRIPT_NAME = {
-    'Score_EL': 'NetMHCpan ScoreEL',
-    'MT_BindAff': 'NetMHCpan ICfiftyBA',
-    'BindStab': 'NetMHCstabpan BindStab',
-    'Quantification': 'KallistoTPM NeoAbundance',
-    'Agretopicity' : 'ICfiftyBA Agretop',
+    'Score_EL': 'NetMHCpan_ScoreEL',
+    'MT_BindAff': 'NetMHCpan_ICfiftyBA',
+    'BindStab': 'NetMHCstabpan_BindStab',
+    'Quantification': 'KallistoTPM_NeoAbundance',
+    'Agretopicity' : 'ICfiftyBA_Agretop',
     'ln_NumTested' : 'NumTested',
 }
 
@@ -350,7 +350,11 @@ SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS = {
     'ln_NumTested' : 'NumTested',
     'mhcflurry_aff_percentile'         : 'MHCflurry_aff_%',
     'mhcflurry_presentation_percentile': 'MHCflurry_presentation_%',
-    'DeepHLApan_immunogenic_score'     : 'DeepHLApan_immuno_score'
+    #'DeepHLApan_immunogenic_score'     : 'DeepHLApan_immuno_score'
+    '%Rank_EL' : 'NetMHCpan_%RankEL',
+    '%Rank_BA' : 'NetMHCpan_%RankBA',
+    'Score_EL' : 'NetMHCpan_ScoreEL',
+    'Score_BA' : 'NetMHCpan_ScoreBA',
 }
 
 def add_redundant_names(elements, idx=[0,1,2,3]):
@@ -817,6 +821,34 @@ def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hPar
     df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
     return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1])
 
+def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labelcol, title_in_colname):
+    if colname in colname2rocauc:
+        #print(F'colname2rocauc[{colname}]={colname2rocauc[colname]}')
+        #print(F'rocauclist={colname2rocauc[colname]}=')
+        roc_auc = np.mean(colname2rocauc[colname])
+        roc_auc_std = np.std(colname2rocauc[colname], ddof=1)
+        sample_std = roc_auc_std
+        n = len(colname2rocauc[colname])
+        alpha = 1.0 - 0.9 # 90% confidence interval                
+        dof = n - 1
+        t_critical = stats.t.ppf(1 - alpha/2, dof)  # Two-tailed critical t-value
+        moe = t_critical * (sample_std / np.sqrt(n)) # margin of error
+    else:
+        ranking_mult = (-1 if colname in ASCENDING_FEATURES else 1)
+        sign2corr = {-1: 'negative', 1: 'positive'}
+        logging.info(F'Computing the ({title_in_colname}) of {colname} with {sign2corr[ranking_mult]} feature-label correlation')
+        #y_true = np.where(df_in[labelcol], 1 , 0)
+        if metric_name == 'top':
+            roc_auc = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
+            #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
+        else:                    
+            roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
+        #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
+        #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
+        roc_auc_std = np.nan
+        moe = np.nan
+    return (colname, roc_auc, moe, roc_auc_std)
+
 def benchmark_perf_2(
         df_ins,
         out_fname_fmt,
@@ -863,35 +895,11 @@ def benchmark_perf_2(
             for ft_preproc_name in ft_preproc_names for classifier_name in classifier_names]
         colnames = add_redundant_names(colnames1)
         colnames = sorted(set(features + ex_feats + colnames))
-        
+        colnames = [colname for colname in colnames if colname in df_in.columns]
+        metric_results = Parallel(n_jobs=24)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
+            df_in[['Patient', labelcol, colname]], labelcol, title_in_colname) for colname in colnames)
         rows = []
-        for colname in colnames:
-            if colname not in df_in.columns: continue
-            if colname in colname2rocauc:
-                print(F'colname2rocauc[{colname}]={colname2rocauc[colname]}')
-                print(F'rocauclist={colname2rocauc[colname]}=')
-                roc_auc = np.mean(colname2rocauc[colname])
-                roc_auc_std = np.std(colname2rocauc[colname], ddof=1)
-                sample_std = roc_auc_std
-                n = len(colname2rocauc[colname])
-                alpha = 1.0 - 0.9 # 90% confidence interval                
-                dof = n - 1
-                t_critical = stats.t.ppf(1 - alpha/2, dof)  # Two-tailed critical t-value
-                moe = t_critical * (sample_std / np.sqrt(n)) # margin of error
-            else:
-                ranking_mult = (-1 if colname in ASCENDING_FEATURES else 1)
-                sign2corr = {-1: 'negative', 1: 'positive'}
-                logging.info(F'Computing the ({title_in_colname}) of {colname} with {sign2corr[ranking_mult]} feature-label correlation')
-                #y_true = np.where(df_in[labelcol], 1 , 0)
-                if metric_name == 'top':
-                    roc_auc = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
-                    #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
-                else:                    
-                    roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
-                #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
-                #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
-                roc_auc_std = np.nan
-                moe = np.nan
+        for colname, roc_auc, moe, roc_auc_std in metric_results:
             rows.append((colname, roc_auc, moe))
             if   colname in features:
                 auc_series[colname] = roc_auc
@@ -900,7 +908,7 @@ def benchmark_perf_2(
             else:
                 ft_preproc_name, classifier_name = decomb(colname)
                 auc_df.loc[ft_preproc_name, classifier_name] = roc_auc
-                auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std        
+                auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std
         long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_moe']) # AUROC -> title_in_colname
         long_df.to_csv(out_fname_fmt.format('with_both' + title_in_fname), sep='\t', index=True)
         auc_series2.to_csv(out_fname_fmt.format('with_add_features' + title_in_fname), sep='\t', index=True)
@@ -934,8 +942,16 @@ def benchmark_perf_2(
             4: ('Single feature (included in model)'),
             5: ('Single feature (not included in model)')
         }
+        # Method with higher priority is ranked before the one with lower priority to break a tie
+        # We used these rules, based on the Occam's razor, to assign tie-breaking priorities:
+        # Rule 1: single-feature model before multiple-feature model
+        # Rule 2: model with default hyperparameters before model with tuned hyperparameters
+        # Rule 3: more interpretable model before less interpretable model 
+        #         (e.g., linear is more interpretable than non-linear, IC50 is more interpretable than %RankBA)
+        methclass2priority = [1, 3, 0, 2, 5, 4]
         long_df['MethClass'] = long_df['Method'].apply(meth2id)
-        long_df = long_df.sort_values(by=[title_in_colname,'MethClass','Method'])
+        long_df['MethClassPriority'] = [methclass2priority[mc] for mc in long_df['MethClass']]
+        long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'])
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
         hbars_list = []
@@ -1265,11 +1281,17 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     logging.info(F'Start training')
     train_results = Parallel(n_jobs=24)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir) for ml_pipename, ml_pipe in ml_pipes)
     logging.info(F'End training')
-    for result in train_results:
-        ml_pipename, ml_pipe, ml_pipe_predicted = result
-        train_df[ml_pipename] = ml_pipe_predicted
-    train_df.to_csv(f'{output}_train.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-
+    if not os.path.exists(f'{output}_train.csv.gz.done'):
+        logging.info(F'Start saving training-set predictions to {output}_train.csv.gz')
+        for result in train_results:
+            ml_pipename, ml_pipe, ml_pipe_predicted = result
+            train_df[ml_pipename] = ml_pipe_predicted
+        train_df.to_csv(f'{output}_train.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+        with open(f'{output}_train.csv.gz.done', 'w') as file: file.write('done')
+        logging.info(F'End saving training-set predictions to {output}_train.csv.gz')
+    else:
+        logging.info(F'Skip saving pre-saved training-set predictions at {output}_train.csv.gz')
+    
     test_dfs = []
     for fidx, test_fname in enumerate(test_fnames):
         fidx += 1
