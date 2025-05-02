@@ -513,8 +513,9 @@ parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBU
 parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
 parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
-para_n_jobs = 16
+parser.add_argument('--max_n_negatives', type=int, default=100*1000, help='Maximum number of negatives')
 
+para_n_jobs = 16
 args = parser.parse_args(remaining_argv)
 
 if args.output and not args.model: model_dir_prefix = args.output
@@ -665,8 +666,8 @@ def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
         # the size of NCI-train_neo-pep was limited by randomly sampling 100,000 non-immunogenic neo-peptides from NCI-train_neo-pep,
         # while all immunogenic neo-peptides in NCI-train_neo-pep were retained
         # 1e5 is from https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
-        new_n_pos = min((n_positives, 1e5))
-        new_n_neg = between(n_negatives, n_positives, 1e5)
+        new_n_pos = min((n_positives, args.max_n_negatives))
+        new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
     else:
         logging.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=args1.rand)
