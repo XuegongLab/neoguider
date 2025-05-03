@@ -1078,7 +1078,7 @@ def prepare_df(df, labelcol, na_op, max_peplen):
             logging.info(F'Added the column ln_NumTested')
         else:
             assert np.allclose(ret['ln_NumTested'], np.array(newcol))
-    if not ('Patient' in ret.columns): ret['Patient'] = ret[patientcol]
+    if not ('Patient' in ret.columns): ret['Patient'] = (ret[patientcol] if patientcol else list(range(len(df))))
     if na_op == 'drop':
         ret = ret.loc[df[labelcol] != -1] # -1 means NotAvailable
     elif na_op == 'zero':
