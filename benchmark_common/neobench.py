@@ -670,15 +670,15 @@ def between(x, lower, upper): return min((max((lower, x)), upper))
 def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
     label2nsamples = {}
     if classifier_name in CLASSIFIERS_REQUIRING_STRONG_BALANCE:
-        if n_negatives > 1000: label2nsamples[0] = 1000 # new_n_pos = n_positives # min((n_positives, 1e3))
-        if n_positives > 1000: label2nsamples[1] = 1000 #new_n_neg = between(n_negatives, n_positives, 1e3) # 1e3 is to avoid out-of-mem error
+        if n_negatives > 2*1000: label2nsamples[0] = 1000 # new_n_pos = n_positives # min((n_positives, 1e3))
+        if n_positives > 2*1000: label2nsamples[1] = 1000 #new_n_neg = between(n_negatives, n_positives, 1e3) # 1e3 is to avoid out-of-mem error
     elif classifier_name in CLASSIFIERS_REQUIRING_BALANCE:
         # In order to limit computation time during Hyperopt training on neo-peptides,
         # the size of NCI-train_neo-pep was limited by randomly sampling 100,000 non-immunogenic neo-peptides from NCI-train_neo-pep,
         # while all immunogenic neo-peptides in NCI-train_neo-pep were retained
         # 1e5 is from https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
-        if n_negatives > args.max_n_negatives: label2nsamples[0] = args.max_n_negatives # new_n_pos = n_positives # min((n_positives, args.max_n_negatives))
-        if n_positives > args.max_n_negatives: label2nsamples[1] = args.max_n_negatives # new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
+        if n_negatives > 2*args.max_n_negatives: label2nsamples[0] = args.max_n_negatives # new_n_pos = n_positives # min((n_positives, args.max_n_negatives))
+        if n_positives > 2*args.max_n_negatives: label2nsamples[1] = args.max_n_negatives # new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
     else:
         logging.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=args1.rand)
