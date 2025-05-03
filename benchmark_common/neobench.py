@@ -505,8 +505,11 @@ parser.add_argument('--inc', default=None, help='Assume that label as a function
 parser.add_argument('--sep', default=None, help='csv column separator')
 parser.add_argument('--seed', default=43, help='seed for random number generation')
 parser.add_argument('--tasks', nargs='*', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
-parser.add_argument('--features', nargs='*', default=[], help='Features analyzed, auto infer if not provided')
-parser.add_argument('--label', default='', help='The label analyzed, auto infer if not provided')
+parser.add_argument('--features', nargs='*', default=[], help='Column names denoting the input features (explanatory variable, i.e., pMHC binding affinity, stabilility, and agretopicity), auto infer if not provided')
+parser.add_argument('--label', default='', help='Column name denoting the output label (response variable, i.e., immunogenicity), auto infer if not provided')
+parser.add_argument('--hla', default='', help='The latent factor that is suspected to influence performance (i.e., column denoting HLA allotype), auto infer if not provided')
+parser.add_argument('--partition', default='', help='Column name used for the stratified partitioning (i.e., grouping) of the rows into training/test sets, auto infer if not provided')
+
 parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBUG_SKLEARN_PIPE}: test sklearn pipeline. ')
 
 # Maintain consistency with Muller et al. 2023, Immunity
@@ -586,6 +589,9 @@ def compute_hla_mat(df, hlacol, labelcol, patientcol):
     return matrix
 
 def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
+    if hlacol not in df.columns:
+        logging.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing HLA allotype distributions!')
+        return -1
     matrix = compute_hla_mat(df, hlacol, labelcol, patientcol)
     g = sns.clustermap(
         matrix,
@@ -621,6 +627,10 @@ def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}
     return df
 
 def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR'):
+    if hlacol not in df.columns:
+        logging.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing patterns of assocation between HLA allotype and performance!')
+        return -1
+
     matrix = compute_hla_mat(df, hlacol, labelcol, patientcol)
     df = compute_ranked_df(df, labelcol)
     top20df = df.loc[df['rank']<=20]
@@ -658,22 +668,27 @@ def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patien
 def between(x, lower, upper): return min((max((lower, x)), upper))
 
 def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
+    label2nsamples = {}
     if classifier_name in CLASSIFIERS_REQUIRING_STRONG_BALANCE:
-        new_n_pos = min((n_positives, 1e3))
-        new_n_neg = between(n_negatives, n_positives, 1e3) # 1e3 is to avoid out-of-mem error
+        if n_negatives > 1000: label2nsamples[0] = 1000 # new_n_pos = n_positives # min((n_positives, 1e3))
+        if n_positives > 1000: label2nsamples[1] = 1000 #new_n_neg = between(n_negatives, n_positives, 1e3) # 1e3 is to avoid out-of-mem error
     elif classifier_name in CLASSIFIERS_REQUIRING_BALANCE:
         # In order to limit computation time during Hyperopt training on neo-peptides,
         # the size of NCI-train_neo-pep was limited by randomly sampling 100,000 non-immunogenic neo-peptides from NCI-train_neo-pep,
         # while all immunogenic neo-peptides in NCI-train_neo-pep were retained
         # 1e5 is from https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
-        new_n_pos = min((n_positives, args.max_n_negatives))
-        new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
+        if n_negatives > args.max_n_negatives: label2nsamples[0] = args.max_n_negatives # new_n_pos = n_positives # min((n_positives, args.max_n_negatives))
+        if n_positives > args.max_n_negatives: label2nsamples[1] = args.max_n_negatives # new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
     else:
         logging.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=args1.rand)
-    if new_n_neg > new_n_pos:
-        logging.info(F'Classifier {classifier_name} went through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
-        return 1, RandomUnderSampler(sampling_strategy=(new_n_pos/new_n_neg), random_state=args1.rand)
+    if len(label2nsamples.items()) > 0: # new_n_neg > new_n_pos:
+        logging.info(F'Classifier {classifier_name} went through random sampling with n_positives={n_positives}, n_negatives={n_negatives}, and label2nsamples={label2nsamples}!')
+        #minor_over_major = (new_n_pos/new_n_neg)
+        #if minor_over_major > 1.0:
+        #    logging.warning(F'RandomUnderSampler does not work with the minority/majority ratio of {minor_over_major} (classifier={classifier_name}), so convert the ratio to 1/{minor_over_major} instead!')
+        #    minor_over_major = 1.0 / minor_over_major
+        return 1, RandomUnderSampler(sampling_strategy=label2nsamples, random_state=args1.rand)
     else:
         logging.info(F'Classifier {classifier_name} was not through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # VarianceThreshold()
@@ -1101,8 +1116,9 @@ OTHER_FEATS = ['%Rank_EL', 'Score_BA', '%Rank_BA', 'PRIME_rank', 'PRIME_score', 
 def train_test_cv(train_fnames, test_fnames, cv_fnames):
     output = args.output # csvsep from global
     tasks = args.tasks
-    feature_names = args.features
-    label_name = args.label
+    #feature_names = args.features
+    #label_name = args.label
+    
     untest_flag = args.untest_flag 
     peplen_flag = args.peplen_flag
 
@@ -1125,31 +1141,35 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     ALL_FEATURES = []
     for fts in LISTOF_FEATURES:
         ALL_FEATURES.extend(fts)
-    features_superset1 = (ALL_FEATURES if len(feature_names) == 0 else feature_names) # (.split(','))
-    labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else [label_name])
-    labelcol = None
-    hlacol = ''
+    #features_superset1 = (ALL_FEATURES if len(feature_names) == 0 else feature_names) # (.split(','))
+    #labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else [label_name])
+    features = args.features
+    labelcol = args.label # None
+    hlacol = args.hla
     in_dfs = []
     for i, train_fname in enumerate(train_fnames):
         in_df = pd.read_csv(train_fname, sep=csvsep)
         in_df = add_more(in_df, train_fname)
-        if i == 0:
-            features = [colname for colname in in_df.columns if colname in features_superset1]
-            ft_weights = [len(set(fts) & set(features)) for fts in LISTOF_FEATURES]
-            features_2 = LISTOF_FEATURES[np.argmax(ft_weights)]
-            features = [colname for colname in in_df.columns if colname in features_2]
-            assert len(features) >= len(features_2) / 2, (F'The features {features} and {features_2} share less than 50% names in common! '
-                    'Please use the --features cmd-line option to specify the exact feature (column) names to used. ')
-            labels = [colname for colname in in_df.columns if colname in labels_superset1]
-            hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
-            assert len(labels) == 1, F'Multiple label names ({labels}) are found, please use the --label cmd-line option to specify the exact label (column) name to use. '
-            assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
-            labelcol = labels[0]
-            if hlacols: hlacol = hlacols[0]
+        if i == 0:            
+            if not args.features:
+                features = [colname for colname in in_df.columns if colname in ALL_FEATURES]
+                ft_weights = [len(set(fts) & set(features)) for fts in LISTOF_FEATURES]
+                features_2 = LISTOF_FEATURES[np.argmax(ft_weights)]
+                features = [colname for colname in in_df.columns if colname in features_2]
+                assert len(features) >= len(features_2) / 2, (F'The features {features} and {features_2} share less than 50% names in common! '
+                        'Please use the --features cmd-line option to specify the exact feature (column) names to used. ')
+            if not args.label:
+                labels = [colname for colname in in_df.columns if colname in LISTOF_LABELS[0]]
+                assert len(labels) == 1, F'Multiple label names ({labels}) are found, please use the --label cmd-line option to specify the exact label (column) name to use. '
+                labelcol = labels[0]
+            if not args.hla:
+                hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
+                assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
+                if hlacols: hlacol = hlacols[0]
             in_df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
             if added_feats: features.extend(added_feats)
-            features_superset1 = features
-            labels_superset1 = labels
+            #features_superset1 = features
+            #labels_superset1 = [labelcol]
         else:
             in_df, _ = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
         if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
@@ -1342,13 +1362,13 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         fidx += 1
         in_df = pd.read_csv(fname, sep=csvsep)
         in_df = add_more(in_df, fname)
-        features = [colname for colname in in_df.columns if colname in features_superset1]
-        labels = [colname for colname in in_df.columns if colname in labels_superset1]
-        hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
-        assert len(labels) == 1
-        assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
-        labelcol = labels[0]
-        if hlacols: hlacol = hlacols[0]
+        #features = [colname for colname in in_df.columns if colname in features_superset1]
+        #labels = [colname for colname in in_df.columns if colname in labels_superset1]
+        #hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
+        #assert len(labels) == 1
+        #assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
+        #labelcol = labels[0]
+        #if hlacols: hlacol = hlacols[0]
         
         df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_cv_examples, max_peplen=peplen_max_cv_examples)
         features.extend(added_feats)
@@ -1356,15 +1376,23 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         X = dfXy.loc[:, features].copy()
         X = X.fillna({col : np.mean(X[col]) for col in features})
         y = dfXy.loc[:, labelcol].copy()
-        partition_name = None
-        THE_PARTITION_NAMES = ['Partition', 'Patient', 'MT_pep', 'ET_pep', 'Epitope']
-        for partition_name_1 in THE_PARTITION_NAMES:
-            if partition_name_1 in df.columns:
-                if partition_name != None:
-                    logging.error(F'The partition names {partition_name} and {partition_name_1} cannot co-exist in the tabular file {fname}, keep using {partition_name}! ')
-                else: partition_name = partition_name_1
-        assert partition_name != None, F'The file {fname} does not contain any of the partitions names {THE_PARTITION_NAMES} as its column name! '
-        
+        if args.partition: partition_name = args.partition
+        else:
+            partition_name = None
+            THE_PARTITION_NAMES = ['Partition', 'Patient', 'MT_pep', 'ET_pep', 'Epitope']
+            for partition_name_1 in THE_PARTITION_NAMES:
+                if partition_name_1 in df.columns:
+                    if partition_name != None:
+                        logging.error(F'The partition names {partition_name} and {partition_name_1} cannot co-exist in the tabular file {fname}, keep using {partition_name}! ')
+                    else: partition_name = partition_name_1
+            #assert partition_name != None, F'The file {fname} does not contain any of the partitions names {THE_PARTITION_NAMES} as its column name! '
+            if partition_name == None:
+                logging.warning(
+                        F'The file {fname} does not contain any of the partitions names {THE_PARTITION_NAMES} as its column name! '
+                        F'Insert the column DUMMY_PARTITION to the DataFrame from {fname}, making a new partition to each row to perform non-stratified cross validation. ')
+                df['DUMMY_PARTITION'] = list(range(len(df)))
+                partition_name = 'DUMMY_PARTITION'
+
         results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_predict_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx) for ml_pipename, ml_pipe in ml_pipes)
         
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
@@ -1388,9 +1416,9 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         pipename2score_list.append(pipename2score)
     if cv_fnames:
         benchmark_performance(cv_pred_dfs, F'{output}_0_cv_score_roc_auc_{{}}',
-            features_superset1, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+            features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
         benchmark_performance(cv_pred_dfs, F'{output}_0_cv_predict_roc_auc_{{}}', 
-            features_superset1, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+            features, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
         
 def main():
     config_logging('main')
