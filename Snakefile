@@ -561,6 +561,8 @@ def peptide_to_pmhc_binding_stability(infaa, outtsv, hla_strs):
     outputfile1 = outtsv
     
     if netmhcstabpan_cmd == path:
+        inputfile = infaa + '.input2stab'
+        shutil.copy2(infaa, inputfile)
         run_calculation = F'python {bindstab_filter_py}             -i {inputfile}      -o {outputfile1}      -n {path} -c {netmhc_ncores} --peplens {prep_peplens}'
         call_with_infolog(run_calculation)
     else:
@@ -634,15 +636,16 @@ rule Peptide_processing:
         shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta} && touch {homologous_peptide_fasta_done}')
 
 homologous_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
-netmhc_is_remote = config['netmhcpan_cmd'].startswith('ssh')
-netmhcstab_is_remote = config['netmhcstabpan_cmd'].startswith('ssh')
-if netmhc_is_remote == netmhcstab_is_remote:
-    PeptideMHC_binding_affinity_prediction_order_sentinel = homologous_peptide_fasta
-else:
-    PeptideMHC_binding_affinity_prediction_order_sentinel = homologous_netmhcstabpan_txt
+
+#netmhc_is_remote = config['netmhcpan_cmd'].startswith('ssh')
+#netmhcstab_is_remote = config['netmhcstabpan_cmd'].startswith('ssh')
+#if netmhc_is_remote == netmhcstab_is_remote:
+#    PeptideMHC_binding_affinity_prediction_order_sentinel = homologous_peptide_fasta
+#else:
+#    PeptideMHC_binding_affinity_prediction_order_sentinel = homologous_netmhcstabpan_txt
 
 rule PeptideMHC_binding_affinity_prediction:
-    input: homologous_peptide_fasta, homologous_peptide_fasta_done, PeptideMHC_binding_affinity_prediction_order_sentinel
+    input: homologous_peptide_fasta, homologous_peptide_fasta_done #, PeptideMHC_binding_affinity_prediction_order_sentinel
     output: homologous_netmhcpan_txt
     threads: netmhc_nthreads # 12
     run:
@@ -672,11 +675,11 @@ rule PeptideMHC_immunogenicity_prediction:
         homologous_peptide_fasta_summary = F'{homologous_peptide_fasta}.partition/mapping.json'
         with open(homologous_peptide_fasta_summary) as jsonfile: hla2faa = json.load(jsonfile)
         homologous_peptide_fasta_partdir = os.path.dirname(os.path.realpath(homologous_peptide_fasta_summary))
-        shell(F'rm {homologous_peptide_fasta_partdir}/*.prime.txt || true')
+        shell(F'rm {homologous_peptide_fasta_partdir}/*.prime-step1.txt || true')
         for hla_str, faa in sorted(hla2faa.items()):
-            local_hla_short2long = peptide_to_pmhc_immunogenicity(F'{homologous_peptide_fasta_partdir}/{faa}', F'{homologous_peptide_fasta_partdir}/{faa}.prime.txt', hla_str)
+            local_hla_short2long = peptide_to_pmhc_immunogenicity(F'{homologous_peptide_fasta_partdir}/{faa}', F'{homologous_peptide_fasta_partdir}/{faa}.prime-step1.txt', hla_str)
             hla_short2long_dict.update(local_hla_short2long)
-        shell(F'cat {homologous_peptide_fasta_partdir}/*.prime.txt > {homologous_prime_txt}')
+        shell(F'cat {homologous_peptide_fasta_partdir}/*.prime-step1.txt > {homologous_prime_txt}')
         with open(hla_short2long_json, 'w') as jsonfile: json.dump(hla_short2long_dict, jsonfile, indent=2)
 
 homologous_mhcflurry_txt = F'{pmhc_dir}/{PREFIX}_all_peps.mhcflurry.txt'
