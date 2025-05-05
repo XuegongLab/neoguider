@@ -365,7 +365,7 @@ CLASSIFIERS_REQUIRING_STRONG_BALANCE = set([
     'hParamDefault_SVC', 'hParamTuned_SVC',
 ])
 
-CLASSIFIERS_REQUIRING_BALANCE = set(HPARAM_TUNED_CLASSIFIER_NAME2TECH.values())
+CLASSIFIERS_REQUIRING_BALANCE = set(HPARAM_TUNED_CLASSIFIER_NAME2TECH.keys())
 
 SOFT_NAME_TO_MANUSCRIPT_NAME = {
     'Score_EL': 'NetMHCpan_ScoreEL',
@@ -535,11 +535,11 @@ parser.add_argument('--partition', default='', help='Column name used for the st
 
 parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBUG_SKLEARN_PIPE}: test sklearn pipeline. ')
 
-# Maintain consistency with Muller et al. 2023, Immunity
+# Maintain consistency with Muller et al., 2023, Immunity
 parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
 parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
-parser.add_argument('--max_n_negatives', type=int, default=100*1000, help='Maximum number of negatives')
+parser.add_argument('--max_n_negatives', type=int, default=500*1000, help='Maximum number of negatives') # Five times higher than the one from Muller et al., 2023, Immunity
 
 parser.add_argument('--njobs', type=int, default=24, help='Number of jobs to run in parallel')
 
