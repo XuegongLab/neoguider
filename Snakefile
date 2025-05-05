@@ -634,8 +634,15 @@ rule Peptide_processing:
         shell(F'cat {homologous_peptide_fasta} | python {script_basedir}/fasta_partition.py --key HLA --out {homologous_peptide_fasta} && touch {homologous_peptide_fasta_done}')
 
 homologous_netmhcpan_txt = F'{pmhc_dir}/{PREFIX}_all_peps.netmhcpan.txt'
+netmhc_is_remote = config['netmhcpan_cmd'].startswith('ssh')
+netmhcstab_is_remote = config['netmhcstabpan_cmd'].startswith('ssh')
+if netmhc_is_remote == netmhcstab_is_remote:
+    PeptideMHC_binding_affinity_prediction_order_sentinel = homologous_peptide_fasta
+else:
+    PeptideMHC_binding_affinity_prediction_order_sentinel = homologous_netmhcstabpan_txt
+
 rule PeptideMHC_binding_affinity_prediction:
-    input: homologous_peptide_fasta, homologous_peptide_fasta_done
+    input: homologous_peptide_fasta, homologous_peptide_fasta_done, PeptideMHC_binding_affinity_prediction_order_sentinel
     output: homologous_netmhcpan_txt
     threads: netmhc_nthreads # 12
     run:
