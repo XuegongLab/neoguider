@@ -15,7 +15,6 @@ parser1.add_argument('-I', '--isolib', default=scriptdir+'/../IsotonicLogisticRe
 
 args1, remaining_argv = parser1.parse_known_args()
 
-
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed # multiprocessing can hang if the virtual memory allocated is too big
@@ -252,6 +251,28 @@ HPARAM_TUNED_FT_PREPROC_NAME2TECH = {
     'NG_withoutNumTested' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withoutNumTested']),
 }
 
+DT_best_hparams = collections.OrderedDict([
+        ('criterion', 'entropy'),
+        ('max_depth', 5),
+        ('max_features', 'sqrt'),
+        ('max_leaf_nodes', None),
+        ('min_samples_leaf', 1),
+        ('min_samples_split', 3),
+        ('min_weight_fraction_leaf', 1e-05),
+        ('splitter', 'random')])
+
+RF_best_hparams = collections.OrderedDict([
+        ('bootstrap', True), 
+        ('class_weight', None), 
+        ('criterion', 'entropy'), 
+        ('max_depth', 3), 
+        ('max_features', 'sqrt'), 
+        ('max_leaf_nodes', None), 
+        ('min_samples_leaf', 2), 
+        ('min_samples_split', 3), 
+        ('min_weight_fraction_leaf', 0.015260491812400271), 
+        ('n_estimators', 56)])
+
 # All classifiers from https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 # The classifiers with runtime error are commented out (or provided with ideas to work around the error)
 HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
@@ -268,7 +289,9 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     # 'hParamDefault_GP':  GaussianProcessClassifier(random_state=args1.rand),
 
     'hParamDefault_DT':  DecisionTreeClassifier(random_state=args1.rand),
+    'hParamNCItrain_DT':  DecisionTreeClassifier(random_state=args1.rand, **DT_best_hparams),
     'hParamDefault_RF':  RandomForestClassifier(random_state=args1.rand),
+    'hParamNCItrain_RF':  RandomForestClassifier(random_state=args1.rand, **RF_best_hparams),
     'hParamDefault_MLP': MLPClassifier(random_state=args1.rand),
     'hParamDefault_AB':  AdaBoostClassifier(random_state=args1.rand),
     'hParamDefault_GNB': GaussianNB(),
@@ -503,7 +526,7 @@ parser.add_argument('-4', '--hparam_tuned_classifier_names', nargs='*', default=
         help='Names of the machine-learning classifiers with hyperparameter tuning to be assessed')
 parser.add_argument('--inc', default=None, help='Assume that label as a function of each feature is increasing (0, 1, "auto", or None denoting false, true, auto, and inferred)')
 parser.add_argument('--sep', default=None, help='csv column separator')
-parser.add_argument('--seed', default=43, help='seed for random number generation')
+parser.add_argument('--seed', default=-1, type=int, help='seed for random number generation. If set to -1, then use the value of --rand as the seed. ')
 parser.add_argument('--tasks', nargs='*', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='*', default=[], help='Column names denoting the input features (explanatory variable, i.e., pMHC binding affinity, stabilility, and agretopicity), auto infer if not provided')
 parser.add_argument('--label', default='', help='Column name denoting the output label (response variable, i.e., immunogenicity), auto infer if not provided')
@@ -518,8 +541,10 @@ parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
 parser.add_argument('--max_n_negatives', type=int, default=100*1000, help='Maximum number of negatives')
 
-para_n_jobs = 16
+parser.add_argument('--njobs', type=int, default=24, help='Number of jobs to run in parallel')
+
 args = parser.parse_args(remaining_argv)
+para_n_jobs = args.njobs
 
 if args.output and not args.model: model_dir_prefix = args.output
 elif args.model: model_dir_prefix = args.model
@@ -531,6 +556,8 @@ if 'prime' in args.add: LISTOF_FEATURES[0].extend(['PRIME_BArank', 'PRIME_rank',
 if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', '%Rank_EL', 'Score_BA', '%Rank_BA', 'MT_BindAff', 'BindStab'])
 elif 'default' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', 'MT_BindAff', 'BindStab'])
 LISTOF_FEATURES[0] = sorted(set(LISTOF_FEATURES[0]))
+
+if args.seed < 0: args.seed = args1.rand
 
 random.seed(args.seed)
 np.random.seed(args.seed)
