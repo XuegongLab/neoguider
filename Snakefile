@@ -139,7 +139,8 @@ def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile
             os.makedirs(os.path.dirname(file), exist_ok=True)
             try:
                 shutil.copy2(origfile, file)
-                if extension: call_with_infolog(F'touch {file}{extension}')
+                # the time-stamp 2000-01-01 is to prevent dependency error caused by misconfigured system time
+                if extension: call_with_infolog(F'touch -d 20000101 {file}{extension}')
             except shutil.SameFileError as err:
                 logging.warning(err)
             if config.get('refresh_files', 0) == 1 and is_refresh_allowed:
@@ -193,7 +194,7 @@ else:
 tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
 if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)):
     make_dummy_files([tumor_spec_peptide_fasta], origfile=config['tumor_spec_peptide_fasta'], extension='.copied', is_refresh_allowed=True)
- 
+
 rule all:
     input: pipeline_out_final
 
