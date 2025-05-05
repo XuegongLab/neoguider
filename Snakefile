@@ -140,7 +140,8 @@ def make_dummy_files(files, origfile = F'{script_basedir}/placeholders/EmptyFile
             try:
                 shutil.copy2(origfile, file)
                 # the time-stamp 2000-01-01 is to prevent dependency error caused by misconfigured system time
-                if extension: call_with_infolog(F'touch -d 20000101 {file}{extension}')
+                call_with_infolog(F'touch -d 20000101 {file}')
+                if extension: call_with_infolog(F'touch {file}{extension}')
             except shutil.SameFileError as err:
                 logging.warning(err)
             if config.get('refresh_files', 0) == 1 and is_refresh_allowed:
