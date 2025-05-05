@@ -190,6 +190,10 @@ else:
     logging.critical('Either dna_tumor_fq1, rna_tumor_fq1 or tumor_spec_peptide_fasta must be specified in the config. ')
     exit(-1)
 
+tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
+if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)):
+    make_dummy_files([tumor_spec_peptide_fasta], origfile=config['tumor_spec_peptide_fasta'], extension='.copied', is_refresh_allowed=True)
+ 
 rule all:
     input: pipeline_out_final
 
@@ -587,11 +591,7 @@ def peptide_to_pmhc_immunogenicity(infaa, outtsv, hla_string_orig):
     cmd = F'{prime_cmd} -i {outtsv}.seqs.txt -mix {mixmhcpred_path} -a {hla_string} -o {outtsv} 1> {outtsv}.stdout 2> {outtsv}.stderr'
     call_with_infolog(cmd)
     return {norm_hla(h) : h for h in hla_string_orig.split(',')}
-
-tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
-if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)):
-    make_dummy_files([tumor_spec_peptide_fasta], origfile=config['tumor_spec_peptide_fasta'], extension='.copied', is_refresh_allowed=True)
-    
+   
 homologous_peptide_fasta = F'{pmhc_dir}/{PREFIX}_all_peps.fasta'
 
 hetero_nbits = config.get('hetero_nbits', 0.75)
