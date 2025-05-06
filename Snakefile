@@ -125,6 +125,9 @@ OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
 motif_file = F'{script_basedir}/database/all_peptides.motif.tsv'
 
+BLAST_PATH=F"{script_basedir}/software/ncbi-blast-2.14.1+/bin"
+os.environ["PATH"] = f"{BLAST_PATH}:{os.environ.get('PATH','/usr/bin')}"  # Prepend (higher priority)
+
 NA_REP = ''
 def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
 def call_with_infolog(cmd, in_shell = True):

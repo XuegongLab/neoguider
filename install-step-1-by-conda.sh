@@ -77,3 +77,14 @@ if false; then
     conda env export -n ${neoguider} --from-history          > env/freeze.env_export_from_history.yml
 fi
 
+rootdir="$(dirname -- "$0";)"
+rootdir="$(cd "$rootdir"; pwd;)"
+
+mkdir -p ${rootdir}/software/
+cd ${rootdir}/software/
+wget -c https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.14.1/ncbi-blast-2.14.1+-x64-linux.tar.gz
+tar -xvf ncbi-blast-2.14.1+-x64-linux.tar.gz
+
+# You can run the following if the blast installed by conda does not work (e.g., blast complains about mising *.so libraries)
+# export PATH="${rootdir}/software/ncbi-blast-2.14.1+/bin:${PATH}"
+
