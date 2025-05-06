@@ -3,6 +3,8 @@ import csv
 import pandas as pd
 from pyfaidx import Fasta
 
+import logging
+
 def write_file(a_list, name):
     textfile = open(name, "w")
     textfile.write(a_list + "\n")
@@ -33,6 +35,9 @@ def translate(seq):
     protein = ""
     for i in range(0, len(seq), 3):
         codon = seq[i:i + 3]
+        if codon not in table:
+            logging.warning(f'The codon {codon} from sequence {seq} is invalid! Treat it as a stop codon (WARNING_INVALID_CODON).')
+            break
         if table[codon] == '_':
             break
         protein+= table[codon]
