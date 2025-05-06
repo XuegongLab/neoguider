@@ -83,13 +83,17 @@ sh -evx install-step-1-by-conda.sh ng                              # install all
 conda run -n ng sh -evx install-step-2-for-neoepitope-detection.sh # download tools and database for detecting neoepitope candidates (in FASTA format) from sequencing data
 conda run -n ng sh -evx install-step-2-for-feature-extraction.sh   # download tools and database for extracting features (in TSV format) from neoepitope candidates
 ```
-If the "$conda install" command in install-step-1-by-conda.sh ran into any error, you can try replacing this command by each of the following commands:
+If the "$conda install" command in install-step-1-by-conda.sh ran into any error or if you would like to reproduce our results, you can try replacing this command by each of the following commands:
 ```
-conda create     --name ng --file env/requirements.list_e_no_pypi.txt    # if this command does not work then try the next one below
-conda env create --name ng --file env/freeze.env_export.yml              # if this command does not work then try the next one below
-conda env create --name ng --file env/freeze.env_export_no_builds.yml    # if this command does not work then try the next one below
-conda env create --name ng --file env/freeze.env_export_from_history.yml
+conda create     --name ng --file env/requirements.list_e_no_pypi.txt    # If this command fails, then remove the ng env and try the next one below. This command usually fails due to OS-specific builds.
+conda env create --name ng --file env/freeze.env_export.yml              # If this command fails, then remove the ng env and try the next one below. This command usually fails due to OS-specific builds.
+conda env create --name ng --file env/freeze.env_export_no_builds.yml    # If this command fails, then remove the ng env and try the next one below. This command usually does not fail.
+conda env create --name ng --file env/freeze.env_export_from_history.yml # This command almost never fails at the cost of potentially reduced reproducibility
+
+# The command to remove the ng conda env: conda env remove -n ng # if this command still does not work, then run both this command and the next one below.
+# The command to clean-up conda packages: conda clean -a
 ```
+The environment optitype\_env, specified in the env directory, can be installed in a similar way. 
 
 The tools netMHCpan, netMHCstabpan, and MixCR can only be manually downloaded and configured due to their licensing requirements.
 
