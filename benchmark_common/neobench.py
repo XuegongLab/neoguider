@@ -1194,14 +1194,14 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
                 if hlacols: hlacol = hlacols[0]
             in_df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
-            if added_feats: features.extend(added_feats)
-            #features_superset1 = features
+            if added_feats: features.extend(added_feats)            
             #labels_superset1 = [labelcol]
         else:
             in_df, _ = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
         if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
             logging.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
         in_dfs.append(in_df)
+    features_superset1 = copy.deepcopy(features)
     train_df = pd.concat(in_dfs, join="inner")
     if 'hla1' in tasks: analyze_hla(train_df, hlacol, labelcol, f'{output}_train_hla_stats.pdf')
 
@@ -1389,7 +1389,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         fidx += 1
         in_df = pd.read_csv(fname, sep=csvsep)
         in_df = add_more(in_df, fname)
-        #features = [colname for colname in in_df.columns if colname in features_superset1]
+        features = [colname for colname in in_df.columns if colname in features_superset1]
         #labels = [colname for colname in in_df.columns if colname in labels_superset1]
         #hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
         #assert len(labels) == 1
