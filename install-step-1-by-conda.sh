@@ -47,7 +47,7 @@ $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
 
 $conda run -n $neoguider $conda update numexpr # fix warning from pandas
 
-conda run -n $neoguider pip install sj2psi # for ASNEO.py
+conda run -n $neoguider pip install sj2psi # for ASNEO.py # You may have to use pip install -I sj2psi if you have used conda env create -n ... --file ...yml
 
 # > First work-around for https://github.com/FRED-2/OptiType/issues/125 : use podman to run OptiType
 #   Please set IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK=True in the Snakefile to enable this work-around.
@@ -60,7 +60,7 @@ conda run -n $neoguider podman pull quay.io/biocontainers/optitype:1.3.2--py27_3
 optitype=optitype_env
 conda create -y -n $optitype
 $conda install -y -n $optitype optitype=1.3.2
-conda run -n ${optitype} pip install --upgrade pyomo # pyomo=5.7.3
+conda run -n ${optitype} pip install --upgrade pyomo # pyomo=5.7.3 # You may have to use pip install -I pyomo if you have used conda env create -n ... --file ...yml
 
 # > Third work-around for https://github.com/FRED-2/OptiType/issues/125 : manually set the comma_sep_hla_list config param to skip HLA typing. 
 
