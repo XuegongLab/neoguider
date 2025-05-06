@@ -66,7 +66,11 @@ conda run -n ${optitype} pip install --upgrade pyomo # pyomo=5.7.3
 
 # The following commands can generate the requirements and freeze files
 if false; then
-    conda env export -n ${optitype} > env/${optitype}.freeze.env_export.yml &&  conda list -e -n ${optitype} > env/${optitype}.requirements.list_e.txt
+    conda list       -n ${optitype} -e                       > env/${optitype}.requirements.list_e.txt
+    conda env export -n ${optitype}                          > env/${optitype}.freeze.env_export.yml
+    conda env export -n ${optitype} --no-builds              > env/${optitype}.freeze.env_export_no_build.yml
+    conda env export -n ${optitype} --from-history           > env/${optitype}.freeze.env_export_from_history.yml
+
     conda list       -n ${neoguider} -e | grep -v "^sj2psi=" > env/requirements.list_e_no_pypi.txt
     conda env export -n ${neoguider}                         > env/freeze.env_export.yml
     conda env export -n ${neoguider} --no-builds             > env/freeze.env_export_no_builds.yml
