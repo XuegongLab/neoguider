@@ -16,7 +16,12 @@ if [ -z "$neoguider" ]; then neoguider=ng; fi
 
 VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $2}' | awk -F. '{print $1}') # 109 #"105"
 
-mkdir -p ${rootdir}/software
+mkdir -p ${rootdir}/software/asn
+cd ${rootdir}/software/asn
+git clone https://github.com/bm2-lab/ASNEO.git
+tar -xvf ASNEO/src/software.tar.gz
+mv ASNEO ../
+
 cd       ${rootdir}/software 
 
 # IMPORTNT-NOTE: UVC (along with UVC-delins) is free for non-commercial use only. For commercial use, please contact Genetron Health
