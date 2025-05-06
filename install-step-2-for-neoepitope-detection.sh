@@ -3,7 +3,7 @@
 rootdir="$(dirname -- "$0";)"
 rootdir="$(cd "$rootdir"; pwd;)"
 
-neoguider=$1 # neoguider env name
+neoguider=$2 # neoguider env name
 if [ -z "$neoguider" ]; then neoguider=ng; fi
 
 ###
@@ -41,7 +41,7 @@ fi
 ### IMPORTNT-NOTE: MixCR is free for non-commercial use only. For commercial use, please contact MiLaboratories Inc
 # You have to activate MixCR with a license obtained from https://licensing.milaboratories.com/ in order to use it
 if [ $(echo "$1" | grep -cP "skip-mixcr|skip-all-software") -eq 0 ]; then
-    wget -c https://github.com/milaboratory/mixcr/releases/download/v4.0.0/mixcr-4.0.0.zip
+    wget --no-check-certificate -c https://github.com/milaboratory/mixcr/releases/download/v4.0.0/mixcr-4.0.0.zip
     unzip mixcr-4.0.0.zip
 fi
 if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
@@ -56,11 +56,11 @@ if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
 fi
 
 if [ $(echo "$1" | grep -cP "skip-mutect2|skip-all-software") -eq 0 ]; then
-    wget https://github.com/broadinstitute/gatk/releases/download/4.3.0.0/gatk-4.3.0.0.zip
+    wget --no-check-certificate https://github.com/broadinstitute/gatk/releases/download/4.3.0.0/gatk-4.3.0.0.zip
     unzip gatk-4.3.0.0.zip
 fi
 
-#wget -c https://snpeff.blob.core.windows.net/versions/snpEff_latest_core.zip
+#wget --no-check-certificate -c https://snpeff.blob.core.windows.net/versions/snpEff_latest_core.zip
 #unzip snpEff_latest_core.zip
 #git clone https://github.com/XuegongLab/NeoHunter.git && cd NeoHunter
 
@@ -71,12 +71,12 @@ fi
 mkdir -p ${rootdir}/database
 cd       ${rootdir}/database
 
-wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/variation/vep/homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
+wget --no-check-certificate -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/variation/vep/homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 tar xvzf homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
-wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh37.cdna.all.fa.gz
+wget --no-check-certificate -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh37.cdna.all.fa.gz
 gunzip -fk Homo_sapiens.GRCh37.cdna.all.fa.gz
 
-wget -c https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
+wget --no-check-certificate -c https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 tar xvzf GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 
 ###
@@ -98,21 +98,21 @@ kallisto index -i Homo_sapiens.GRCh37.cdna.all.fa.kallisto-idx Homo_sapiens.GRCh
 ### (4) other database download for backward compatibility
 ###
 
-wget -c https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
+wget --no-check-certificate -c https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
 gunzip -fk hg19.fa.gz
 
-wget -c http://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
+wget --no-check-certificate -c http://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
 gunzip -fk hg19.refGene.gtf.gz
 
 #bwa index hg19.fa
 #samtools faidx hg19.fa && samtools dict hg19.fa > hg19.dict
 
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/1000G_phase1.indels.hg19.sites.vcf.gz
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/1000G_phase1.indels.hg19.sites.vcf.idx.gz
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/dbsnp_138.hg19.vcf.gz
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/dbsnp_138.hg19.vcf.idx.gz
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.idx.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/1000G_phase1.indels.hg19.sites.vcf.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/1000G_phase1.indels.hg19.sites.vcf.idx.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/dbsnp_138.hg19.vcf.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/dbsnp_138.hg19.vcf.idx.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org:21/bundle/hg19/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.idx.gz
 
 #mkdir -p vcfs
 #for vcf in "1000G_phase1.indels.hg19.sites.vcf.gz" "dbsnp_138.hg19.vcf.gz" "Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz" ; do
@@ -121,8 +121,8 @@ gunzip -fk hg19.refGene.gtf.gz
 #done
 
 # download funcotator dataset
-# wget -c https://console.cloud.google.com/storage/browser/_details/broad-public-datasets/funcotator/funcotator_dataSources.v1.6.20190124s.tar.gz
-#wget -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/funcotator/funcotator_dataSources.v1.6.20190124s.tar.gz
+# wget --no-check-certificate -c https://console.cloud.google.com/storage/browser/_details/broad-public-datasets/funcotator/funcotator_dataSources.v1.6.20190124s.tar.gz
+#wget --no-check-certificate -c ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/funcotator/funcotator_dataSources.v1.6.20190124s.tar.gz
 #tar xzvf funcotator_dataSources.v1.6.20190124s.tar.gz
 
 # download refseq annotation for hg19

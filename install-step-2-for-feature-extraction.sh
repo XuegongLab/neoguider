@@ -57,7 +57,7 @@ python ../neomotif.py -i all_peptides.txt -o all_peptides -p Homo_sapiens.GRCh37
 ### (3) database index construction
 ###
 
-for faa in Homo_sapiens.GRCh37.pep.all.fa iedb.fasta; do
+for faa in ${rootdir}/database/Homo_sapiens.GRCh37.pep.all.fa ${rootdir}/database/iedb.fasta; do
     makeblastdb -in ${faa} -dbtype prot # protein database
     samtools faidx ${faa}
 done
