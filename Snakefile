@@ -225,7 +225,7 @@ elif os.path.exists(hla_out):
 
 logging.debug(F'HLA_REF = {HLA_REF}')
 
-samtools_bin = F'{script_basedir}/software/uvc/bin/samtools'
+samtools_bin = 'samtools' # F'{script_basedir}/software/uvc/bin/samtools'
 
 rule RNA_tumor_HLA_typing_preparation:
     output: hla_bam, hla_fq_r1, hla_fq_r2, hla_fq_se
