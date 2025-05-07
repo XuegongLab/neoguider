@@ -20,6 +20,9 @@ from pybiomart import Server
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s]:  %(message)s')
 
+import os
+script_dir = os.path.dirname(os.path.realpath(__file__))
+dfpath = sys.path.join(script_dir, 'GRCh38.p14.RefSeq_mRNA_ID.Trascript_stable_ID.csv')
 
 def InputParser():
     parser = ArgumentParser()
@@ -191,12 +194,16 @@ def ProcessSJ(junc_file, columns, reads, psi, bam, rpkm, process, expression_fil
     with open(path['iso_bed'], 'a+') as f:
         f.write('\n'.join(isoforms) + '\n')
 
-    server = Server(host='http://grch37.ensembl.org')
-    dataset = (server.marts['ENSEMBL_MART_ENSEMBL']
-                    .datasets['hsapiens_gene_ensembl'])
-    mart = server['ENSEMBL_MART_ENSEMBL']
-    dataset = mart['hsapiens_gene_ensembl']
-    df=dataset.query(attributes=['refseq_mrna','ensembl_transcript_id'])
+    if os.path.exist(dfpath):
+        df = pd.read_csv(dfpath)
+    else:
+        server = Server(host='http://grch37.ensembl.org')
+        dataset = (server.marts['ENSEMBL_MART_ENSEMBL']
+                        .datasets['hsapiens_gene_ensembl'])
+        mart = server['ENSEMBL_MART_ENSEMBL']
+        dataset = mart['hsapiens_gene_ensembl']
+        df=dataset.query(attributes=['refseq_mrna','ensembl_transcript_id'])
+        df.to_csv(dfpath)
     exp = pd.read_csv(expression_file,header=0,sep='\t')
     gene_exp = exp.loc[:,['target_id','tpm']]
     gene_exp = gene_exp[gene_exp['tpm']>float(tpm_threshold)]
