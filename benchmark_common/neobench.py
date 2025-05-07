@@ -9,13 +9,16 @@ scriptdir = (os.path.dirname(os.path.realpath(__file__)))
 # First parser setup and parse
 parser1 = argparse.ArgumentParser()
 parser1.add_argument('-n', '--n_hyper_iter', type=int, default=50)
-parser1.add_argument('--rand', type=int, default=0)
+parser1.add_argument('--randseed', type=int, default=0)
 parser1.add_argument('-I', '--isolib', default=scriptdir+'/../IsotonicLogisticRegression#IsotonicLogisticRegression',
         help='The NeoGuider feature transformation library file')
 
 args1, remaining_argv = parser1.parse_known_args()
 
 import numpy as np
+random.seed(args1.randseed)
+np.random.seed(args1.randseed)
+
 import pandas as pd
 from joblib import Parallel, delayed # multiprocessing can hang if the virtual memory allocated is too big
 from scipy import stats
@@ -28,9 +31,7 @@ from matplotlib import pyplot as plt
 matplotlib.use('Agg')  # Use a non-GUI backend
 import seaborn as sns
 
-import imblearn
-#from imblearn.pipeline import Pipeline
-from imblearn.under_sampling import RandomUnderSampler
+import imblearn # Bonus points
 
 # From https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 #  and https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
@@ -227,12 +228,17 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'MinMaxScaler'        : MinMaxScaler(),
     'Normalizer'          : Normalizer(),
     'PowerTransformer'    : PowerTransformer(),
-    'QuantileTransformer' : QuantileTransformer(random_state=args1.rand),
+    'QuantileTransformer' : QuantileTransformer(random_state=args1.randseed),
     'RobustScaler'        : RobustScaler(),
     'StandardScaler'      : StandardScaler(),
-    # 'NormalTransformer' : QuantileTransformer(random_state=args1.rand, output_distribution='normal'), # not used with default value
-    F'{NG_default}'       : IsotonicLogisticRegression(random_state=args1.rand, excluded_cols=['ln_NumTested']),
-    'NG_withoutNumTested' : IsotonicLogisticRegression(random_state=args1.rand, excluded_cols=[]),
+    # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
+    F'{NG_default}'       : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=['ln_NumTested']),
+    'NG_withoutNumTested' : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=[]),
+    # For testing purpose
+    'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    'TestNg_rand0_rep2'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    'TestNg_rand1_rep1'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
+    'TestNg_rand1_rep2'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
 }
 
 # Let StandardScaler represent IdentityTransformer, MaxAbsScaler, MinMaxScaler, and RobustScaler since they are all linear maps
@@ -286,25 +292,28 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     
     # GP error: O(n_examples^3*n_iterations) RAM requirement, with numpy.core._exceptions._ArrayMemoryError: Unable to allocate 1.25 TiB for ... 
     # workaround: none AFAIK
-    # 'hParamDefault_GP':  GaussianProcessClassifier(random_state=args1.rand),
+    # 'hParamDefault_GP':  GaussianProcessClassifier(random_state=args1.randseed),
 
-    'hParamDefault_DT':  DecisionTreeClassifier(random_state=args1.rand),
-    'hParamNCItrain_DT':  DecisionTreeClassifier(random_state=args1.rand, **DT_best_hparams),
-    'hParamDefault_RF':  RandomForestClassifier(random_state=args1.rand),
-    'hParamNCItrain_RF':  RandomForestClassifier(random_state=args1.rand, **RF_best_hparams),
-    'hParamDefault_MLP': MLPClassifier(random_state=args1.rand),
-    'hParamDefault_AB':  AdaBoostClassifier(random_state=args1.rand),
+    'hParamDefault_DT':  DecisionTreeClassifier(random_state=args1.randseed),
+    'hParamNCItrain_DT':  DecisionTreeClassifier(random_state=args1.randseed, **DT_best_hparams),
+    'hParamDefault_RF':  RandomForestClassifier(random_state=args1.randseed),
+    'hParamNCItrain_RF':  RandomForestClassifier(random_state=args1.randseed, **RF_best_hparams),
+    'hParamDefault_MLP': MLPClassifier(random_state=args1.randseed),
+    'hParamDefault_AB':  AdaBoostClassifier(random_state=args1.randseed),
     'hParamDefault_GNB': GaussianNB(),
         
     'hParamDefault_QDA': QuadraticDiscriminantAnalysis(),
     
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
-    'hParamDefault_LR' : LogisticRegression(random_state=args1.rand), # Not listed in plot_classifier_comparison.html
-    'hParamDefault_XGB': XGBClassifier(random_state=args1.rand), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
+    'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html
+    'hParamRand0_LR'   : LogisticRegression(random_state=0), # Not listed in plot_classifier_comparison.html
+    'hParamRand1_LR'   : LogisticRegression(random_state=1), # Not listed in plot_classifier_comparison.html
+
+    'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
     
     'UnitCoefficient_LR': FixedOneLogisticRegression(),
-    # 'ET': ExtraTreesClassifier(random_state=args1.rand)      , # Not listed in plot_classifier_comparison.html and performs worse than RF
-    # 'GB': GradientBoostingClassifier(random_state=args1.rand), # Not listed in plot_classifier_comparison.html and similar to XGB but runs much slower
+    # 'ET': ExtraTreesClassifier(random_state=args1.randseed)      , # Not listed in plot_classifier_comparison.html and performs worse than RF
+    # 'GB': GradientBoostingClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and similar to XGB but runs much slower
 }
 
 # Other authors also performed split in patient-unspecific manner (the same patient's peptides are used for both training and assessing hyperparam-goodness)
@@ -312,7 +321,7 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
 # We think it is fine because our hyperparam-goodness score is the roc-auc for the ensemble of peptides over multiple patients
 HPARAM_TUNING_PARAMS = {
     'scoring': 'roc_auc',
-    'random_state': args1.rand, 
+    'random_state': args1.randseed, 
     'n_iter': args1.n_hyper_iter, 
     'cv': 3,
     'n_jobs': 12,
@@ -324,24 +333,24 @@ HPARAM_TUNING_PARAMS = {
 HPARAM_TUNED_CLASSIFIER_NAME2TECH = {
     
     # GP error: same as the error with hParamDefault_GP
-    # 'hParamTuned_GP'  BayesSearchCV(GaussianProcessClassifier(random_state=args1.rand), grid_param_GP , **HPARAM_TUNING_PARAMS),
+    # 'hParamTuned_GP'  BayesSearchCV(GaussianProcessClassifier(random_state=args1.randseed), grid_param_GP , **HPARAM_TUNING_PARAMS),
      
     # AB was used with its default hyperparameter values
-    'hParamTuned_AB' : BayesSearchCV(AdaBoostClassifier    (random_state=args1.rand), grid_param_AB , **HPARAM_TUNING_PARAMS),
+    'hParamTuned_AB' : BayesSearchCV(AdaBoostClassifier    (random_state=args1.randseed), grid_param_AB , **HPARAM_TUNING_PARAMS),
     
-    'hParamTuned_DT' : BayesSearchCV(DecisionTreeClassifier(random_state=args1.rand), grid_param_DT , **HPARAM_TUNING_PARAMS),
+    'hParamTuned_DT' : BayesSearchCV(DecisionTreeClassifier(random_state=args1.randseed), grid_param_DT , **HPARAM_TUNING_PARAMS),
     
     # KNN consumes too much running time
     'hParamTuned_KNN': BayesSearchCV(KNeighborsClassifier  (                       ), grid_param_KNN, **HPARAM_TUNING_PARAMS),
-    'hParamTuned_MLP': BayesSearchCV(MLPClassifier         (random_state=args1.rand), grid_param_MLP, error_score=0, **HPARAM_TUNING_PARAMS),
-    'hParamTuned_RF' : BayesSearchCV(RandomForestClassifier(random_state=args1.rand), grid_param_RF , **HPARAM_TUNING_PARAMS),
+    'hParamTuned_MLP': BayesSearchCV(MLPClassifier         (random_state=args1.randseed), grid_param_MLP, error_score=0, **HPARAM_TUNING_PARAMS),
+    'hParamTuned_RF' : BayesSearchCV(RandomForestClassifier(random_state=args1.randseed), grid_param_RF , **HPARAM_TUNING_PARAMS),
     
     # SVC consumes too much running time
-    'hParamTuned_SVC': BayesSearchCV(DecisionTreeClassifier(random_state=args1.rand), grid_param_DT , **HPARAM_TUNING_PARAMS),
+    'hParamTuned_SVC': BayesSearchCV(DecisionTreeClassifier(random_state=args1.randseed), grid_param_DT , **HPARAM_TUNING_PARAMS),
     
     # LR and XGB are not listed in plot_classifier_comparison.html
-    'hParamTuned_LR' : BayesSearchCV(LogisticRegression    (random_state=args1.rand), grid_param_LR,  **HPARAM_TUNING_PARAMS),
-    'hParamTuned_XGB': BayesSearchCV(XGBClassifier         (random_state=args1.rand), grid_param_XGB, **HPARAM_TUNING_PARAMS),
+    'hParamTuned_LR' : BayesSearchCV(LogisticRegression    (random_state=args1.randseed), grid_param_LR,  **HPARAM_TUNING_PARAMS),
+    'hParamTuned_XGB': BayesSearchCV(XGBClassifier         (random_state=args1.randseed), grid_param_XGB, **HPARAM_TUNING_PARAMS),
 }
 
 # These are the classifiers at https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
@@ -526,7 +535,7 @@ parser.add_argument('-4', '--hparam_tuned_classifier_names', nargs='*', default=
         help='Names of the machine-learning classifiers with hyperparameter tuning to be assessed')
 parser.add_argument('--inc', default=None, help='Assume that label as a function of each feature is increasing (0, 1, "auto", or None denoting false, true, auto, and inferred)')
 parser.add_argument('--sep', default=None, help='csv column separator')
-parser.add_argument('--seed', default=-1, type=int, help='seed for random number generation. If set to -1, then use the value of --rand as the seed. ')
+parser.add_argument('--sub-randseed', default=-1, type=int, help='Seed for random number generation in subprocesses. If set to -1, then use the value of --randseed as the seed. ')
 parser.add_argument('--tasks', nargs='*', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='*', default=[], help='Column names denoting the input features (explanatory variable, i.e., pMHC binding affinity, stabilility, and agretopicity), auto infer if not provided')
 parser.add_argument('--label', default='', help='Column name denoting the output label (response variable, i.e., immunogenicity), auto infer if not provided')
@@ -557,10 +566,10 @@ if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', '%Rank_EL', 'Sco
 elif 'default' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', 'MT_BindAff', 'BindStab'])
 LISTOF_FEATURES[0] = sorted(set(LISTOF_FEATURES[0]))
 
-if args.seed < 0: args.seed = args1.rand
+if args.sub_randseed < 0: args.sub_randseed = args1.randseed
 
-random.seed(args.seed)
-np.random.seed(args.seed)
+#random.seed(args.sub_randseed)
+#np.random.seed(args.sub_randseed)
 
 assert len(args.input) % 2 == 0, F'''The number of input files ({args.input}) is not (but should be) a multiple of two'''
 testfile = args.input[1]
@@ -597,7 +606,7 @@ kwargs = {
 
 #for tech in [HPARAM_TUNED_FT_PREPROC_NAME2TECH, HPARAM_DEFLT_FT_PREPROC_NAME2TECH]:
 #    tech[F'{NG_default}']       = IsotonicLogisticRegression(**kwargs)
-#    tech['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=args1.rand, feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
+#    tech['NG_withoutNumTested'] = IsotonicLogisticRegression(increasing=increasing, random_state=args1.randseed, feat_pvalue_drop=feat_pvalue_drop, nan_policy=nan_policy)
 
 try:
     sklearn.set_config(enable_metadata_routing=False)
@@ -708,14 +717,14 @@ def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
         if n_positives > 2*args.max_n_negatives: label2nsamples[1] = args.max_n_negatives # new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
     else:
         logging.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
-        return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=args1.rand)
+        return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=args1.randseed)
     if len(label2nsamples.items()) > 0: # new_n_neg > new_n_pos:
         logging.info(F'Classifier {classifier_name} went through random sampling with n_positives={n_positives}, n_negatives={n_negatives}, and label2nsamples={label2nsamples}!')
         #minor_over_major = (new_n_pos/new_n_neg)
         #if minor_over_major > 1.0:
         #    logging.warning(F'RandomUnderSampler does not work with the minority/majority ratio of {minor_over_major} (classifier={classifier_name}), so convert the ratio to 1/{minor_over_major} instead!')
         #    minor_over_major = 1.0 / minor_over_major
-        return 1, RandomUnderSampler(sampling_strategy=label2nsamples, random_state=args1.rand)
+        return 1, imblearn.under_sampling.RandomUnderSampler(sampling_strategy=label2nsamples, random_state=args1.randseed)
     else:
         logging.info(F'Classifier {classifier_name} was not through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # VarianceThreshold()
@@ -739,6 +748,8 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
                 ml_pipe = imblearn.pipeline.make_pipeline(imbalearn_selector, copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier_tech))
                 ret.append((ml_pipename, ml_pipe))
                 if DEBUG_SKLEARN_PIPE in args.debug and not was_balancing_performed and hyperparam_tuning_strategy == 'hyperparam_deflt':
+                    # TODO: report the UNEXPECTED_BEHAVIOR to the sklearn team. 
+                    # Only the first VarianceThreshold() is applied in a sklearn.pipeline if multiple VarianceThreshold() exist in the pipeline.
                     for first_step_idx, first_step_tech in enumerate(['passthrough', VarianceThreshold()]):
                         ml_pipe = sklearn.pipeline.make_pipeline(first_step_tech, copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier_tech))
                         ret.append((add_redundant_names(ml_pipename, first_step_idx + 1), ml_pipe))
@@ -769,8 +780,8 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
     config_logging('FIT')
     taskname = F'training {ml_pipename}'
     logging.info(F'Started {taskname} with input_shape={X.shape}')
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    random.seed(args.sub_randseed)
+    np.random.seed(args.sub_randseed)
 
     X = drop_feat_from_X(ml_pipename, X)
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
@@ -801,8 +812,8 @@ def predict_with_ml_pipe(ml_pipename, ml_pipe, X, modeldir):
     config_logging('PREDICT')
     taskname = F'predicting test-set labels using {ml_pipename}'
     logging.info(F'Started {taskname} with input_shape={X.shape}')
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    random.seed(args.sub_randseed)
+    np.random.seed(args.sub_randseed)
    
     X = drop_feat_from_X(ml_pipename, X)
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
@@ -827,8 +838,8 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx)
     config_logging('CROSS_VAL_PREDICT')
     taskname = F'predicting out-of-fold labels by cross validation using {ml_pipename}'
     logging.info(F'Start {taskname} with input_shape={X.shape}')
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    random.seed(args.sub_randseed)
+    np.random.seed(args.sub_randseed)
 
     X = drop_feat_from_X(ml_pipename, X)
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
@@ -849,8 +860,8 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
     config_logging('CROSS_VAL_SCORE')
     taskname = F'scoring by cross validation using {ml_pipename}'
     logging.info(F'Started {taskname} with input_shape={X.shape}')
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    random.seed(args.sub_randseed)
+    np.random.seed(args.sub_randseed)
 
     X = drop_feat_from_X(ml_pipename, X)
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
@@ -1215,7 +1226,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     big_y   = big_y.apply(pd.to_numeric)
 
     ft_preproc_tech = HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']
-    #train_X = QuantileTransformer(random_state=args1.rand).fit_transform(train_X)
+    #train_X = QuantileTransformer(random_state=args1.randseed).fit_transform(train_X)
     #train_X = pd.DataFrame(train_X, columns=features)
     big_transformed_X = ft_preproc_tech.fit_transform(train_X, big_y)
     ft_preproc_tech_feature_names = ft_preproc_tech.get_feature_names()
@@ -1298,31 +1309,31 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     if 'fa3' in tasks:
         big_transformed_df = pd.DataFrame(np.append(big_transformed_X, np.array([[v] for v in big_y]), axis=1), columns=list(features)+[labelcol])
         big_transformed_df = big_transformed_df.apply(pd.to_numeric)
-        big_trans_df0 = big_transformed_df.loc[big_transformed_df[labelcol]==0,:] #.sample(n=100, random_state=args1.rand)
-        big_trans_df1 = big_transformed_df.loc[big_transformed_df[labelcol]==1,:] #.sample(n=100, random_state=args1.rand)
+        big_trans_df0 = big_transformed_df.loc[big_transformed_df[labelcol]==0,:] #.sample(n=100, random_state=args1.randseed)
+        big_trans_df1 = big_transformed_df.loc[big_transformed_df[labelcol]==1,:] #.sample(n=100, random_state=args1.randseed)
 
-        big_trans1_df0 = big_trans_df0.loc[:,features] #.sample(n=100, random_state=args1.rand)
-        big_trans1_df1 = big_trans_df1.loc[:,features] #.sample(n=100, random_state=args1.rand)
+        big_trans1_df0 = big_trans_df0.loc[:,features] #.sample(n=100, random_state=args1.randseed)
+        big_trans1_df1 = big_trans_df1.loc[:,features] #.sample(n=100, random_state=args1.randseed)
 
         dfsize = min((len(big_trans_df0), len(big_trans_df1)))
         logging.info(F'Min_nrows={dfsize}')
         dfsize = min((dfsize, 100))
         logging.info(F'Start plotting all neoepitope candidates')
-        plot_ret = pairplot_showing_pretrans_feat_vals(big_trans1_df0.sample(n=dfsize, random_state=args1.rand), big_trans1_df1.sample(n=dfsize, random_state=args1.rand), ilr)
+        plot_ret = pairplot_showing_pretrans_feat_vals(big_trans1_df0.sample(n=dfsize, random_state=args1.randseed), big_trans1_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
         logging.info(F'Mid plotting all neoepitope candidates')
-        #sns.pairplot(pd.concat([big_trans_df0.sample(n=dfsize, random_state=args1.rand), big_trans_df1.sample(n=dfsize, random_state=args1.rand)]), hue=labelcol)
+        #sns.pairplot(pd.concat([big_trans_df0.sample(n=dfsize, random_state=args1.randseed), big_trans_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
         plt.savefig(f'{output}_pairwiseLogOdds.pdf')
         plt.close()
         logging.info(F'End plotting all neoepitope candidates')
         if 'mhcflurry_presentation_percentile' in big_transformed_df.columns:
-            big_trans2_df0 = big_trans_df0.loc[big_trans_df0['mhcflurry_presentation_percentile']<=5,features] #big_transformed_df.loc[big_transformed_df[labelcol]==0,:].sample(n=100, random_state=args1.rand)
+            big_trans2_df0 = big_trans_df0.loc[big_trans_df0['mhcflurry_presentation_percentile']<=5,features] #big_transformed_df.loc[big_transformed_df[labelcol]==0,:].sample(n=100, random_state=args1.randseed)
             big_trans2_df1 = big_trans_df1.loc[big_trans_df1['mhcflurry_presentation_percentile']<=5,features]
             dfsize = min((len(big_trans2_df0), len(big_trans2_df1)))
             logging.info(F'Min_nrows={dfsize}')
             dfsize = min((dfsize, 100))
             dfsize_0 = min((len(big_trans2_df0), 1000))
-            #plot_ret = sns.pairplot(pd.concat([big_trans2_df0.sample(n=dfsize_0, random_state=args1.rand), big_trans2_df1.sample(n=dfsize, random_state=args1.rand)]), hue=labelcol)
-            plot_ret = pairplot_showing_pretrans_feat_vals(big_trans2_df0.sample(n=dfsize_0, random_state=args1.rand), big_trans2_df1.sample(n=dfsize, random_state=args1.rand), ilr)
+            #plot_ret = sns.pairplot(pd.concat([big_trans2_df0.sample(n=dfsize_0, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
+            plot_ret = pairplot_showing_pretrans_feat_vals(big_trans2_df0.sample(n=dfsize_0, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
             plt.savefig(f'{output}_pairwiseLogOdds_mhcflurry_presentation_5perc.pdf')
             plt.close()
 
