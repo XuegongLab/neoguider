@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s]:  %(
 
 import os
 script_dir = os.path.dirname(os.path.realpath(__file__))
-dfpath = sys.path.join(script_dir, 'GRCh38.p14.RefSeq_mRNA_ID.Trascript_stable_ID.csv')
+dfpath = os.path.sep.join((script_dir, 'GRCh38.p14.RefSeq_mRNA_ID.Trascript_stable_ID.csv'))
 
 def InputParser():
     parser = ArgumentParser()
@@ -194,7 +194,7 @@ def ProcessSJ(junc_file, columns, reads, psi, bam, rpkm, process, expression_fil
     with open(path['iso_bed'], 'a+') as f:
         f.write('\n'.join(isoforms) + '\n')
 
-    if os.path.exist(dfpath):
+    if os.path.exists(dfpath):
         df = pd.read_csv(dfpath)
     else:
         server = Server(host='http://grch37.ensembl.org')
@@ -267,12 +267,16 @@ def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, save=None):
     peps_pos = set()
     line_num = 0
 
-    server = Server(host='http://grch37.ensembl.org')
-    dataset = (server.marts['ENSEMBL_MART_ENSEMBL']
-                    .datasets['hsapiens_gene_ensembl'])
-    mart = server['ENSEMBL_MART_ENSEMBL']
-    dataset = mart['hsapiens_gene_ensembl']
-    df=dataset.query(attributes=['refseq_mrna','ensembl_transcript_id'])
+    if os.path.exists(dfpath):
+        df = pd.read_csv(dfpath)
+    else:
+        server = Server(host='http://grch37.ensembl.org')
+        dataset = (server.marts['ENSEMBL_MART_ENSEMBL']
+                        .datasets['hsapiens_gene_ensembl'])
+        mart = server['ENSEMBL_MART_ENSEMBL']
+        dataset = mart['hsapiens_gene_ensembl']
+        df=dataset.query(attributes=['refseq_mrna','ensembl_transcript_id'])
+        df.to_csv(dfpath)
     exp = pd.read_csv(expression_file,header=0,sep='\t')
     gene_exp = exp.loc[:,['target_id','tpm']]
     gene_exp = gene_exp[gene_exp['tpm']>float(tpm_threshold)]
