@@ -234,9 +234,14 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     F'{NG_default}'         : IsotonicLogisticRegression(excluded_cols=['ln_NumTested']),
     'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[]),
     'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[]),
-    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+0),
+    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=1),
+    'NG_withNumTested_BW2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=2),
+    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=4),
+    'NG_withNumTested_BW8'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
     'NG_withNumTested_RS1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+1),
     'NG_withNumTested_RS2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+2),
+    'NG_withNumTested_RS3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+3),
+    
     # For testing purpose
     #'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
     #'TestNg_rand0_rep2'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
@@ -309,8 +314,8 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
     'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html
-    'hParamRand0_LR'   : LogisticRegression(random_state=0), # Not listed in plot_classifier_comparison.html
-    'hParamRand1_LR'   : LogisticRegression(random_state=1), # Not listed in plot_classifier_comparison.html
+    #'hParamRand0_LR'   : LogisticRegression(random_state=0), # Not listed in plot_classifier_comparison.html
+    #'hParamRand1_LR'   : LogisticRegression(random_state=1), # Not listed in plot_classifier_comparison.html
 
     'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
     
@@ -1057,6 +1062,7 @@ def benchmark_perf_2(
                 methodnames = long_df['Method']
                 break
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS.get(x, x) for x in methodnames]
+        methodnames = [meth.replace(NG_default+'/', 'NG/') for meth in methodnames]
         ax.set_yticks(long_df['ypos'], labels=methodnames, fontsize=smallest_fontsize)
         ax.set_ylim(-1, len(long_df))
         xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname] + long_df[title_in_colname+'_moe'].fillna(0))

@@ -365,7 +365,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             final_predictor = None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
             pseudocount=0.5,
             disable_random=False,
-            random_state=-1,
+            random_state=0,
+            min_n_adaKDE_samples=2.0, # only used when disable_random=True
             fit_add_measure_error=None,
             transform_add_measure_error=None,
             ft_fit_add_measure_error=None,
@@ -392,7 +393,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         @param disable_random : Boolean indicating whether this class uses random-number generator
         @param random_state: the state for generating random numbers (just like the random_state from sklearn), -1 means setting disable_random=True
-        
+        @min_n_adaKDE_samples: inclusive minimum number of examples in each adaptive KDE of a response value (i.e., log odds. Only used when disable_random=True).
+
         @param fit_add_measure_error         : introduce noise to the fit                      method to prevent overfitting. Empirical evidence supports its use for plain decision trees. 
         @param transform_add_measure_error   : introduce noise to the transform                method to prevent overfitting. This option is advanced. 
         @param ft_fit_add_measure_error      : introduce noise to the fit part of       fit_transform to prevent overfitting. This option is advanced. 
@@ -435,6 +437,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.pseudocount = pseudocount
         self.disable_random = disable_random
         self.random_state = random_state
+        self.min_n_adaKDE_samples = min_n_adaKDE_samples
         self.fit_add_measure_error = fit_add_measure_error
         self.transform_add_measure_error = transform_add_measure_error
         self.ft_fit_add_measure_error = ft_fit_add_measure_error
@@ -854,20 +857,18 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                     featval_x0cnt_x1cnt_list = [_center_group(contig) for contig in contig_list]
                     for i, (featval, (x0cnt, x1cnt)) in enumerate(featval_x0cnt_x1cnt_list):
                         prev1_x0cnt, next1_x0cnt, prev1_x1cnt, next1_x1cnt = (0, 0, 0, 0)
-                        if x0cnt < 3.9 or x1cnt < 3.9:
-                            prev1_featval, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[abs(i-1)]
-                            next1_featval, (next1_x0cnt, next1_x1cnt) = featval_x0cnt_x1cnt_list[min((i+1,2*len(featval_x0cnt_x1cnt_list)-i-3))]
+                        delta = 1
+                        min_n_adaKDE_samples = self.min_n_adaKDE_samples * 0.999
+                        while (x0cnt - 0.5 * (prev1_x0cnt + next1_x0cnt) < min_n_adaKDE_samples) or (x1cnt - 0.5 * (prev1_x1cnt + next1_x1cnt) < min_n_adaKDE_samples):
+                            prev1_featval, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[abs(i-delta)]
+                            next1_featval, (next1_x0cnt, next1_x1cnt) = featval_x0cnt_x1cnt_list[min((i+delta,2*len(featval_x0cnt_x1cnt_list)-i-2-delta))]
                             x0cnt += prev1_x0cnt + next1_x0cnt
                             x1cnt += prev1_x1cnt + next1_x1cnt
-                        if x0cnt - (prev1_x0cnt + next1_x0cnt) * 0.5 < 2.9 or x1cnt - (prev1_x1cnt + next1_x1cnt) * 0.5 < 2.9:
-                            prev1_featval, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[abs(i-2)]
-                            next1_featval, (next1_x0cnt, next1_x1cnt) = featval_x0cnt_x1cnt_list[min((i+2,2*len(featval_x0cnt_x1cnt_list)-i-4))]
-                            x0cnt += prev1_x0cnt + next1_x0cnt
-                            x1cnt += prev1_x1cnt + next1_x1cnt
-                        x0cnt -= (prev1_x0cnt + next1_x0cnt) * 0.5
-                        x1cnt -= (prev1_x1cnt + next1_x1cnt) * 0.5
-                        assert x0cnt > 1.9, f'{x0cnt} > 1.9 failed for {featval_x0cnt_x1cnt_list} at {i}-th index (elemnt={featval, (x0cnt, x1cnt)})'
-                        assert x1cnt > 1.9, f'{x1cnt} > 1.9 failed for {featval_x0cnt_x1cnt_list} at {i}-th index (elemnt={featval, (x0cnt, x1cnt)})'
+                            delta += 1
+                        x0cnt -= 0.5 * (prev1_x0cnt + next1_x0cnt)
+                        x1cnt -= 0.5 * (prev1_x1cnt + next1_x1cnt)
+                        #assert x0cnt > 1.9, f'{x0cnt} > 1.9 failed for {featval_x0cnt_x1cnt_list} at {i}-th index (elemnt={featval, (x0cnt, x1cnt)})'
+                        #assert x1cnt > 1.9, f'{x1cnt} > 1.9 failed for {featval_x0cnt_x1cnt_list} at {i}-th index (elemnt={featval, (x0cnt, x1cnt)})'
                         xcenter = featval
                         odds = x1cnt / x0cnt
                         xcenters.append(xcenter)
