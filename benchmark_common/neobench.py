@@ -3,7 +3,6 @@
 import argparse, collections, copy, datetime, json, itertools, logging, os, pickle, pprint, random, sys
 from collections import Counter, defaultdict, namedtuple
 
-
 scriptpath = (os.path.realpath(__file__))
 scriptdir = (os.path.dirname(os.path.realpath(__file__)))
 # First parser setup and parse
@@ -880,9 +879,14 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
 
 def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR', topN=20, ranking_mult=1):
     df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
-    return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1])
+    df2 = df.loc[df[labelcol]==1, [patientcol, 'rank']]
+    pat2score = {}
+    for pat, rank_df in df2.groupby(patientcol):
+        pat2score[pat] = sum(np.exp(-0.02*(rank_df['rank']-1))) # https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
+    return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1]), pat2score
 
 def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labelcol, title_in_colname):
+    pat2score = {}
     if colname in colname2rocauc:
         #print(F'colname2rocauc[{colname}]={colname2rocauc[colname]}')
         #print(F'rocauclist={colname2rocauc[colname]}=')
@@ -900,15 +904,15 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
         logging.info(F'Computing the ({title_in_colname}) of {colname} with {sign2corr[ranking_mult]} feature-label correlation')
         #y_true = np.where(df_in[labelcol], 1 , 0)
         if metric_name == 'top':
-            roc_auc = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
+            roc_auc, pat2score = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
-        else:                    
+        else:
             roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
         #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
         #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
         roc_auc_std = np.nan
         moe = np.nan
-    return (colname, roc_auc, moe, roc_auc_std)
+    return (colname, roc_auc, moe, roc_auc_std, pat2score)
 
 def benchmark_perf_2(
         df_ins,
@@ -959,8 +963,27 @@ def benchmark_perf_2(
         colnames = [colname for colname in colnames if colname in df_in.columns]
         metric_results = Parallel(n_jobs=24)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
             df_in[['Patient', labelcol, colname]], labelcol, title_in_colname) for colname in colnames)
+        
+        logging.info(F'Started tabulating and performing statistical analyses on rank_score')
+        meth2pat2score = {fpt_clf_comb: pat2score for (fpt_clf_comb, roc_auc, moe, roc_auc_std, pat2score) in metric_results}
+        df_meth_x_pat_score = pd.DataFrame.from_dict(meth2pat2score, orient='index')
+        if ax_idx == 0 and df_meth_x_pat_score.shape[1] >= 2:
+            df_meth_x_pat_score.to_csv(out_fname_fmt.format('rank_score' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
+            meths2pval = {}
+            for meth1, scores1 in df_meth_x_pat_score.iterrows():
+                meths2pval[meth1] = {}
+                for meth2, scores2 in df_meth_x_pat_score.iterrows():
+                    if (scores1 == scores2).all():
+                        meths2pval[meth1][meth2] = np.nan
+                    else:
+                        pval_mult = np.sign(sum(np.sign(scores1 - score2)))
+                        stat_test = stats.wilcoxon(scores1 - scores2)
+                        meths2pval[meth1][meth2] = stat_test.pvalue * pval_mult
+            pd.DataFrame.from_dict(meths2pval, orient='index').to_csv(out_fname_fmt.format('rank_score_signed_pval' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
+        logging.info(F'Ended tabulating and performing statistical analyses on rank_score')
+
         rows = []
-        for colname, roc_auc, moe, roc_auc_std in metric_results:
+        for colname, roc_auc, moe, roc_auc_std, pat2score in metric_results:
             rows.append((colname, roc_auc, moe))
             if   colname in features:
                 auc_series[colname] = roc_auc
@@ -1377,7 +1400,10 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             ml_pipename, ml_pipe, ml_pipe_predicted = result
             assert not np.isnan(ml_pipe_predicted).any()
             df[ml_pipename] = ml_pipe_predicted
-        df.to_csv(F'{output}_{fidx}_test.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+        
+        if not os.path.exists(f'{output}_{fidx}_test.csv.gz.done'):
+            df.to_csv(F'{output}_{fidx}_test.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+            with open(f'{output}_{fidx}_test.csv.gz.done', 'w') as file: file.write('done')
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         test_dfs.append(df2)
         if 'Patient' in df2.columns:
