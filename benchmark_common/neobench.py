@@ -231,10 +231,12 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'RobustScaler'        : RobustScaler(),
     'StandardScaler'      : StandardScaler(),
     # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
-    F'{NG_default}'       : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=['ln_NumTested']),
-    'NG_withoutNumTested' : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=[]),
-    'NG_withNumTested_In' : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=[]),
-
+    F'{NG_default}'         : IsotonicLogisticRegression(excluded_cols=['ln_NumTested']),
+    'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[]),
+    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[]),
+    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+0),
+    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+1),
+    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+2),
     # For testing purpose
     #'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
     #'TestNg_rand0_rep2'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
@@ -976,7 +978,7 @@ def benchmark_perf_2(
                     if (scores1 == scores2).all():
                         meths2pval[meth1][meth2] = np.nan
                     else:
-                        pval_mult = np.sign(sum(np.sign(scores1 - score2)))
+                        pval_mult = np.sign(sum(np.sign(scores1 - scores2)))
                         stat_test = stats.wilcoxon(scores1 - scores2)
                         meths2pval[meth1][meth2] = stat_test.pvalue * pval_mult
             pd.DataFrame.from_dict(meths2pval, orient='index').to_csv(out_fname_fmt.format('rank_score_signed_pval' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
