@@ -27,6 +27,52 @@ def _abbrevshow(alist, anum=5):
     if len(alist) <= anum*2: return [alist]
     else: return [alist[0:anum], alist[(len(alist)-anum):len(alist)]]
 
+def _transform_and_partition(x, y):
+    if len(x) == 0:
+        return []
+    
+    # Step 1: Transform into a list of (feature_value, (x0count, x1count))
+    feature_counts = collections.defaultdict(lambda: [0, 0])
+    for feature, label in zip(x, y):
+        if label == 0:
+            feature_counts[feature][0] += 1
+        else:
+            feature_counts[feature][1] += 1
+
+    transformed_list = [(feature, (counts[0], counts[1])) for feature, counts in sorted(feature_counts.items())]
+
+    # Step 2: Partition the list into sublists where consecutive tuples with x0count=0 or x1count=0 are merged
+    if not transformed_list:
+        return []
+
+    partitioned = []
+    current_sublist = [transformed_list[0]]
+
+    for i in range(1, len(transformed_list)):
+        current_feature, (current_x0, current_x1) = transformed_list[i]
+        prev_feature, (prev_x0, prev_x1) = transformed_list[i - 1]
+
+        # Check if current and previous tuples can be merged based on x0count or x1count being zero
+        if (current_x0 == 0 and prev_x0 == 0) or (current_x1 == 0 and prev_x1 == 0):
+            current_sublist.append(transformed_list[i])
+        else:
+            partitioned.append(current_sublist)
+            current_sublist = [transformed_list[i]]
+
+    partitioned.append(current_sublist)
+
+    return partitioned
+
+def _center_group(contig):
+    ftvalwsum = 0
+    x0cntsum = 0
+    x1cntsum = 0
+    for ftval, (x0cnt, x1cnt) in contig:
+        ftvalwsum += ftval * (x0cnt + x1cnt)
+        x0cntsum += x0cnt
+        x1cntsum += x1cnt
+    return ftvalwsum / (x0cntsum + x1cntsum), (x0cntsum, x1cntsum)
+    
 # This piece of code confirms that rank_biserial_correlation, pointbiserialr, and pearsonr are equivalent to each other if used as follows:
 # implication: pearsonr=2*(AUC_ROC-0.5) and _fisher_transform can be applied to any of these correlation coefficients
 '''
@@ -318,7 +364,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             task='classification',
             final_predictor = None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
             pseudocount=0.5,
-            random_state=0,
+            disable_random=False,
+            random_state=-1,
             fit_add_measure_error=None,
             transform_add_measure_error=None,
             ft_fit_add_measure_error=None,
@@ -343,7 +390,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         @param pseudocount: deprecated and not used (has no effect whatsoever)
         
-        @param random_state: the state for generating random numbers (just like the random_state from sklearn)
+        @param disable_random : Boolean indicating whether this class uses random-number generator
+        @param random_state: the state for generating random numbers (just like the random_state from sklearn), -1 means setting disable_random=True
         
         @param fit_add_measure_error         : introduce noise to the fit                      method to prevent overfitting. Empirical evidence supports its use for plain decision trees. 
         @param transform_add_measure_error   : introduce noise to the transform                method to prevent overfitting. This option is advanced. 
@@ -385,6 +433,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         # self.cccv = CalibratedClassifierCV(estimator=self._internal_predictor, method='isotonic', cv=KFold(n_splits=n_splits, shuffle=True, random_state=random_state), n_jobs=cccv_n_jobs, ensemble=True)
         # We tested calibration and confirmed that LogisticRegression is already well-calibrated, which is as expected from theory.
         self.pseudocount = pseudocount
+        self.disable_random = disable_random
         self.random_state = random_state
         self.fit_add_measure_error = fit_add_measure_error
         self.transform_add_measure_error = transform_add_measure_error
@@ -795,38 +844,62 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 y1 = np.array([y for (x,y) in xylist])
                 center_log_odds = 0
                 self.raw_log_odds_[colidx] = y1
-                n_effective_examples = len(xylist)
+                # n_effective_examples = len(xylist)
             else:
-                x = X[:,colidx]
-                xord = self.ensure_total_order(x)
-                xylist = sorted(zip(xord,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
-                xylistlist = self.partition(xylist)
                 xcenters = []
                 xodds = []
-                prev_ylabel = None
-                for i, curr_xylist in enumerate(xylistlist):
-                    prev_len = (len(xylistlist[i-1]) if (i-1 >= 0)               else len(xylistlist[i+1]))
-                    next_len = (len(xylistlist[i+1]) if (i+1 <  len(xylistlist)) else len(xylistlist[i-1]))
-                    pre2_len = (len(xylistlist[i-2]) if (i-2 >= 0)               else len(curr_xylist))
-                    nex2_len = (len(xylistlist[i+2]) if (i+2 <  len(xylistlist)) else len(curr_xylist))
-                    assert prev_len > 0
-                    assert next_len > 0
-                    assert len(curr_xylist) > 0
-                    yset = set(xy[1] for xy in curr_xylist)
-                    assert len(yset) == 1
-                    ylabel = list(yset)[0]
-                    assert prev_ylabel != ylabel
-                    xcenter = sum(xy[0] for xy in curr_xylist) / float(len(curr_xylist))
-                    odds = (powermean((len(curr_xylist), powermean((pre2_len, nex2_len)))) + 0*self.pseudocount) / (powermean((prev_len, next_len)) + 0*self.pseudocount)
-                    xcenters.append(xcenter)
-                    xodds.append((odds) if (ylabel == 1) else (1/odds))
-                    prev_ylabel = ylabel
+                x = X[:,colidx]
+                if self.random_state < 0 or self.disable_random:
+                    contig_list = _transform_and_partition(x, y)
+                    featval_x0cnt_x1cnt_list = [_center_group(contig) for contig in contig_list]
+                    for i, (featval, (x0cnt, x1cnt)) in enumerate(featval_x0cnt_x1cnt_list):
+                        prev1_x0cnt, next1_x0cnt, prev1_x1cnt, next1_x1cnt = (0, 0, 0, 0)
+                        if x0cnt < 3.9 or x1cnt < 3.9:
+                            prev1_featval, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[abs(i-1)]
+                            next1_featval, (next1_x0cnt, next1_x1cnt) = featval_x0cnt_x1cnt_list[min((i+1,2*len(featval_x0cnt_x1cnt_list)-i-3))]
+                            x0cnt += prev1_x0cnt + next1_x0cnt
+                            x1cnt += prev1_x1cnt + next1_x1cnt
+                        if x0cnt - (prev1_x0cnt + next1_x0cnt) * 0.5 < 2.9 or x1cnt - (prev1_x1cnt + next1_x1cnt) * 0.5 < 2.9:
+                            prev1_featval, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[abs(i-2)]
+                            next1_featval, (next1_x0cnt, next1_x1cnt) = featval_x0cnt_x1cnt_list[min((i+2,2*len(featval_x0cnt_x1cnt_list)-i-4))]
+                            x0cnt += prev1_x0cnt + next1_x0cnt
+                            x1cnt += prev1_x1cnt + next1_x1cnt
+                        x0cnt -= (prev1_x0cnt + next1_x0cnt) * 0.5
+                        x1cnt -= (prev1_x1cnt + next1_x1cnt) * 0.5
+                        assert x0cnt > 1.9, f'{x0cnt} > 1.9 failed for {featval_x0cnt_x1cnt_list} at {i}-th index (elemnt={featval, (x0cnt, x1cnt)})'
+                        assert x1cnt > 1.9, f'{x1cnt} > 1.9 failed for {featval_x0cnt_x1cnt_list} at {i}-th index (elemnt={featval, (x0cnt, x1cnt)})'
+                        xcenter = featval
+                        odds = x1cnt / x0cnt
+                        xcenters.append(xcenter)
+                        xodds.append(odds)
+                else:
+                    xord = self.ensure_total_order(x)
+                    xylist = sorted(zip(xord,y)) #xylist = (self.total_order(x, y) if (len(set(x)) > 1) else sorted(zip(x,y)))
+                    xylistlist = self.partition(xylist)                
+                    prev_ylabel = None
+                    for i, curr_xylist in enumerate(xylistlist):
+                        prev_len = (len(xylistlist[i-1]) if (i-1 >= 0)               else len(xylistlist[i+1]))
+                        next_len = (len(xylistlist[i+1]) if (i+1 <  len(xylistlist)) else len(xylistlist[i-1]))
+                        pre2_len = (len(xylistlist[i-2]) if (i-2 >= 0)               else len(curr_xylist))
+                        nex2_len = (len(xylistlist[i+2]) if (i+2 <  len(xylistlist)) else len(curr_xylist))
+                        assert prev_len > 0
+                        assert next_len > 0
+                        assert len(curr_xylist) > 0
+                        yset = set(xy[1] for xy in curr_xylist)
+                        assert len(yset) == 1
+                        ylabel = list(yset)[0]
+                        assert prev_ylabel != ylabel
+                        xcenter = sum(xy[0] for xy in curr_xylist) / float(len(curr_xylist))
+                        odds = (powermean((len(curr_xylist), powermean((pre2_len, nex2_len)))) + 0*self.pseudocount) / (powermean((prev_len, next_len)) + 0*self.pseudocount)
+                        xcenters.append(xcenter)
+                        xodds.append((odds) if (ylabel == 1) else (1/odds))
+                        prev_ylabel = ylabel
                 raw_log_odds = np.log(xodds)
                 center_log_odds = np.log(self.prevalence_odds_)                
                 self.raw_log_odds_[colidx] = raw_log_odds
                 x1 = np.array(xcenters)
                 y1 = relative_log_odds = raw_log_odds - center_log_odds
-                n_effective_examples = (len(xylistlist) + 1) / 2.0
+                # n_effective_examples = (len(xylistlist) + 1) / 2.0
                 
             X_in = inX
             self.ixs1_[colidx] = x1
