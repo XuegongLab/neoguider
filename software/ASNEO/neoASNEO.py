@@ -42,6 +42,10 @@ def InputParser():
     parser.add_argument('--rpkm', default=1, help='Cutoff of transcript rpkm value, default 1')
     parser.add_argument('--columns', action='store_true', help='If junction file contain columns name,'
                              'If set, must contain "chrom, intron_start, intron_stop, unique_junction_reads"')
+    parser.add_argument('-c', '--canonical_isoforms', required=True, help='Canonical isoform cDNA fasta file')
+    parser.add_argument('--rna_fqs', nargs='+', required=True, help='RNA fastq file(s)')
+    parser.add_argument('--ncpus',   default=16, help='Number of CPUs used by kallisto to index and quant the transcripts in the fasta file with both canonical and novel isoforms.')
+
     args = parser.parse_args()
     return args
 
@@ -242,10 +246,34 @@ def ProcessSJ(junc_file, columns, reads, psi, bam, rpkm, process, expression_fil
     data.to_csv(path['iso_csv'],header=1,sep='\t',index=0)
 
 
-def Iso2Prot(genome, isobed, isofa, protfa):
+def Iso2Prot(genome, isobed, isofa, protfa, args):
     logging.debug("Call bedtools to extract DNA sequence")
-    cmd = "%s getfasta -s -name -split -fi %s -bed %s -fo %s" % (path['bedtools'], genome, isobed, isofa)
+    cmd = "%s getfasta -s -name -split -fi %s -bed %s -fo %s" % (path['bedtools'], genome, isobed, isofa + '.tmp')
+    print(cmd)
     subprocess.call(cmd, shell=True)
+    cmd = f''' cat {isofa}.tmp | awk ''' + r''' ' { if ($0 ~ "^>") {print $0 "_" NR } else { print $0 } } ' ''' + f''' > {isofa} '''
+    print(cmd)
+    subprocess.call(cmd, shell=True)
+    cmd = f''' cat {args.canonical_isoforms} {isofa} > {isofa}.both '''
+    print(cmd)
+    subprocess.call(cmd, shell=True)
+    cmd = f'kallisto index -t {args.ncpus} -i {isofa}.both.kallisto-idx {isofa}.both'
+    print(cmd)    
+    subprocess.call(cmd, shell=True)
+    cmd = f'kallisto quant -t {args.ncpus} -i {isofa}.both.kallisto-idx -o {isofa}.both.kallisto-out {" ".join(args.rna_fqs)}'
+    print(cmd)
+    subprocess.call(cmd, shell=True)
+
+    id2tpm = {}
+    with open(f'{isofa}.both.kallisto-out/abundance.tsv') as file:
+        for lineno, line in enumerate(file):
+            tokens = line.split()
+            seqid, tpm = tokens[0], tokens[-1]
+            if lineno == 0:
+                assert tpm == 'tpm'
+                continue
+            assert seqid not in id2tpm, f'The seq with ID={seqid} is found at least twice in {isofa}.both.kallisto-out/abundance.tsv'
+            id2tpm[seqid] = float(tpm)
     seqs = SeqIO.parse(isofa, 'fasta')
     with open(protfa, 'w') as f:
         # line_num=0
@@ -255,13 +283,13 @@ def Iso2Prot(genome, isobed, isofa, protfa):
             if len(pep.strip()) > 30:
                 f.write('>%s\n%s\n' % (sequence.id, pep))
             # line_num+=1
-
+    return id2tpm
 
 def getTPM(refseq_mrna):
     df1 = df[df["RefSeq mRNA ID"]==refseq_mrna]
     ensembl_mrna = df1["Transcript stable ID"].item()
 
-def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, save=None):
+def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, id2tpm, save=None):
     sequences = SeqIO.parse(protfa, 'fasta')
     peps = set()
     peps_pos = set()
@@ -284,8 +312,8 @@ def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, save=None):
     gene_exp_list = [x[:-2] for x in gene_exp_list]
     gene_exp_tpm = gene_exp['tpm'].to_list()
 
-    for sequence in sequences:
-        refseq_mrna=str(sequence.id).strip().split(':')[0]
+    for sequence_record in sequences:
+        refseq_mrna=str(sequence_record.id).strip().split(':')[0]
         # print(refseq_mrna)
         df1 = df[df["RefSeq mRNA ID"]==refseq_mrna]
         if not df1.empty:
@@ -301,11 +329,11 @@ def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, save=None):
                 continue
             tpm = max(tpm_list)
             # print(tpm)
-            sequence = str(sequence.seq).strip()
+            sequence = str(sequence_record.seq).strip()
             for i in range(len(sequence) - peplen + 1):
                 peps.add(sequence[i:i + peplen])
                 #peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+str(int(round(tpm,1)*10)))
-                peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+str(tpm))
+                peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+'{:g}'.format(id2tpm[sequence_record.id])) #str(tpm)
             line_num+=1
     if save:
         with open(save, 'w') as f:
@@ -350,16 +378,16 @@ def ParseAffit(protfa, affit, epit, bind):
                 fout.write('\t'.join([hla, mtpep] + lines[11:14] + ['|'.join(keys)]) + '\n')
 
 
-def ProcessIsoform(genome, length, tpm_threshold, expression_file):
+def ProcessIsoform(genome, length, tpm_threshold, expression_file, args):
     logging.info("Begin Isoform to Epitope Process ...")
     logging.info("Translate isoforms to protein")
-    Iso2Prot(genome=genome, isobed=path['iso_bed'], isofa=path['iso_fa'], protfa=path['prot_fa'])
+    id2tpm = Iso2Prot(genome=genome, isobed=path['iso_bed'], isofa=path['iso_fa'], protfa=path['prot_fa'], args=args)
     logging.info("Cut protein to short peptide")
     remain_pep = set()
     peplens = [int(l.strip()) for l in str(length).strip().split(',')]
     pep_ordinal = 0
     for peplen in peplens:
-        peps = GenKmerPep(protfa=path['prot_fa'], peplen=peplen, tpm_threshold=tpm_threshold, expression_file=expression_file)
+        peps = GenKmerPep(protfa=path['prot_fa'], peplen=peplen, tpm_threshold=tpm_threshold, expression_file=expression_file, id2tpm=id2tpm)
         norm_peps = GenKmerPep_ref(protfa=path['refseq_fa'], peplen=peplen, save=path['refpep_%s'%peplen])
         # pep = set([pep.strip().split('_')[0] for pep in peps]) - set([pep.strip().split('_')[0] for pep in norm_peps])#peps - norm_peps
         # peps[pep.strip().split('_')[0] not in norm_peps for pep in peps]
@@ -591,6 +619,8 @@ def DefinePath(args):
     path['result_dir'] = os.path.join(args.outdir, '../../info')
 
     path['iso_bed'] = os.path.join(path['tdir'], args.prefix+'_splicing.bed')
+    if os.path.exists(path['iso_bed']):
+        os.remove(path['iso_bed'])
     path['iso_csv'] = os.path.join(path['result_dir'], args.prefix+'_splicing.csv')
     path['iso_fa'] = os.path.join(path['tdir'], 'putative_isoform.fa')
     path['prot_fa'] = os.path.join(path['tdir'], 'putative_protein.fa')
@@ -616,7 +646,7 @@ def main():
         os.mkdir(path['tdir'])
 
     ProcessSJ(args.junc, args.columns, args.reads, args.psi, args.bam, args.rpkm, args.process, args.expression_file, args.tpm_threshold)
-    ProcessIsoform(args.genome, args.length, args.tpm_threshold, args.expression_file)
+    ProcessIsoform(args.genome, args.length, args.tpm_threshold, args.expression_file, args)
     # ProcessNeo(args.process)
     # shutil.rmtree(path['tdir'])
     logging.info('All Process Done!')
