@@ -97,7 +97,7 @@ sys.path.append(ISO_DIR)
 logging.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} ISO_NAME={ISO_NAME} ISO_MODULE={ISO_MODULE} ISO_EXT={ISO_EXT}')
 IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
-NG_default = 'NG'
+NG_default = 'NG_withNumTested'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
 from custom_models import FixedOneLogisticRegression  # Now pickleable!
@@ -233,11 +233,13 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
     F'{NG_default}'       : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=['ln_NumTested']),
     'NG_withoutNumTested' : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=[]),
+    'NG_withNumTested_In' : IsotonicLogisticRegression(random_state=int(args1.randseed), excluded_cols=[]),
+
     # For testing purpose
-    'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
-    'TestNg_rand0_rep2'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
-    'TestNg_rand1_rep1'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
-    'TestNg_rand1_rep2'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand0_rep2'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand1_rep1'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand1_rep2'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
 }
 
 # Let StandardScaler represent IdentityTransformer, MaxAbsScaler, MinMaxScaler, and RobustScaler since they are all linear maps
@@ -294,9 +296,9 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     # 'hParamDefault_GP':  GaussianProcessClassifier(random_state=args1.randseed),
 
     'hParamDefault_DT':  DecisionTreeClassifier(random_state=args1.randseed),
-    'hParamNCItrain_DT':  DecisionTreeClassifier(random_state=args1.randseed, **DT_best_hparams),
+    #'hParamNCItrain_DT':  DecisionTreeClassifier(random_state=args1.randseed, **DT_best_hparams),
     'hParamDefault_RF':  RandomForestClassifier(random_state=args1.randseed),
-    'hParamNCItrain_RF':  RandomForestClassifier(random_state=args1.randseed, **RF_best_hparams),
+    #'hParamNCItrain_RF':  RandomForestClassifier(random_state=args1.randseed, **RF_best_hparams),
     'hParamDefault_MLP': MLPClassifier(random_state=args1.randseed),
     'hParamDefault_AB':  AdaBoostClassifier(random_state=args1.randseed),
     'hParamDefault_GNB': GaussianNB(),
@@ -385,6 +387,7 @@ SOFT_NAME_TO_MANUSCRIPT_NAME = {
 }
 
 SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS = {
+    NG_default : 'NG',
     'ln_NumTested' : 'NumTested',
     'mhcflurry_aff_percentile'         : 'MHCflurry_aff_%',
     'mhcflurry_presentation_percentile': 'MHCflurry_presentation_%',
@@ -763,17 +766,14 @@ def assert_prob_arr(prob_pred, ml_pipename):
         assert 1-1e-9 < (x + y) and (x + y) < 1+1e-9, F'The probabilities {x} and {y} do not sum to one for {ml_pipename}!'
 
 def drop_feat_from_X(ml_pipename, X):
-    X = X.copy()
     #for colname in X.columns:
     #    if colname in ASCENDING_FEATURES: 
     #        X.loc[:,colname] = -X[colname]
     #        logging.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
-    if (not 'ln_NumTested' in X.columns):
+    if (not 'ln_NumTested' in X.columns) or 'withNumTested' in ml_pipename:
         return X.copy()
-    elif ('withoutNumTested'.lower() in ml_pipename.lower()) or (not 'neoguider' in ml_pipename.lower() and not ml_pipename.startswith(NG_default)): # and not 'NG_' in ml_pipename:
-        return X.drop(columns=['ln_NumTested'])
     else:
-        return X.copy()
+        return X.drop(columns=['ln_NumTested'])
 
 def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):    
     config_logging('FIT')
@@ -1014,7 +1014,7 @@ def benchmark_perf_2(
         ypos = list(range(len(long_df)))
         #auroc_method_class_list = zip(long_df[title_in_colname], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
         def meth2id(x):
-            if x.startswith(NG_default): return (0 if '/hParamTuned_' in x else 1)
+            if x.startswith(NG_default) or x.startswith('NG_withoutNumTested'): return (0 if '/hParamTuned_' in x else 1)
             if x in features: return 4
             if x in ex_feats: return 5
             return (2 if '/hParamTuned_' in x else 3)
