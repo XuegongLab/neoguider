@@ -232,15 +232,27 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'StandardScaler'      : StandardScaler(),
     # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
     F'{NG_default}'         : IsotonicLogisticRegression(excluded_cols=['ln_NumTested']),
-    'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[]),
-    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[]),
+    
+    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[              ]),
+    'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[              ]),    
+    'NG_withoutNumTested_BW2':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=2),
+    'NG_withoutNumTested_BW3':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=3),
+
     'NG_withNumTested_BW1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=1),
     'NG_withNumTested_BW2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=2),
-    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=4),
+    'NG_withNumTested_BW3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=3),
+    'NG_withNumTested_BW5'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=5),
     'NG_withNumTested_BW8'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
-    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+1),
-    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+2),
-    'NG_withNumTested_RS3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=int(args1.randseed)+3),
+    'NG_withNumTested_BW13' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=13),
+
+    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
+    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
+    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
+    'NG_withNumTested_RS3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+3),
+
+    'NG_withNumTested_RS0_F': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed),           feat_pvalue_drop=False),
+    'NG_withNumTested_BW3_F': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=3, feat_pvalue_drop=False),
+    'NG_withNumTested_F'    : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'],                                          feat_pvalue_drop=False),
     
     # For testing purpose
     #'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
@@ -940,12 +952,14 @@ def benchmark_perf_2(
         classifier_names,
         features, # included in model
         ex_feats, # excluded from model
-        labelcol, 
+        labelcol,
         colname2rocauc_list=[{}],
-        metric_name='roc_auc', 
-        metric_thresholds=[0], 
-        titles=[''], 
-        barh_fmt='%.4g'):
+        metric_name='roc_auc',
+        metric_thresholds=[0],
+        titles=[''],
+        barh_fmt='%.4g',
+        sort_type=2,
+        figheight=6*3):
     n_subfigs = max((len(df_ins), len(colname2rocauc_list), len(metric_thresholds), len(titles)))
     assert len(df_ins) in [1, n_subfigs], F'Found {len(df_ins)} df_ins but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
     assert len(colname2rocauc_list) in [1, n_subfigs], F'Found {len(colname2rocauc_list)} colname2rocauc_list but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
@@ -955,7 +969,7 @@ def benchmark_perf_2(
     if len(colname2rocauc_list) < n_subfigs: colname2rocauc_list = [colname2rocauc_list[0]] * n_subfigs
     if len(metric_thresholds) < n_subfigs: metric_thresholds = [metric_thresholds[0]] * n_subfigs
     
-    fig_1, ax_1 = plt.subplots(figsize=(6*max((1.5,n_subfigs)), 6*3))
+    fig_1, ax_1 = plt.subplots(figsize=(6*max((1.5,n_subfigs)), figheight))
     ax_1.set_axis_off()
     gs = gridspec.GridSpec(2, n_subfigs, height_ratios=[1, 25])
     legend_ax = fig_1.add_subplot(gs[0,:])
@@ -1011,13 +1025,15 @@ def benchmark_perf_2(
             else:
                 ft_preproc_name, classifier_name = decomb(colname)
                 auc_df.loc[ft_preproc_name, classifier_name] = roc_auc
+                outf = out_fname_fmt.format('with_featproc_clf_combs'     + title_in_fname) + '.pdf.tsv'
+                # print(F'{outf}: auc_df.loc[{ft_preproc_name},{classifier_name}] = {roc_auc} -> {auc_df.loc[ft_preproc_name, classifier_name]} = {roc_auc} # CHECK_01')
                 auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std
         long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_moe']) # AUROC -> title_in_colname
-        long_df.to_csv(out_fname_fmt.format('with_both' + title_in_fname), sep='\t', index=True)
-        auc_series2.to_csv(out_fname_fmt.format('with_add_features' + title_in_fname), sep='\t', index=True)
-        auc_series.to_csv(out_fname_fmt.format('with_raw_features' + title_in_fname), sep='\t', index=True)
-        auc_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs' + title_in_fname), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
-        auc_std_df.to_csv(out_fname_fmt.format('with_featproc_clf_combs_std' + title_in_fname), sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
+        long_df.    to_csv(out_fname_fmt.format('with_both'                   + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
+        auc_series2.to_csv(out_fname_fmt.format('with_add_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
+        auc_series. to_csv(out_fname_fmt.format('with_raw_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
+        auc_df.     to_csv(out_fname_fmt.format('with_featproc_clf_combs'     + title_in_fname) + '.pdf.tsv', sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
+        auc_std_df. to_csv(out_fname_fmt.format('with_featproc_clf_combs_std' + title_in_fname) + '.pdf.tsv', sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
 
         if False:
             fig_heat, ax_heat = plt.subplots(figsize=(9, 4))
@@ -1054,13 +1070,18 @@ def benchmark_perf_2(
         methclass2priority = [1, 3, 0, 2, 5, 4]
         long_df['MethClass'] = long_df['Method'].apply(meth2id)
         long_df['MethClassPriority'] = [methclass2priority[mc] for mc in long_df['MethClass']]
-        long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'])
+        if sort_type == 1:
+            long_df['Clf'] = long_df['Method'].str.split('_').str[-1]
+            long_df = long_df.sort_values(by=['MethClassPriority','Clf','Method',title_in_colname], ascending=False)
+        elif sort_type == 2:
+            long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'], ascending=False)
+        else: raise ValueError(f'The sort_type {sort_type} is invalid. ')
         long_df['ypos'] = list(range(len(long_df)))
         methclass_df_iterable = long_df.groupby('MethClass')
         hbars_list = []
         methclass_list = []
         cmap = matplotlib.colormaps['tab20']
-        smallest_fontsize = min((9, 900.0 / (1.0 + len(long_df))))
+        smallest_fontsize = min((9, 50*figheight / (1.0 + len(long_df))))
         for classidx, (methclass, df) in enumerate(sorted(methclass_df_iterable)):
             xerr = (df[title_in_colname+'_moe']).fillna(0)
             hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=methclass2desc[methclass], color=cmap.colors[classidx], xerr=xerr)
@@ -1115,7 +1136,7 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*6)
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage2', 
@@ -1124,7 +1145,7 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3)
 
 def x_allin_y(X, Y):
     for x in X:
