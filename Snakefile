@@ -390,7 +390,7 @@ rule RNA_splicing_peptide_generation:
     run:
         shell(
         'mkdir -p {info_dir} '
-        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t -1 -c {CDNA_REF} --rna_fqs {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --ncpus 4 '
+        ' && python {script_basedir}/software/ASNEO/neoASNEO.py -j {input.sj} -g {ASNEO_REF} -o {asneo_out} -l 8,9,10,11 -p {PREFIX} -t -1 -c {CDNA_REF} --rna_fqs {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} --process 12 '
         ' -e {outf_rna_quantification}'
         ' && cat {asneo_out}/{PREFIX}_splicing_* > {peptide_dir}/{PREFIX}_splicing.fasta'
         )

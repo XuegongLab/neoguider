@@ -44,7 +44,6 @@ def InputParser():
                              'If set, must contain "chrom, intron_start, intron_stop, unique_junction_reads"')
     parser.add_argument('-c', '--canonical_isoforms', required=True, help='Canonical isoform cDNA fasta file')
     parser.add_argument('--rna_fqs', nargs='+', required=True, help='RNA fastq file(s)')
-    parser.add_argument('--ncpus',   default=16, help='Number of CPUs used by kallisto to index and quant the transcripts in the fasta file with both canonical and novel isoforms.')
 
     args = parser.parse_args()
     return args
@@ -171,7 +170,7 @@ def MultiIters(its, func, process):
     for i in range(len(its)//200 + 1):
         pool = multiprocessing.Pool(processes=int(process))
         bits = (it[1] for it in its.iloc[i*200:(i+1)*200,].iterrows())
-        for out in pool.imap(func, bits):
+        for out in pool.map(func, bits):
             yield out
             num += 1
             sys.stdout.write('Done %d/%d\r' % (num, len(its)))
@@ -190,13 +189,13 @@ def ProcessSJ(junc_file, columns, reads, psi, bam, rpkm, process, expression_fil
     'txEnd', 'isoform', 'protein', 'strand','cdsStart', 'cdsEnd', 'gene', 'exonNum','exonLens', 'exonStarts'))
     isoforms, count = set(), 0
     novel_isoforms = MultiIters(its=sj, func=partial(Jun2Iso, proteome=proteome, bam=bam, rpkm_value=rpkm), process=process)
-    for iso in novel_isoforms:
+    for iso in sorted(novel_isoforms):
         if iso:
             isoforms = isoforms | iso
             count += 1
     logging.info("Novel isoforms number is %s" , len(isoforms))
     with open(path['iso_bed'], 'a+') as f:
-        f.write('\n'.join(isoforms) + '\n')
+        f.write('\n'.join(sorted(isoforms)) + '\n')
 
     if os.path.exists(dfpath):
         df = pd.read_csv(dfpath)
@@ -257,10 +256,10 @@ def Iso2Prot(genome, isobed, isofa, protfa, args):
     cmd = f''' cat {args.canonical_isoforms} {isofa} > {isofa}.both '''
     print(cmd)
     subprocess.call(cmd, shell=True)
-    cmd = f'kallisto index -t {args.ncpus} -i {isofa}.both.kallisto-idx {isofa}.both'
+    cmd = f'kallisto index -i {isofa}.both.kallisto-idx {isofa}.both'
     print(cmd)    
     subprocess.call(cmd, shell=True)
-    cmd = f'kallisto quant -t {args.ncpus} -i {isofa}.both.kallisto-idx -o {isofa}.both.kallisto-out {" ".join(args.rna_fqs)}'
+    cmd = f'kallisto quant -i {isofa}.both.kallisto-idx -o {isofa}.both.kallisto-out {" ".join(args.rna_fqs)}'
     print(cmd)
     subprocess.call(cmd, shell=True)
 
@@ -313,6 +312,14 @@ def GenKmerPep(protfa, peplen, tpm_threshold, expression_file, id2tpm, save=None
     gene_exp_tpm = gene_exp['tpm'].to_list()
 
     for sequence_record in sequences:
+        sequence = str(sequence_record.seq).strip()
+        for i in range(len(sequence) - peplen + 1):
+            peps.add(sequence[i:i + peplen])
+            #peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+str(int(round(tpm,1)*10)))
+            peps_pos.add(sequence[i:i + peplen]+"_"+str(line_num)+"_"+'{:g}'.format(id2tpm[sequence_record.id])) #str(tpm)
+        line_num+=1
+        continue
+
         refseq_mrna=str(sequence_record.id).strip().split(':')[0]
         # print(refseq_mrna)
         df1 = df[df["RefSeq mRNA ID"]==refseq_mrna]
@@ -393,7 +400,7 @@ def ProcessIsoform(genome, length, tpm_threshold, expression_file, args):
         # peps[pep.strip().split('_')[0] not in norm_peps for pep in peps]
         pep_out = set()
         pep_saved = set()
-        for pep in peps:
+        for pep in sorted(peps):
             if (pep.strip().split('_')[0] not in norm_peps) & (pep.strip().split('_')[0] not in pep_saved):
                 pep_out.add(pep)
                 pep_saved.add(pep.strip().split('_')[0])
@@ -401,7 +408,7 @@ def ProcessIsoform(genome, length, tpm_threshold, expression_file, args):
         logging.debug("After filter, remain %s mer peptide number is: %s", peplen, len(peps))
         remain_pep = remain_pep | pep_out
         with open(path['pep_%s'%peplen], 'w') as f:
-            for pep in pep_out:
+            for pep in sorted(pep_out):
                 #f.write(">SP_"+pep.split('_')[1]+"_"+pep.split('_')[2]+'\n')
                 pep_seq, pep_id, pep_tpm = pep.split('_')
                 # https://stackoverflow.com/questions/2267362/how-to-convert-an-integer-to-a-string-in-any-base
