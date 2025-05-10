@@ -365,7 +365,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             final_predictor = None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
             pseudocount=0.5,
             disable_random=False,
-            random_state=0,
+            random_state=-1,
             min_n_adaKDE_samples=2.0, # only used when disable_random=True
             fit_add_measure_error=None,
             transform_add_measure_error=None,
