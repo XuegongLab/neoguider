@@ -42,6 +42,8 @@ from IsotonicLogisticRegression import IsotonicLogisticRegression
 random.seed(0)
 np.random.seed(0)
 
+THE_FLOAT_FORMAT = '%g'
+
 BIG_INT = 2**30
 
 # https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
@@ -55,13 +57,13 @@ SCALERS = {
     'RobustScaler'        : RobustScaler(),
     'StandardScaler'      : StandardScaler(),
     'StandardTransformer' : QuantileTransformer(random_state=0, output_distribution='normal'),
-    '_KDEIsoTransformer00' : IsotonicLogisticRegression(random_state=0, fit_data_clear=True, 
+    '_KDEIsoTransformer00' : IsotonicLogisticRegression(fit_data_clear=True, 
         fit_add_measure_error=False, transform_add_measure_error=False, ft_fit_add_measure_error=False, ft_transform_add_measure_error=False),
-    '_KDEIsoTransformer01' : IsotonicLogisticRegression(random_state=0, fit_data_clear=True, 
+    '_KDEIsoTransformer01' : IsotonicLogisticRegression(fit_data_clear=True, 
         fit_add_measure_error=False, transform_add_measure_error=False, ft_fit_add_measure_error=False, ft_transform_add_measure_error=True ),
-    '_KDEIsoTransformer10' : IsotonicLogisticRegression(random_state=0, fit_data_clear=True, 
+    '_KDEIsoTransformer10' : IsotonicLogisticRegression(fit_data_clear=True, 
         fit_add_measure_error=False, transform_add_measure_error=True,  ft_fit_add_measure_error=False, ft_transform_add_measure_error=False),
-    '_KDEIsoTransformer11' : IsotonicLogisticRegression(random_state=0, fit_data_clear=True, 
+    '_KDEIsoTransformer11' : IsotonicLogisticRegression(fit_data_clear=True, 
         fit_add_measure_error=False, transform_add_measure_error=True,  ft_fit_add_measure_error=False,  ft_transform_add_measure_error=True),
 }
 
@@ -200,8 +202,8 @@ def patientwise_predict(tuple_arg):
             pipedf = pipedf.astype({"Rank":int})
             pipedf['ML_pipeline'] = pipeline_name
             other_pred = F'{outpref}.other_method_{(i+1):03d}.baseline'
-            #pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA')
-            pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=1, index=0, na_rep='NA', compression='gzip')
+            #pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=1, index=0, na_rep='NA', compression='gzip', float_format=THE_FLOAT_FORMAT)
 
             if 'VALIDATED' in pipedf.columns:
                 evalres = assess_top20_top50_top100_ttif_fr_auprc(pipedf)
@@ -219,7 +221,7 @@ def patientwise_predict(tuple_arg):
             json.dump(evalres3, file, indent=2)
         with open(outpref + '.methods.performance.tsv', 'w') as file:
             eval_df = pd.DataFrame.from_dict(evaldict)
-            eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA')
+            eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     
     df = df1
     
@@ -247,8 +249,8 @@ def patientwise_predict(tuple_arg):
     col2last(df, 'PepTrace')
     dropcols(df, ['BindLevel', 'BindAff'])
     logger.info(F'N_rows={len(df)} N_cols={len(df.columns)} for {outpref}')
-    df.to_csv(outpref, sep='\t', header=1, index=0, na_rep='NA')
-    df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=1, index=0, na_rep='NA')
+    df.to_csv(outpref, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
 
     if 'VALIDATED' in df.columns:
         evalres = assess_top20_top50_top100_ttif_fr_auprc(df)
@@ -264,7 +266,7 @@ def patientwise_predict(tuple_arg):
             evaldict[k].append(v)
         with open(outpref + '.performance.tsv', 'w') as file:
             eval_df = pd.DataFrame.from_dict(evaldict)
-            eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA')
+            eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     logger.info(F'END:   infile={infile}')
     return 0
 
@@ -338,8 +340,7 @@ def main():
         pipelines = []
         big_train_X = big_train_df.loc[:, listof_features[0]].copy()
         if args.mintrain:
-            pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=1, index=0, na_rep='NA')
-        big_train_X = big_train_X.round(5)
+            pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
         big_train_X = pd.DataFrame(big_train_X)
         big_train_y = pd.Series(big_train_y)
         if ('method' in args.baseline.split(',')):
@@ -355,7 +356,7 @@ def main():
             pipelines = Parallel(n_jobs=args.ncores)(delayed(mapfunc)(arg) for arg in map_args)
         ilrs = []
         for features in listof_features:
-            big_train_X = big_train_df.loc[:, features].copy().round(5)
+            big_train_X = big_train_df.loc[:, features].copy()
             iso_scaler = IsotonicLogisticRegression(excluded_cols=['ln_NumTested']) # excluded_cols is used for better extrapolation
             iso_scaler.fit(big_train_X, big_train_y)
             ilrs.append(iso_scaler)
@@ -372,7 +373,6 @@ def main():
             ilrs, pipeline_names, pipelines = pickle.load(file)
     else:
         ilrs, pipeline_names, pipelines = ([], [], [])
-    pp.pprint([(i, ilr.get_info()) for i, ilr in enumerate(ilrs)])
     
     logger.info(F'Finished fitting IsotonicLogisticRegressions. ')
     

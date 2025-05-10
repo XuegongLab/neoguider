@@ -179,7 +179,6 @@ Example command is:
 python neopredictor.py --train from_improve/pred_df_Simple.txt --test from_improve/pred_df_Simple.txt --model from_improve/pred_df_Simple.pickle --feature-sets 'Aro,pI,CysRed,RankBA,Expression' --label response --sep " "
 ```
 Please be aware that the above command uses the same data for training and test, which should be avoided in real applications due to overfitting (the command is only used to show how to use neopredictor.py). 
-Also, neopredictor.py rounds every input feature value to 5 digits after the decimal point, so the input feature values cannot be too close to zero. 
 
 ### How to use this repository as a scikit-learn machine-learning library
 
