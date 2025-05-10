@@ -1072,11 +1072,11 @@ def benchmark_perf_2(
         long_df['MethClassPriority'] = [methclass2priority[mc] for mc in long_df['MethClass']]
         if sort_type == 1:
             long_df['Clf'] = long_df['Method'].str.split('_').str[-1]
-            long_df = long_df.sort_values(by=['MethClassPriority','Clf','Method',title_in_colname], ascending=False)
+            long_df = long_df.sort_values(by=['MethClassPriority','Clf','Method',title_in_colname], ascending=True)
         elif sort_type == 2:
-            long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'], ascending=False)
+            long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'], ascending=True)
         else: raise ValueError(f'The sort_type {sort_type} is invalid. ')
-        long_df['ypos'] = list(range(len(long_df)))
+        long_df['ypos'] = np.array(list(range(len(long_df))))
         methclass_df_iterable = long_df.groupby('MethClass')
         hbars_list = []
         methclass_list = []
