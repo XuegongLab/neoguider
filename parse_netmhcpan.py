@@ -365,7 +365,8 @@ def netmhcpan_result_to_df(infilename):
                 row[2] = pep_norm(row[2])
                 rows.append(row)
     logging.info(F'File={infilename} inheader={inheader}')
-    df = pd.DataFrame(rows, columns = inheader)
+    df = pd.DataFrame(rows, columns=inheader)
+    df = df.sort_values(by=list(df.columns))
     df.columns = df.columns.str.replace('HLA', 'MHC')
     etpep_mhc_to_aff = {}
     for identity, etpep, mhc, aff in zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)']):
@@ -417,8 +418,8 @@ def netmhcpan_df_in2out(df, etpep_mhc_to_aff, et2mt_mt2wt_2tup_pep2pep, et_mt_wt
         not_rna_fids = set(fid for fid in fids if not fid_is_moltype(fid, 'R'))
         # dna_rna_equiv_fids = set(fid_to_dna_rna_equiv_fid(fid) for fpep in etpep_to_fpep_list[etpep] for fid in fpep_to_fid_list[fpep])
         #etpep_tpm = sum(fid_to_tpm[fid] for fid in dna_rna_equiv_fids)
-        not_dna_etpep_tpm = sum(fid2finfo[fid][INFO_TPM_IDX] for fid in not_dna_fids) # (if fid2finfo[fid][INFO_MT_IDX] == fid2finfo[fid][INFO_ET_IDX])
-        not_rna_etpep_tpm = sum(fid2finfo[fid][INFO_TPM_IDX] for fid in not_rna_fids) # (if fid2finfo[fid][INFO_MT_IDX] == fid2finfo[fid][INFO_ET_IDX])
+        not_dna_etpep_tpm = sum(fid2finfo[fid][INFO_TPM_IDX] for fid in sorted(not_dna_fids)) # (if fid2finfo[fid][INFO_MT_IDX] == fid2finfo[fid][INFO_ET_IDX])
+        not_rna_etpep_tpm = sum(fid2finfo[fid][INFO_TPM_IDX] for fid in sorted(not_rna_fids)) # (if fid2finfo[fid][INFO_MT_IDX] == fid2finfo[fid][INFO_ET_IDX])
         etpep_tpm = max((not_dna_etpep_tpm, not_rna_etpep_tpm))
         
         mtpep_list = []
