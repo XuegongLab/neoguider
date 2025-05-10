@@ -24,11 +24,12 @@ conda create -y -n $neoguider
 # Order of packages: common bin, common lib, machine-learning lib, bioinformatics bin, bioinformatics lib 
 # note:
 #   pyfasta is replaced by pyfaidx
+#   kallisto with versions higher than 0.48 is characterized by some non-deterministic behavior, generating different outputs from the same input
 #   ASNEO requires 'biopython<=1.79' (ASNEO code can be refactored to upgrade biopython)
 #   ERGO-II requires pytorch-lightning=0.8, but we will change a few lines of source code in ERGO-II
 #     in the next installation step to make it work with higher versions of pytorch-lightning
 #   podman can be used to provide a work-around for https://github.com/FRED-2/OptiType/issues/125
-# Please feel free to modify other version sets as needed. 
+# Please feel free to modify other version sets as needed.
 $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
     gcc openjdk parallel perl podman screen sshpass tcsh \
     joblib perl-carp-assert psutil pyyaml requests-cache zlib \
