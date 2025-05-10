@@ -373,7 +373,19 @@ HPARAM_DEFLT_CLASSIFIER_LIST = ['hParamDefault_AB', 'hParamDefault_DT', 'hParamD
 # https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 HPARAM_TUNED_CLASSIFIER_LIST = ['hParamTuned_DT', 'hParamTuned_MLP', 'hParamTuned_RF', 'hParamTuned_LR']
 
-FINAL_FT_PREPROC_NAMES = list(HPARAM_DEFLT_FT_PREPROC_NAME2TECH.keys())
+FINAL_FT_PREPROC_NAMES = (
+    'IdentityTransformer',
+    'MaxAbsScaler'       ,
+    'MinMaxScaler'       ,
+    'Normalizer'         ,
+    'PowerTransformer'   ,
+    'QuantileTransformer',
+    'RobustScaler'       ,
+    'StandardScaler'     ,
+    NG_default           ,
+    'NG_withoutNumTested'
+)
+
 FINAL_CLASSIFIER_NAMES = HPARAM_TUNED_CLASSIFIER_LIST + HPARAM_DEFLT_CLASSIFIER_LIST
 
 CLASSIFIERS_REQUIRING_STRONG_BALANCE = set([
