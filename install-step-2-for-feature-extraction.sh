@@ -50,7 +50,7 @@ cd ${rootdir}/database
 wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/pep/Homo_sapiens.GRCh37.pep.all.fa.gz
 gunzip -fk Homo_sapiens.GRCh37.pep.all.fa.gz
 
-wget http://mhcmotifatlas.org/data/classI/MS/Peptides/all_peptides.txt
+# wget http://mhcmotifatlas.org/data/classI/MS/Peptides/all_peptides.txt # use the version from 2025-0225
 python ../neomotif.py -i all_peptides.txt -o all_peptides -p Homo_sapiens.GRCh37.pep.all.fa # GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_annot.pep
 
 ###
