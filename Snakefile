@@ -126,7 +126,8 @@ OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 motif_file = F'{script_basedir}/database/all_peptides.motif.tsv'
 
 BLAST_PATH=F"{script_basedir}/software/ncbi-blast-2.14.1+/bin"
-os.environ["PATH"] = f"{BLAST_PATH}:{os.environ.get('PATH','/usr/bin')}"  # Prepend (higher priority)
+os.environ["PATH"] = f"{BLAST_PATH}:{os.environ.get('PATH','/usr/bin')}" # Prepend (higher priority)
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = 0 # Generate deterministic output, instead of stochastic output, from tensorflow by MHCflurry
 
 NA_REP = ''
 def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
