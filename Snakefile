@@ -127,7 +127,11 @@ motif_file = F'{script_basedir}/database/all_peptides.motif.tsv'
 
 BLAST_PATH=F"{script_basedir}/software/ncbi-blast-2.14.1+/bin"
 os.environ["PATH"] = f"{BLAST_PATH}:{os.environ.get('PATH','/usr/bin')}" # Prepend (higher priority)
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = '0' # Generate deterministic output, instead of stochastic output, from tensorflow by MHCflurry
+
+# Generate deterministic output, instead of stochastic output, from tensorflow by MHCflurry
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
 
 NA_REP = ''
 def isna(arg): return arg in [None, '', 'NA', 'Na', 'None', 'none', '.']
