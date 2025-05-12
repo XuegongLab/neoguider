@@ -746,9 +746,12 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         else:
             if self.task == 'regression':
                 self._internal_predictor = LinearRegression(**self.kwargs)
-                #self._internal_predictor = ElasticNetCV(**kwargs)
+                # self._internal_predictor = ElasticNetCV(**kwargs)
             else:
-                self._internal_predictor = LogisticRegression(**self.kwargs)
+                # The default-param logistic regression: different trained params from the same training data on different machines
+                #self._internal_predictor = LogisticRegression(**self.kwargs)
+                # Therefore, the following logistic regression is used
+                self._internal_predictor = LogisticRegression(random_state=0, solver='saga')
         self.irrelevant_feature_indexes_ = []
         
         #def triangular_kernel(val, mid, lo, hi): return max((0, ((val-lo) / (mid-lo) if (val < mid) else (hi-val) / (hi-mid))))
@@ -966,6 +969,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 if self.feat_pvalue_drop:
                     self.irs0_[colidx] = AlwaysConstantRegressor(0)
         log_ratios = self._transform(X, add_measure_error=add_measure_error, is_inverse=False)
+        #self.lr_X_ = np.hstack([log_ratios, exX])
+        #self.lr_y_ = y
+        #self.lr_params_ = kwargs
         self._internal_predictor.fit(np.hstack([log_ratios, exX]), y, **kwargs)
         if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
         self.n_features_in_ = X1.shape[1]
