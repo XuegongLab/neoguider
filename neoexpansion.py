@@ -149,7 +149,7 @@ def blast_search(hdr_pep_list, reference, output_file, ncores):
         #    pep2hla[selfpep] = pep2hla[selfpep] + ',' + hla
         #elif not (selfpep in pep2hla):
         #    pep2hla[selfpep] = hla
-    selfpeps = sorted(list(set(selfpeps1)))
+    selfpeps = sorted(set(selfpeps1))
     for (hdr, pep, _), selfpep, alninfo in zip(hdr_pep_list, selfpeps1, alninfos1):
         alninfo_str = json.dumps(sorted(alninfo)[::-1], separators=(',', ':'), sort_keys=True)
         print(F'{hdr} ST={selfpep} IsNeoPeptide=1 SelfAlnInfo={alninfo_str}')
@@ -158,7 +158,7 @@ def blast_search(hdr_pep_list, reference, output_file, ncores):
         if isna(selfpep):
             logging.warning(F'The string (ST="{selfpep}") is not found in the list of peptides and is skipped. ')
             continue
-        hla = ','.join(list(pep2hla[selfpep]))
+        hla = ','.join(sorted(pep2hla[selfpep]))
         print(F'>SELF_{i+1} HLA={hla} ST={selfpep} IsHelperPeptide=1 IsSearchedFromSelfProteome=1')
         print(selfpep)
 
