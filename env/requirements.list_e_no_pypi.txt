@@ -20,6 +20,7 @@ attrs=23.2.0=pyh71513ae_0
 bbmap=39.01=h92535d8_1
 bcftools=1.19=h8b25389_1
 bcrypt=4.1.2=py310hcb5633a_0
+bedtools=2.30.0=h468198e_3
 binutils_impl_linux-64=2.40=hf600244_0
 biopython=1.79=py310h5764c6d_3
 blast=2.14.1=pl5321h6f7f691_0
