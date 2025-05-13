@@ -128,7 +128,9 @@ motif_file = F'{script_basedir}/database/all_peptides.motif.tsv'
 BLAST_PATH=F"{script_basedir}/software/ncbi-blast-2.14.1+/bin"
 os.environ["PATH"] = f"{BLAST_PATH}:{os.environ.get('PATH','/usr/bin')}" # Prepend (higher priority)
 
-# Generate deterministic output, instead of stochastic output, from tensorflow by MHCflurry
+# Try to generate deterministic output, instead of stochastic output, from tensorflow by MHCflurry
+# However, the output of MHCflurry is still not the same when run on different machines (sometimes even the second significant digit is not the same)
+# Therefore, although this Snakefile runs MHCflurry, the output of MHCflurry is not incorporated into the final result by default
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_DETERMINISTIC_OPS'] = '1'
 os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
@@ -691,6 +693,11 @@ rule PeptideMHC_immunogenicity_prediction:
         with open(hla_short2long_json, 'w') as jsonfile: json.dump(hla_short2long_dict, jsonfile, indent=2)
 
 homologous_mhcflurry_txt = F'{pmhc_dir}/{PREFIX}_all_peps.mhcflurry.txt'
+if config.get('add_mhcflurry_results_into_final_tsv', 0) == 1:
+    homologous_mhcflurry_param = F'''--mhcflurry-file {homologous_mhcflurry_txt}'''
+else:
+    homologous_mhcflurry_param = ''
+
 rule PeptideMHC_mhcflurry_prediction:
     input: homologous_peptide_fasta, homologous_peptide_fasta_done
     output: homologous_mhcflurry_txt
@@ -795,13 +802,13 @@ rule PrioPrep_with_all_TCRs_from_reads:
               '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         if variantcaller == 'mutect2':
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' #' --passflag 0x0 '
             F''' {prioritization_function_params.replace('_', '-')}''')
         else:
             call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} ' # ' -S {splicing_info_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
             F' --dna-vcf {dna_tonly_raw_vcf} --rna-vcf {rna_tonly_raw_vcf} ' # ' --rna-depth {rna_tumor_depth_summary} '
@@ -815,7 +822,7 @@ rule PrioPrep_with_all_TCRs_from_pMHCs:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
               '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
-            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} '
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} '
             F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} -m {motif_file} '
             F''' {prioritization_function_params.replace('_', '-')}''')
 
@@ -859,7 +866,7 @@ rule Validation_with_all_TCRs_from_reads:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} ' # dummy
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} ' # dummy
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} -m {motif_file}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 
@@ -870,7 +877,7 @@ rule Validation_with_all_TCRs_from_pMHCs:
         truth_file = config.get('truth_file')
         truth_patientID = config.get('truth_patientID')
         call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file - -i - -I - --truth-file {truth_file} --truth-patientID {truth_patientID} '
-            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} --mhcflurry-file {homologous_mhcflurry_txt} ' # dummy
+            F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} ' # dummy
             F' -o {features_extracted_from_pmhcs_tsv} -t {alteration_type} -m {motif_file}'
             F''' {prioritization_function_params.replace('_', '-')}''')
 

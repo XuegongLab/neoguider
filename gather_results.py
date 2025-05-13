@@ -518,7 +518,8 @@ def main():
     
     netmhcstabpan_pmhc2halfperc = build_pMHC2stab(args.netmhcstabpan_file)
     prime_pmhc2stats = build_prime(args.prime_file, args.hla_short2long)
-    mhcflurry_pmhc2stats = build_mhcflurry(args.mhcflurry_file)
+    if args.mhcflurry_file:
+        mhcflurry_pmhc2stats = build_mhcflurry(args.mhcflurry_file)
     halflives = [netmhcstabpan_pmhc2halfperc[(pep, hla)][0] for (pep, hla) in zip(data['ET_pep'], data['HLA_type'])]
     data['BindStab'] = halflives
     primeinfo = {'not_found_pmhcs': []}
@@ -553,12 +554,13 @@ def main():
                 return (np.nan, np.nan, np.nan)
         else:
                 return (np.nan, np.nan, np.nan)
-    mhcflurry_aff_perc_presentation_perc = [pephla2mhcflurrystats(pep, hla, mhcflurryinfo) for (pep, hla) in zip(data['ET_pep'], data['HLA_type'])]
-    data['mhcflurry_aff_percentile'] = [x[0] for x in mhcflurry_aff_perc_presentation_perc]
-    data['mhcflurry_presentation_percentile'] = [x[1] for x in mhcflurry_aff_perc_presentation_perc]
-    if len(mhcflurryinfo['not_found_pmhcs']) > 0:
-        with open(args.mhcflurry_file + '.debug1.json', 'w') as file: json.dump({'/'.join(k): v for (k,v) in mhcflurry_pmhc2stats.items()}, file, indent=2)
-        with open(args.mhcflurry_file + '.debug2.json', 'w') as file: json.dump(mhcflurryinfo, file, indent=2)
+    if args.mhcflurry_file:
+        mhcflurry_aff_perc_presentation_perc = [pephla2mhcflurrystats(pep, hla, mhcflurryinfo) for (pep, hla) in zip(data['ET_pep'], data['HLA_type'])]
+        data['mhcflurry_aff_percentile'] = [x[0] for x in mhcflurry_aff_perc_presentation_perc]
+        data['mhcflurry_presentation_percentile'] = [x[1] for x in mhcflurry_aff_perc_presentation_perc]
+        if len(mhcflurryinfo['not_found_pmhcs']) > 0:
+            with open(args.mhcflurry_file + '.debug1.json', 'w') as file: json.dump({'/'.join(k): v for (k,v) in mhcflurry_pmhc2stats.items()}, file, indent=2)
+            with open(args.mhcflurry_file + '.debug2.json', 'w') as file: json.dump(mhcflurryinfo, file, indent=2)
 
     qseq2sseqs = allblast(sorted(list(set(list(data['ET_pep'])))), args.iedb_fasta, args.output_file)
     wseq2sseqs = allblast(sorted(list(set(list(data['WT_pep'])))), args.iedb_fasta, args.output_file)

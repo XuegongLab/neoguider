@@ -219,9 +219,9 @@ The columns are classified into two groups:
 
 - PRIME_BArank: the percentile of the estimated binding affinity between the mutant peptide and the MHC molecules (ranging from 0 to 1, lower corresponds to higher affinity and lower IC50). 
 
-- mhcflurry_aff_percentile: the percentile of the affinity between the mutant peptide and the MHC molecules (ranging from 0 to 1, lower corresponds to higher affinity and lower IC50). 
+- mhcflurry_aff_percentile: the percentile of the affinity between the mutant peptide and the MHC molecules (ranging from 0 to 1, lower corresponds to higher affinity and lower IC50). This column is not added by default since MHC generates different outputs from the same input on different platforms (https://github.com/openvax/mhcflurry/issues/253).
 
-- mhcflurry_presentation_percentile: the percentile of the probability that the peptide is presented by the MHC molecules (ranging from 0 to 1, lower means more immunogenic). 
+- mhcflurry_presentation_percentile: the percentile of the probability that the peptide is presented by the MHC molecules (ranging from 0 to 1, lower means more immunogenic). This column is not added by default since MHC generates different outputs from the same input on different platforms (https://github.com/openvax/mhcflurry/issues/253).
 
 - ln_NumTested: the number of all mutant peptides originated from the same patient (from which this peptide originated) that were or willb be tested for immunogenicity. 
 
