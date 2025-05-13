@@ -18,9 +18,10 @@ VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $
 
 mkdir -p ${rootdir}/software/asn
 cd ${rootdir}/software/asn
-git clone https://github.com/bm2-lab/ASNEO.git
+git clone https://github.com/bm2-lab/ASNEO.git || true
+pushd ASNEO && git checkout 9f43cff && popd
 tar -xvf ASNEO/src/software.tar.gz
-mv ASNEO ../
+mv ASNEO/* ../ASNEO
 
 cd       ${rootdir}/software 
 
@@ -29,15 +30,15 @@ export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${CONDA_PREFIX}/include"
 
 if [ $(echo "$1" | grep -cP "skip-uvc|skip-all-software") -eq 0 ]; then
     mv uvc uvc.bak || true
-    git clone https://gitlab.com/cndfeifei/uvc.git
-    pushd uvc
+    git clone https://gitlab.com/cndfeifei/uvc.git || true
+    pushd uvc && git checkout 193ebfa05b9b16bd2b7bd7d38b1bbd849a919e76
     ./install-dependencies.sh && make -j 6 && make deploy
     cp bin/uvc* "${CONDA_PREFIX}/bin/" || true
     popd
 
     mv uvc-delins uvc-delins.bak || true
-    git clone https://gitlab.com/cndfeifei/uvc-delins.git
-    pushd uvc-delins
+    git clone https://gitlab.com/cndfeifei/uvc-delins.git || true
+    pushd uvc-delins && git checkout 30af0939e3e9d4d492243ca38fe6cc14ac2c9ac7
     ./install-dependencies.sh && make -j 6 && make deploy
     cp bin/uvc* "${CONDA_PREFIX}/bin/" || true
     popd
@@ -51,7 +52,8 @@ if [ $(echo "$1" | grep -cP "skip-mixcr|skip-all-software") -eq 0 ]; then
 fi
 if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
     mv ERGO-II ERGO-II.bak || true
-    git clone https://github.com/IdoSpringer/ERGO-II.git
+    git clone https://github.com/IdoSpringer/ERGO-II.git || true
+    pushd ERGO-II && git checkout 85d320a && popd
     sed -i "s;ae_dir = 'TCR_Autoencoder';ae_dir = 'Models/AE' # CHANGED_FROM ae_dir = 'TCR_Autoencoder';g" ERGO-II/Models.py 
     sed -i "s;checkpoint = torch.load(ae_file);checkpoint = torch.load(ae_file, map_location='cuda:0') # CHANGED_FROM checkpoint = torch.load(ae_file);g" ERGO-II/Models.py 
     sed -i "s;from pytorch_lightning.logging import TensorBoardLogger;from pytorch_lightning.loggers import TensorBoardLogger # CHANGED_FROM from pytorch_lightning.logging import TensorBoardLogger;g" ERGO-II/Trainer.py
@@ -79,7 +81,7 @@ cd       ${rootdir}/database
 wget --no-check-certificate -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/variation/vep/homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 tar xvzf homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 wget --no-check-certificate -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh37.cdna.all.fa.gz
-gunzip -fk Homo_sapiens.GRCh37.cdna.all.fa.gz
+gunzip -cf Homo_sapiens.GRCh37.cdna.all.fa.gz > Homo_sapiens.GRCh37.pep.all.fa
 
 wget --no-check-certificate -c https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 tar xvzf GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
@@ -104,10 +106,10 @@ kallisto index -i Homo_sapiens.GRCh37.cdna.all.fa.kallisto-idx Homo_sapiens.GRCh
 ###
 
 wget --no-check-certificate -c https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
-gunzip -fk hg19.fa.gz
+gunzip -cf hg19.fa.gz > hg19.fa
 
 wget --no-check-certificate -c http://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
-gunzip -fk hg19.refGene.gtf.gz
+gunzip -cf hg19.refGene.gtf.gz > hg19.refGene.gtf
 
 #bwa index hg19.fa
 #samtools faidx hg19.fa && samtools dict hg19.fa > hg19.dict

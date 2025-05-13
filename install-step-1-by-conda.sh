@@ -34,7 +34,7 @@ $conda install -y -n $neoguider python=3.10 xlrd openpyxl \
     gcc openjdk parallel perl podman screen sshpass tcsh \
     joblib perl-carp-assert psutil pyyaml requests-cache zlib \
     imbalanced-learn numpy scipy pandas pytorch pytorch-lightning scikit-learn scikit-optimize statsmodels xgboost \
-    bcftools blast 'bwa=0.7.17' 'ensembl-vep=109.3' 'kallisto=0.48.0' mosdepth 'optitype=1.3.5' samtools snakemake 'star=2.7.8' 'star-fusion=1.12.0' mhcflurry \
+    bcftools bedtools blast 'bwa=0.7.17' 'ensembl-vep=109.3' 'kallisto=0.48.0' mosdepth 'optitype=1.3.5' samtools snakemake 'star=2.7.8' 'star-fusion=1.12.0' mhcflurry mafft \
     'biopython<=1.79' pybiomart pyfaidx pysam
     # bcftools blast bwa ensembl-vep kallisto mosdepth optitype samtools snakemake star 'star-fusion>=1.11' \
 

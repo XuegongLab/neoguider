@@ -15,6 +15,13 @@ if [ -z "$neoguider" ]; then neoguider=ng; fi
 ### (1) software download
 ###
 
+if [ $(blastp -h | wc -l) -lt 3 ]; then
+    mkdir -p ${rootdir}/software/
+    cd ${rootdir}/software/
+    wget -c --no-check-certificate https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.14.1/ncbi-blast-2.14.1+-x64-linux.tar.gz
+    tar -xvf ncbi-blast-2.14.1+-x64-linux.tar.gz
+fi
+
 conda run -n $neoguider mhcflurry-downloads fetch || true # We can manually download the mhcflurry data if this command fails (e.g. due to problems with the connection to github)
 
 # IMPORTNT-NOTE: netMHCpan and netMHCstabpan are free for non-commercial use only. For commercial use, please contact DTU Health Tech
@@ -29,13 +36,13 @@ conda run -n $neoguider mhcflurry-downloads fetch || true # We can manually down
 # IMPORTNT-NOTE: PRIME and MixMHCpred are free for non-commercial use only. For commercial use, please contact the GfellerLab
 mkdir -p ${rootdir}/software/prime
 pushd    ${rootdir}/software/prime
-    git clone https://gitlab.com/cndfeifei/PRIME.git
+    git clone https://gitlab.com/cndfeifei/PRIME.git || true
     pushd PRIME && git checkout e798aad && popd
     g++ -O3 PRIME/lib/PRIME.cc -o PRIME/lib/PRIME.x
-    git clone https://gitlab.com/cndfeifei/MixMHCpred.git
+    git clone https://gitlab.com/cndfeifei/MixMHCpred.git || true
     pushd MixMHCpred && git checkout 0a7f9b9
         chmod +x MixMHCpred
-        chmod +x install_packages && conda install mafft # ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)
+        chmod +x install_packages # ./install_packages # this command requires sudo, the corresponding non-sudo version is "$conda install mafft" (e.g., conda=mamba)
         # chmod +x setup_path && ./setup_path # recommended by the authors of MixMHCpred but not needed here
     popd
 popd
@@ -48,7 +55,7 @@ VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $
 
 cd ${rootdir}/database
 wget -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/pep/Homo_sapiens.GRCh37.pep.all.fa.gz
-gunzip -fk Homo_sapiens.GRCh37.pep.all.fa.gz
+gunzip -cf Homo_sapiens.GRCh37.pep.all.fa.gz > Homo_sapiens.GRCh37.pep.all.fa
 
 # wget http://mhcmotifatlas.org/data/classI/MS/Peptides/all_peptides.txt # use the version from 2025-0225
 python ../neomotif.py -i all_peptides.txt -o all_peptides -p Homo_sapiens.GRCh37.pep.all.fa # GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_annot.pep
