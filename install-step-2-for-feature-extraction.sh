@@ -19,7 +19,7 @@ if [ $(blastp -h | wc -l) -lt 3 ]; then
     mkdir -p ${rootdir}/software/
     cd ${rootdir}/software/
     wget -c --no-check-certificate https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.14.1/ncbi-blast-2.14.1+-x64-linux.tar.gz
-    tar -xvf ncbi-blast-2.14.1+-x64-linux.tar.gz
+    tar -xvkf ncbi-blast-2.14.1+-x64-linux.tar.gz
 fi
 
 conda run -n $neoguider mhcflurry-downloads fetch || true # We can manually download the mhcflurry data if this command fails (e.g. due to problems with the connection to github)
