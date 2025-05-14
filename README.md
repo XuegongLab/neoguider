@@ -98,7 +98,7 @@ The environment optitype\_env, specified in the env directory, can be installed 
 The tools netMHCpan, netMHCstabpan, and MixCR can only be manually downloaded and configured due to their licensing requirements.
 
 (1) For using netMHCpan and netMHCstabpan (neoepitope feature extractors), please refer to https://services.healthtech.dtu.dk/services/NetMHC-4.0/ and https://services.healthtech.dtu.dk/services/NetMHCstabpan-1.0/ for how to manually download, install and activate netMHCpan and netMHCstabpan.
-After doing so, please set the full paths of netMHCpan and netMHCstabpan in the config.yaml file accordingly.
+After doing so, please set the full paths of netMHCpan and netMHCstabpan (i.e., netmhcpan\_cmd and netmhcstabpan\_cmd) in the config.yaml file accordingly.
 
 (2) For using MixCR (TCR-clonotype detector), please obtain a license from https://licensing.milaboratories.com/ and then run the command ```software/mixcr activate-license``` to activate MixCR.
 
