@@ -343,7 +343,8 @@ rule RNA_tumor_preprocessing:
         shell(
         'rm {output.outbam}.tmp.*.bam || true '
         ' && {samtools_bin} fixmate -@ {samtools_nthreads} -m {starfusion_bam} - '
-        ' | {samtools_bin} sort -m 4000M -T {rna_tumor_bam}.tmp -@ {samtools_nthreads} -o - - '
+        ' | {samtools_bin} sort -m 4000M -T {rna_tumor_bam}.tmp1 -@ {samtools_nthreads} -o - - -n '
+        ' | {samtools_bin} sort -m 4000M -T {rna_tumor_bam}.tmp2 -@ {samtools_nthreads} -o - - '
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {rna_tumor_bam}'
         ' && {samtools_bin} index -@ {samtools_nthreads} {rna_tumor_bam}'
         )
@@ -384,7 +385,8 @@ rule RNA_tumor_splicing_alignment:
         ' --outSAMtype BAM Unsorted --outTmpDir {fifo_path_prefix}.star.tmpdir '
         ' && rm {rna_t_spl_bam}.tmp.*.bam || true '
         ' && {samtools_bin} fixmate -@ {samtools_nthreads} -m {asneo_out}/Aligned.out.bam - '
-        ' | {samtools_bin} sort -m 4000M -T {rna_t_spl_bam}.tmp -@ {samtools_nthreads} -o - -'
+        ' | {samtools_bin} sort -m 4000M -T {rna_t_spl_bam}.tmp1 -@ {samtools_nthreads} -o - - -n'
+        ' | {samtools_bin} sort -m 4000M -T {rna_t_spl_bam}.tmp2 -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {rna_t_spl_bam}'
         ' && {samtools_bin} index -@ {samtools_nthreads} {rna_t_spl_bam}'
         )
@@ -409,7 +411,8 @@ rule DNA_tumor_alignment:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
         ' && bwa mem -K 80000000 -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
         ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
-        ' | {samtools_bin} sort -m 4000M -T {dna_tumor_bam}.tmp -@ {samtools_nthreads} -o - -'
+        ' | {samtools_bin} sort -m 4000M -T {dna_tumor_bam}.tmp1 -@ {samtools_nthreads} -o - - -n'
+        ' | {samtools_bin} sort -m 4000M -T {dna_tumor_bam}.tmp2 -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
         ' && {samtools_bin} index -@ {samtools_nthreads} {dna_tumor_bam}'
     
@@ -421,7 +424,8 @@ rule DNA_normal_alignment:
         'rm {dna_normal_bam}.tmp.*.bam || true'
         ' && bwa mem -K 80000000 -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
         ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
-        ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp -@ {samtools_nthreads} -o - -'
+        ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp1 -@ {samtools_nthreads} -o - - -n'
+        ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp2 -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_normal_bam}'
         ' && {samtools_bin} index -@ {samtools_nthreads} {dna_normal_bam}'
     
