@@ -20,8 +20,8 @@ mkdir -p ${rootdir}/software/asn
 cd ${rootdir}/software/asn
 git clone https://github.com/bm2-lab/ASNEO.git || true
 pushd ASNEO && git checkout 9f43cff && popd
-tar -xvf ASNEO/src/software.tar.gz
-mv ASNEO/* ../ASNEO
+tar -xvkf ASNEO/src/software.tar.gz || true
+cp -r ASNEO/* ../ASNEO
 
 cd       ${rootdir}/software 
 
@@ -54,7 +54,7 @@ if [ $(echo "$1" | grep -cP "skip-mixcr|skip-all-software") -eq 0 ]; then
     unzip mixcr-4.0.0.zip
 fi
 if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
-    mv ERGO-II ERGO-II.bak || true
+    #mv ERGO-II ERGO-II.bak || true
     git clone https://github.com/IdoSpringer/ERGO-II.git || true
     pushd ERGO-II && git checkout 85d320a && popd
     sed -i "s;ae_dir = 'TCR_Autoencoder';ae_dir = 'Models/AE' # CHANGED_FROM ae_dir = 'TCR_Autoencoder';g" ERGO-II/Models.py 
@@ -66,7 +66,7 @@ if [ $(echo "$1" | grep -cP "skip-ergo|skip-all-software") -eq 0 ]; then
 fi
 
 if [ $(echo "$1" | grep -cP "skip-mutect2|skip-all-software") -eq 0 ]; then
-    wget --no-check-certificate https://github.com/broadinstitute/gatk/releases/download/4.3.0.0/gatk-4.3.0.0.zip
+    wget --no-check-certificate -c https://github.com/broadinstitute/gatk/releases/download/4.3.0.0/gatk-4.3.0.0.zip
     unzip gatk-4.3.0.0.zip
 fi
 
@@ -84,7 +84,7 @@ cd       ${rootdir}/database
 wget --no-check-certificate -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/variation/vep/homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 tar xvzf homo_sapiens_vep_${VEP_version}_GRCh37.tar.gz
 wget --no-check-certificate -c http://ftp.ensembl.org/pub/grch37/release-${VEP_version}/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh37.cdna.all.fa.gz
-gunzip -cf Homo_sapiens.GRCh37.cdna.all.fa.gz > Homo_sapiens.GRCh37.pep.all.fa
+gunzip -cf Homo_sapiens.GRCh37.cdna.all.fa.gz > Homo_sapiens.GRCh37.cdna.all.fa
 
 wget --no-check-certificate -c https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
 tar xvzf GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
