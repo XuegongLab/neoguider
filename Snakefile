@@ -118,8 +118,8 @@ mixcr_mem_mb = 32*1000
 bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
-IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = False
-OPTITYPE_CONDA_ENV = 'optitype_env'
+IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = config.get('is_optitype_in_podman', False)
+OPTITYPE_CONDA_ENV = config.get('optitype_env', 'optitype_env')
 OPTITYPE_CONFIG = f"{script_basedir}/software/optitype.config.ini"
 OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
@@ -260,7 +260,7 @@ rule HLA_typing:
             if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
                 shell('podman run -v {hla_typing_dir}:/data/ -t quay.io/biocontainers/optitype:1.3.2--py27_3 /usr/local/bin/OptiTypePipeline.py'
                       ' -c /data/config.ini -i /data/{hla_fq_r1_fname} /data/{hla_fq_r2_fname} --rna -o /data/optitype_out/ > {hla_out}.OptiType-container.stdout')
-            elif OPTITYPE_CONDA_ENV != '':
+            elif not isna(OPTITYPE_CONDA_ENV):
                 shell('$CONDA_EXE run -n {OPTITYPE_CONDA_ENV} OptiTypePipeline.py -i {hla_fq_r1} {hla_fq_r2} --rna -o {RES}/hla_typing/optitype_out/'
                       ' -c {OPTITYPE_NOPATH_CONFIG} > {output.out}.OptiType.stdout')
             else:
@@ -269,7 +269,7 @@ rule HLA_typing:
             if IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK:
                 shell('podman run -v {hla_typing_dir}:/data/ -t quay.io/biocontainers/optitype:1.3.2--py27_3 /usr/local/bin/OptiTypePipeline.py'
                       ' -c /data/config.ini -i /data/{hla_fq_se_fname}                         --rna -o /data/optitype_out/ > {hla_out}.OptiType-container.stdout')
-            elif OPTITYPE_CONDA_ENV != '':
+            elif not isna(OPTITYPE_CONDA_ENV):
                 shell('$$CONDA_EXE run -n {OPTITYPE_CONDA_ENV} OptiTypePipeline.py -i {hla_fq_se} --rna -o {RES}/hla_typing/optitype_out/'
                       ' -c {OPTITYPE_NOPATH_CONFIG} > {output.out}.OptiType.stdout')
             else:

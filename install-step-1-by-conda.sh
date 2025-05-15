@@ -51,7 +51,7 @@ $conda run -n $neoguider $conda update numexpr # fix warning from pandas
 conda run -n $neoguider pip install sj2psi # for ASNEO.py # You may have to use pip install -I sj2psi if you have used conda env create -n ... --file ...yml
 
 # > First work-around for https://github.com/FRED-2/OptiType/issues/125 : use podman to run OptiType
-#   Please set IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK=True in the Snakefile to enable this work-around.
+#   Please set is_optitype_in_podman=1 in the snakemake config or IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK=True in the Snakefile to enable this work-around.
 #   On some platforms, the error '''Error: command required for rootless mode with multiple IDs: exec: "newuidmap": executable file not found in $PATH''' pop up for this work-around. 
 conda run -n $neoguider podman pull quay.io/biocontainers/optitype:1.3.2--py27_3 || true # Docker runs into error here
 
