@@ -305,6 +305,7 @@ rule RNA_tumor_fusion_detection:
     resources: mem_mb = star_mem_mb
     threads: star_nthreads
     run:
+        shell('rm -r {starfusion_out} || true') # STAR-Fusion is not idempotent (running once is not the same as running twice)
         if RNA_TUMOR_ISPE:
             shell('STAR-Fusion {starfusion_params} --CPU {star_nthreads} --left_fq {RNA_TUMOR_FQ1} --right_fq {RNA_TUMOR_FQ2} --outTmpDir {fifo_path_prefix}.starfusion.tmpdir')
         else:
