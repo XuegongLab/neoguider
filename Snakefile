@@ -443,7 +443,7 @@ rule DNA_SmallVariant_detection:
             shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {dna_tumor_bam} -I {dna_normal_bam} -O {dna_vcf} 1> {dna_vcf}.stdout 2> {dna_vcf}.stderr ')
         else:
             shell(
-        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
+        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} -R {REF}.window1000bp.bed '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= {tumor_normal_var_qual}) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
@@ -466,7 +466,7 @@ rule RNA_SmallVariant_detection: # RNA filtering is more stringent
              shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {rna_tumor_bam} -I {dna_normal_bam} -O {rna_vcf} 1> {rna_vcf}.stdout 2> {rna_vcf}.stderr ')
          else:
              shell(
-        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
+        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} -R {REF}.window1000bp.bed '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 83) && (tAD[1] >= 7) && (tAD[1] >= (tAD[0] + tAD[1]) * 0.8) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
