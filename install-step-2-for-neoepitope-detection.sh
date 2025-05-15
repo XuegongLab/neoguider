@@ -31,8 +31,11 @@ export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${CONDA_PREFIX}/include"
 if [ $(echo "$1" | grep -cP "skip-uvc|skip-all-software") -eq 0 ]; then
     mv uvc uvc.bak || true
     git clone https://gitlab.com/cndfeifei/uvc.git || true
-    pushd uvc && git checkout 193ebfa05b9b16bd2b7bd7d38b1bbd849a919e76
-    ./install-dependencies.sh && make -j 6 && make deploy
+    pushd uvc && git checkout a01fb6f669b077f59d39199af48ebbbf88f8d5e4
+    # rename libbz2.so into something else if an error pops up from the make command
+    # older versions of C++ compilers do not support address sanitizors (ASAN) that are used for debugging
+    #   in this case, please just skip ASAN by running make deploy manually.
+    ./install-dependencies.sh && make -j 6 && make deploy 
     cp bin/uvc* "${CONDA_PREFIX}/bin/" || true
     popd
 
@@ -96,6 +99,8 @@ bedtools sort \
     -faidx GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_genome.fa.fai \
     -i     GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_annot.gtf.mini.sortu | bedtools merge -i - \
     >      GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_annot.gtf.mini.sortu.bed
+
+pushd GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ && cut -f1,2 ref_genome.fa.fai > ref_genome.fa.chrom_sizes && bedtools makewindows -g ref_genome.fa.chrom_sizes -w 1000 > ref_genome.fa.window1000bp.bed && popd
 
 bwa index GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir/ref_genome.fa
 # kallisto index -i  GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.cdna.fa.kallisto-idx GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ctat_genome_lib_build_dir//ref_annot.cdna.fa

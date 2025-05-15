@@ -244,7 +244,7 @@ rule RNA_tumor_HLA_typing_preparation:
     # Note: razers3 is too memory intensive, so bwa mem is used instead of the command
     # (razers3 --percent-identity 90 --max-hits 1 --distance-range 0 --output {hla_bam} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2})
     shell : '''
-        bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | {samtools_bin} view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
+        bwa mem -K 80000000 -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | {samtools_bin} view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
         {samtools_bin} fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
 if 'comma_sep_hla_list' in config: make_dummy_files([hla_out])
 rule HLA_typing:
@@ -407,7 +407,7 @@ rule DNA_tumor_alignment:
     threads: bwa_nthreads
     shell:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
-        ' && bwa mem -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
+        ' && bwa mem -K 80000000 -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
         ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
         ' | {samtools_bin} sort -m 4000M -T {dna_tumor_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
@@ -419,7 +419,7 @@ rule DNA_normal_alignment:
     threads: bwa_nthreads
     shell:
         'rm {dna_normal_bam}.tmp.*.bam || true'
-        ' && bwa mem -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
+        ' && bwa mem -K 80000000 -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
         ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
         ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_normal_bam}'
@@ -443,7 +443,7 @@ rule DNA_SmallVariant_detection:
             shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {dna_tumor_bam} -I {dna_normal_bam} -O {dna_vcf} 1> {dna_vcf}.stdout 2> {dna_vcf}.stderr ')
         else:
             shell(
-        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
+        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {dna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_DNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} -R {REF}.window1000bp.bed '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= {tumor_normal_var_qual}) && (tAD[1] >= {tumor_depth}) && (tAD[1] >= (tAD[0] + tAD[1]) * {tumor_vaf}) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
@@ -466,7 +466,7 @@ rule RNA_SmallVariant_detection: # RNA filtering is more stringent
              shell('java -jar {gatk_jar} Mutect2 -R {REF} -I {rna_tumor_bam} -I {dna_normal_bam} -O {rna_vcf} 1> {rna_vcf}.stdout 2> {rna_vcf}.stderr ')
          else:
              shell(
-        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} '
+        '{script_basedir}/software/uvc/bin/uvcTN.sh {REF} {rna_tumor_bam} {dna_normal_bam} {output.vcf1} {PREFIX}_RNA_tumor,{PREFIX}_DNA_normal -t {uvc_nthreads_on_cmdline} -R {REF}.window1000bp.bed '
             ' 1> {output.vcf1}.stdout.log 2> {output.vcf1}.stderr.log'
         ' && bcftools view {output.vcf1} -Oz -o {output.vcf2} '
             ' -i "(QUAL >= 83) && (tAD[1] >= 7) && (tAD[1] >= (tAD[0] + tAD[1]) * 0.8) && (nAD[1] <= (nAD[0] + nAD[1]) * {normal_vaf})"'
