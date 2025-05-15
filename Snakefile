@@ -244,7 +244,7 @@ rule RNA_tumor_HLA_typing_preparation:
     # Note: razers3 is too memory intensive, so bwa mem is used instead of the command
     # (razers3 --percent-identity 90 --max-hits 1 --distance-range 0 --output {hla_bam} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2})
     shell : '''
-        bwa mem -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | {samtools_bin} view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
+        bwa mem -K 80000000 -t {bwa_nthreads} {HLA_REF} {RNA_TUMOR_FQ1} {RNA_TUMOR_FQ2} | {samtools_bin} view -@ {samtools_nthreads} -bh -F4 -o {hla_bam}
         {samtools_bin} fastq -@ {samtools_nthreads} {hla_bam} -1 {hla_fq_r1} -2 {hla_fq_r2} -s {hla_fq_se} '''
 if 'comma_sep_hla_list' in config: make_dummy_files([hla_out])
 rule HLA_typing:
@@ -407,7 +407,7 @@ rule DNA_tumor_alignment:
     threads: bwa_nthreads
     shell:
         'rm {dna_tumor_bam}.tmp.*.bam || true'
-        ' && bwa mem -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
+        ' && bwa mem -K 80000000 -t {bwa_nthreads} {REF} {DNA_TUMOR_FQ1} {DNA_TUMOR_FQ2} '
         ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
         ' | {samtools_bin} sort -m 4000M -T {dna_tumor_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_tumor_bam}'
@@ -419,7 +419,7 @@ rule DNA_normal_alignment:
     threads: bwa_nthreads
     shell:
         'rm {dna_normal_bam}.tmp.*.bam || true'
-        ' && bwa mem -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
+        ' && bwa mem -K 80000000 -t {bwa_nthreads} {REF} {DNA_NORMAL_FQ1} {DNA_NORMAL_FQ2}'
         ' | {samtools_bin} fixmate -@ {samtools_nthreads} -m - -'
         ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_normal_bam}'
