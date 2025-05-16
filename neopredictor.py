@@ -320,7 +320,7 @@ def main():
     
     if args.train:
         dfs = []
-        for infile in args.train:
+        for infile in sorted(args.train):
             df = pd.read_csv(infile, sep=args.sep)
             if args.label: df['VALIDATED'] = df[args.label]
             df, are_in_cum = compute_are_in_cum(df)
