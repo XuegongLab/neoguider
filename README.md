@@ -93,7 +93,7 @@ conda env create --name ng --file env/freeze.env_export_from_history.yml # This 
 # The command to remove the ng conda env: conda env remove -n ng # if this command still does not work, then run both this command and the next one below.
 # The command to clean-up conda packages: conda clean -a
 ```
-The environment optitype\_env, specified in the env directory, can be installed in a similar way. 
+The environment optitype\_env, specified in the env directory, can be installed in a similar way. We recommend to install optitype\_env to workaround https://github.com/FRED-2/OptiType/issues/125.
 
 The tools netMHCpan, netMHCstabpan, and MixCR can only be manually downloaded and configured due to their licensing requirements.
 

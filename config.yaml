@@ -19,7 +19,7 @@ output_directory: '.'
 prefix: '.'
 
 ### Section 2: parameters having no default values: one set-up per installation and for all samples
-# variables that begins with ssh:// requires the NeohunterRemotePassword environment variable to be set and exported
+# variables that begins with ssh:// requires the StabPanRemotePassword environment variable to be set and exported
 
 #netmhcpan_cmd: '/mnt/d/code/netMHCpan-4.0/netMHCpan'
 netmhcpan_cmd: '/home/zhaoxiaofei/software/netMHCpan-4.1/netMHCpan'
@@ -58,6 +58,10 @@ fifo_dir: '/tmp'
 # We may consider comparing with MHCflurry once this issue is fully solved
 add_mhcflurry_results_into_final_tsv: 0
 
+# Two workarounds for https://github.com/FRED-2/OptiType/issues/125
+# use either the OptiType-specific conda env or the OptiType podman container to run OptiType
+optitype_env: 'optitype_env'
+is_optitype_in_podman: 0
 
 # You can add tumor_spec_peptide_fasta config params if you would like to run with given MHCs and peptides
 # for example:
