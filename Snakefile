@@ -118,8 +118,15 @@ mixcr_mem_mb = 32*1000
 bwa_samtools_mem_mb = bwa_mem_mb + samtools_sort_mem_mb
 
 ### usually you should not modify the code below (please think twice before doing so) ###
-IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = config.get('is_optitype_in_podman', False)
+
+# Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
+#   https://github.com/FRED-2/OptiType/issues/125
+# We can use either the optitype-specific conda env or the podman container as a workaround for the memory leak.
+# If the memory leak is fixed or if you have enough RAM, 
+#   then you can ignore this workaround.
 OPTITYPE_CONDA_ENV = config.get('optitype_env', 'optitype_env')
+IS_PODMAN_USED_TO_WORKAROUND_OPTITYPE_MEM_LEAK = config.get('is_optitype_in_podman', False)
+
 OPTITYPE_CONFIG = f"{script_basedir}/software/optitype.config.ini"
 OPTITYPE_NOPATH_CONFIG = f"{script_basedir}/software/optitype_nopath.config.ini"
 
@@ -209,11 +216,6 @@ if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)):
 rule all:
     input: pipeline_out_final
 
-# Note: the combination of pandas' reindex and optitype v1.3.5 results in memory leak: 
-#   https://github.com/FRED-2/OptiType/issues/125
-# Therefore, we used the podman container as a workaround for the memory leak.
-# If the memory leak is fixed or if you have enough RAM, 
-#   then you can ignore this workaround.
 hla_fq_r1_fname = F'{PREFIX}.rna_hla_r1.fastq.gz'
 hla_fq_r2_fname = F'{PREFIX}.rna_hla_r2.fastq.gz'
 hla_fq_se_fname = F'{PREFIX}.rna_hla_se.fastq.gz'
