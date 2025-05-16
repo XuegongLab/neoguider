@@ -19,8 +19,9 @@ VEP_version=$(conda list --name $neoguider | grep "^ensembl-vep" | awk '{print $
 mkdir -p ${rootdir}/software/asn
 cd ${rootdir}/software/asn
 git clone https://github.com/bm2-lab/ASNEO.git || true
-pushd ASNEO && git checkout 9f43cff && popd
-tar -xvkf ASNEO/src/software.tar.gz || true
+pushd ASNEO/src && git checkout 9f43cff
+tar -xvkf ./software.tar.gz || true
+popd
 cp -r ASNEO/* ../ASNEO
 
 cd       ${rootdir}/software 
