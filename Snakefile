@@ -503,7 +503,7 @@ rule DNA_SmallVariant_peptide_generation:
         dna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {dna_variant_effect} -o {peptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {DNA_PREFIX} --molecule_type=D -t -1        
-        cp {dna_variant_effect} {dna_snvindel_info_file}'''
+        cat {dna_variant_effect} | sed 's/splice_polypyrimidine_tract_variant,splice_region_variant/splice_region_variant,splice_polypyrimidine_tract_variant/g' > {dna_snvindel_info_file}'''
 # cp {peptide_dir}/{DNA_PREFIX}_tmp_fasta/{DNA_PREFIX}_snv_indel_wt.fasta {dna_snvindel_wt_peptide_fasta}
 
 # end-of-DNA-vep-mainline
@@ -536,7 +536,7 @@ rule RNA_SmallVariant_peptide_generation:
         rna_snvindel_info_file
     shell: '''python {script_basedir}/annotation2fasta.py -i {rna_variant_effect} -o {peptide_dir} -p {PEP_REF} \
         -r {REF} -s VEP -e {outf_rna_quantification} -P {RNA_PREFIX} --molecule_type=R -t -1        
-        cp {rna_variant_effect} {rna_snvindel_info_file}'''
+        cat {rna_variant_effect} | sed 's/splice_polypyrimidine_tract_variant,splice_region_variant/splice_region_variant,splice_polypyrimidine_tract_variant/g' > {rna_snvindel_info_file}'''
 
 # end-of-RNA-vep-sideline-for-rescue
 
