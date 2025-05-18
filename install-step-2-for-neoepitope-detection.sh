@@ -32,7 +32,7 @@ export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${CONDA_PREFIX}/include"
 if [ $(echo "$1" | grep -cP "skip-uvc|skip-all-software") -eq 0 ]; then
     mv uvc uvc.bak || true
     git clone https://gitlab.com/cndfeifei/uvc.git || true
-    pushd uvc && git checkout a01fb6f669b077f59d39199af48ebbbf88f8d5e4
+    pushd uvc && git checkout 45d68ea890bd726bbd127b41ee25e1654aec5e70
     # rename libbz2.so into something else if an error pops up from the make command
     # older versions of C++ compilers do not support address sanitizors (ASAN) that are used for debugging
     #   in this case, please just skip ASAN by running make deploy manually.
