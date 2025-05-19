@@ -814,6 +814,7 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
     np.random.seed(args.sub_randseed)
 
     X = drop_feat_from_X(ml_pipename, X)
+    y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
     prefilename = F'{modeldir}/{ml_pipename_in_fname}_model.pickle'
     if os.path.exists(prefilename):
@@ -872,6 +873,7 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx)
     np.random.seed(args.sub_randseed)
 
     X = drop_feat_from_X(ml_pipename, X)
+    y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
     prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_cross_val_predict_results.pickle'
     if os.path.exists(prefilename):
@@ -894,6 +896,7 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
     np.random.seed(args.sub_randseed)
 
     X = drop_feat_from_X(ml_pipename, X)
+    y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
     prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_cross_val_score_results.pickle'
     if os.path.exists(prefilename):
@@ -938,7 +941,7 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
             roc_auc, pat2score = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
         else:
-            roc_auc = roc_auc_score(df_in[labelcol], ranking_mult*df_in[colname])
+            roc_auc = roc_auc_score(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
         #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
         #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
         roc_auc_std = np.nan
