@@ -188,7 +188,7 @@ grid_param_MLP = {
     'momentum' : Real(0.8, 1.0-HYPERPARAM_EPS),
     'nesterovs_momentum' : Categorical([True, False]),
     'early_stopping' : Categorical([True, False]),
-    'validation_fraction' : Real(0.05, 0.20, prior='log-uniform'), # If this number is too slow, then we may encounter a runtime error at validation
+    # 'validation_fraction' : Real(0.05, 0.20, prior='log-uniform'), # If this number is too low, then we may encounter a runtime error at validation
     'beta_1' : Real(0.8, 1.0-HYPERPARAM_EPS),
     'beta_2' : Real(0.998, 1.0-HYPERPARAM_EPS),
     'epsilon' : Real(1e-09, 1e-7, prior='log-uniform'),
