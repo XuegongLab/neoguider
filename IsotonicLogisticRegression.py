@@ -406,11 +406,16 @@ class ConvexRegression(BaseEstimator, ClassifierMixin, RegressorMixin):
 class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin):
 
     def __init__(self,
-            excluded_cols = [],
+            categorical_cols='auto',
+            excluded_cols=[],
+            increasing_cols=[],
+            decreasing_cols=[],
+            nonstrict_mono_cols=[],
             convex_cols=[],
             freeform_cols=[],
+
             task='classification',
-            final_predictor = None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
+            final_predictor=None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
             
             random_state=-1,
             # adaKDE_* are only used when random_state<0
@@ -419,17 +424,24 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             adaKDE_exponent_inverse=3,
             adaKDE_freeform_min_width=1e99,
             
+            postCIR_mov_avg_window_size=0,
+            
             fit_add_measure_error=None,
             transform_add_measure_error=None,
             ft_fit_add_measure_error=None,
             ft_transform_add_measure_error=None,
+            
             fit_data_clear=False,
+            
+            set_feature_importances=True,
+            effect_sizes=_EFFECT_SIZES,
             feat_effect_size_thres=0.15,
             feat_pvalue_method='auto', # mann-whitney-U and spearman for classification and regression, respectively
             feat_pvalue_thres=0.05,
             feat_pvalue_correction='bh', # the default one from https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.false_discovery_control.html            
             feat_pvalue_drop=True,
             feat_pvalue_warn=True,
+            
             increasing = 'auto', # the default one from https://scikit-learn.org/stable/modules/generated/sklearn.isotonic.IsotonicRegression.html
             nan_policy = 'raise', # similar to https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
             **kwargs):
@@ -439,14 +451,26 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         Parameters
         ----------
 
+        categorical_cols: list of str or the special value ``auto``,
+            columns to denote categorical features. The special str value ``auto`` means auto infer from the data (features with less than five distinct values are assumed to be categorical).
+
         excluded_cols: list of str
             columns to remain untransformed
+
+        increasing_cols: list of str
+            columns that are monotonically increasing with respect to the label
+
+        decreasing_cols: list of str
+            columns that are monotonically decreasing with respect to the label
+
+        nonstrict_mono_cols: list of str
+            columns that do not require the increase/decrease to be strictly monotonic
 
         convex_cols: list of str
             columns that are subject to convex regression (modeling by convex functions) instead of isotonic regression (monotonic functions)
         
         freeform_cols: list of str
-            columns that are only transformed y adaKDE (instead of being transformed by isotonic or convex regression as the next step). 
+            columns that are only transformed by adaKDE (instead of being transformed by isotonic (aka monotonic) or convex regression as the next step). 
         
         task: ``classification`` (default) or ``regression``
 
@@ -483,6 +507,10 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         adaKDE_freeform_min_width:
             The minimum bandwith to disable isotonic and convex regression (because the bandwidth covered enough samples to estimate density without any constraint).
             This has the same effect as setting the relevant freeform_cols. 
+
+        postCIR_mov_avg_window_size: integer
+            If set to greater zero, then perform moving average with this value on the breakpoints resulting from CIR.
+            This parameter is not applicable to categorical features.
  
         fit_add_measure_error: True or False
             If set to true, then introduce noise to the fit                      method to prevent overfitting. Empirical evidence supports its use for plain decision trees. 
@@ -495,7 +523,14 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         fit_data_clear: True or False
             Let the fit method perform clear_intermediate_internal_data at its end
-        
+
+        set_feature_importances: True or False
+            If set to True, then will set feature importances during the fit. 
+            Setting this to false may prevent a runtime error (due to some not-yet discovered bug) at the cost of not getting feature importance.
+
+        effect_sizes: list of float
+            List of effect sizes used for computing feature importances
+                 
         feat_effect_size_thres: float
             The null hypothesis assumes that the effect size is greater than this threshold. 
             The features that deviates from this hypothesis are rejected with the feat_pvalue_thres. 
@@ -511,15 +546,12 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             Zero out the feature if the null hypothesis fails to hold at the p-value threshold of feat_pvalue_thres for the feature. 
             If the p-value threshold is <0 and >1, then always zero out and and keep unchanged the feature, respectively.
             It is highly recommended to use sklearn.feature_selection.VarianceThreshold to remove the features that are zeroed-out. 
-        
+            Typically, when all columns are in increasing_cols, decreasing_cols, or convex_cols, then feat_pvalue_drop should be set to False
+            because these columns provide prior info to the relationship between the label and the features represented by these columns.
+
         feat_pvalue_warn: True or False
             When set to True, gives warning with warnings.warn if the null hypothesis fails to hold at the given p-value threshold of feat_pvalue_thres
-
-        increasing: True, False or ``auto``
-            True/False if the label as a function of each feature is increasing/decreasing, where ``auto`` means inferred from the data.
-            Typically, when this value is set to either True or False (i.e., not ``auto``), then feat_pvalue_drop should be set to False
-            because this True/False provides prior info to the relationship between the label and the feature.
-        
+       
         nan_policy: how to treat nan values in the input sample-times-feature matrix
                 
         **kwargs: dict
@@ -529,9 +561,13 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         super().__init__()
 
         self.excluded_cols = excluded_cols
+        self.categorical_cols = categorical_cols
+        self.increasing_cols = increasing_cols
+        self.decreasing_cols = decreasing_cols
+        self.nonstrict_mono_cols = nonstrict_mono_cols
         self.convex_cols = convex_cols
         self.freeform_cols = freeform_cols
-
+        
         self.task = task
         self.final_predictor = final_predictor
         # Probability can be calibrated with:
@@ -545,7 +581,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.adaKDE_width_adjust_factor = adaKDE_width_adjust_factor
         self.adaKDE_exponent_inverse = adaKDE_exponent_inverse
         self.adaKDE_freeform_min_width = adaKDE_freeform_min_width
-        
+
+        self.postCIR_mov_avg_window_size = postCIR_mov_avg_window_size
+                
         self.fit_add_measure_error = fit_add_measure_error
         self.transform_add_measure_error = transform_add_measure_error
         self.ft_fit_add_measure_error = ft_fit_add_measure_error
@@ -553,12 +591,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         self.fit_data_clear = fit_data_clear
         
+        self.set_feature_importances = set_feature_importances
+        self.effect_sizes = effect_sizes
         self.feat_effect_size_thres = feat_effect_size_thres
         self.feat_pvalue_method = feat_pvalue_method
         self.feat_pvalue_thres = feat_pvalue_thres
         self.feat_pvalue_warn = feat_pvalue_warn
         self.feat_pvalue_drop = feat_pvalue_drop
         self.feat_pvalue_correction = feat_pvalue_correction
+        
         self.increasing = increasing
         self.nan_policy = nan_policy
         self.kwargs = kwargs
@@ -600,7 +641,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             ir = self.mat_x2y_regs_0_[i]
             isor_info.append([ir.X_min_, ir.X_max_, ir.X_thresholds_, ir.y_thresholds_, ir.f_, ir.increasing_])
         return [int_pred_info, isor_info]
-    
+   
+    ''' 
     def _split(self, X, is_already_splitted=False):
         X1 = np.array(X)
         if not is_already_splitted:
@@ -620,7 +662,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             return X.iloc[:,in_colidxs], X.iloc[:,ex_colidxs], in_colidxs, ex_colidxs
         else:
             return X1[:,in_colidxs], X1[:,ex_colidxs], in_colidxs, ex_colidxs
-    
+    '''
     def _center(self, x, y, epsilon = 1e-6):
         """ Implement the centering step of the centered isotonic regression at https://arxiv.org/pdf/1701.05964.pdf """
         assert len(x) == len(y)
@@ -827,38 +869,19 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             self.feature_importances_ = self.feature_importances_to_label_ * self.feature_importances_to_features_
         return self
 
-    def fit(self, X1, y1, *args, is_centered=True, postCIR_mov_avg_window_size=False, add_measure_error=None, data_clear=None, data_clear_steps=[0,1,2], set_feature_importances=True,
-            increasings=None,
-            effect_sizes=_EFFECT_SIZES, are_variables_categorical='auto', 
+    def fit(self, X, y, *args,
+            add_measure_error=None, data_clear=None, data_clear_steps=[0,1,2],
             # max_n_susbamples=100, n_iterations=100*25*20, # not used because Monte-Carlos simulation is not performed. 
             **kwargs):
         """
         Parameters
         ----------
         
-        is_centered: True or False
-            use centered isotonic regression (CIR) if set to True
-        
-        postCIR_mov_avg_window_size: integer
-            If set to greater zero, then perform moving average with this value on the breakpoints resulting from CIR.
-            This parameter is not applicable to categorical features.
-        
-        set_feature_importances: True or False
-            If set to True, then will set feature importances during the fit. 
-            Setting this to false may prevent a runtime error (due to some not-yet discovered bug) at the cost of not getting feature importance.
-
-        increasings: None, True, False, ``auto``, or an iterable of these three values
-            If not None, then will override the one from __init__
-        
-        effect_sizes: list of float
-            List of effect sizes used for computing feature importances
-
-        are_variables_categorical: boolean ndarray
-            Indicating whether each variable is categorical (e.g. a binary label, a variable that can take its value from (-1 0,1), etc.)
-        
         kwargs: dict
             Used only to maintain compatibility with other sklearn APIs. 
         """
+        X1, y1 = X, y
+        effect_sizes = copy.deepcopy(self.effect_sizes)
         if self.feat_effect_size_thres not in effect_sizes: effect_sizes.append(self.feat_effect_size_thres)
         effect_sizes = sorted(effect_sizes)
         #if feat_pvalue_thres == None: feat_pvalue_thres = self.feat_pvalue_thres
@@ -883,27 +906,29 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         add_measure_error = self.get_default(add_measure_error, self.fit_add_measure_error, False)
         data_clear = self.get_default(data_clear, self.fit_data_clear, False)
         
-        inX, exX, inIdxs, exIdxs = self._split(X1)
-        X = np.array(inX)
+        #inX, exX, inIdxs, exIdxs = self._split(X1)
+        X = np.array(X1)
         y = np.array(y1)
 
-        if are_variables_categorical == 'auto':
-            self.are_variables_categorical_ = [(len(set(list(X[:,i]))) <= 5) for i in range(X.shape[1])]
+        inColumns = X1.columns if hasattr(X1, 'columns') else ([''] * (X.shape[1]))
+        self.feature_names_in_ = [(inColumn if inColumn != '' else inIdx) for inIdx, inColumn in enumerate(inColumns)] 
+
+        if self.categorical_cols == 'auto':
+            self.are_variables_categorical_ = [(len(set(list(X[:,i]))) <= 5) for i in range(len(inColumns))]
         else:
-            self.are_variables_categorical_ = are_variables_categorical
-        
-        if increasings and not isinstance(increasings, str) and isinstance(increasings, collections.abc.Iterable):
-            self.increasings_ = np.array([increasings[i] for i in inIdxs])
-        else:
-            increasing = self.get_default(increasings, self.increasing, None)
-            self.increasings_ = np.array([increasing for i in inIdxs]) 
+            self.are_variables_categorical_ = [(True if (colidx in self.categorical_cols or colname in self.categorical_cols) else False) for colidx, colname in enumerate(inColumns)]
+
+        self.increasings_ = ['auto' for i in inColumns]
+        for (inIdx, inColname) in enumerate(inColumns):
+            if inIdx in self.increasing_cols or inColname in self.increasing_cols:
+                self.increasings_[inIdx] = True
+            if inIdx in self.decreasing_cols or inColname in self.decreasing_cols:
+                assert self.increasings_[inIdx] != True, F'The column {inColname} at index {inIdx} cannot be both increasing and decreasing!'
+                self.increasings_[inIdx] = False
+        self.increasings_ = np.array(self.increasings_)
         
         self.feat_odds_spearman_rs_ = [None for _ in range(X.shape[1])]
         self.feat_odds_spearman_pvalues_ = [None for _ in range(X.shape[1])]
-        if hasattr(inX, 'columns'):
-            self.feature_names_in_ = [(colname if colname != '' else colidx) for colidx, colname in enumerate(inX.columns)]
-        else:
-            self.feature_names_in_ = [i for i in range(X.shape[1])]
         
         assert X.shape[0] > 0, F'The input {X1} does not have any rows'
         assert X.shape[1] > 0, F'The input {X1} does not have any columns'
@@ -924,7 +949,6 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         irs3 = self.mat_x2y_regs_3_ = [SciPyPiecewiseLinearRegressor() for i in range(X.shape[1])]
         ivs3 = self.mat_y_values_3_ = [[] for _ in range(X.shape[1])]
 
-        self.convex_regressions_0_ = [None for _ in range(X.shape[1])]
         self.feat_pvalue_method_ = self.feat_pvalue_method
 
         self.mannwhitneyu_H0_assume_feat_is_useful_pval_ = {}
@@ -1134,7 +1158,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 x1 = np.array(xcenters)
                 y1 = relative_log_odds = raw_log_odds - center_log_odds
                 
-            X_in = inX
+            X_in = X1
             
             spearman_r, pvalue_observed = spearmanr(x1, y1)
             self.feat_odds_spearman_rs_[colidx] = spearman_r
@@ -1147,12 +1171,22 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             if colidx in self.convex_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.convex_cols):
                 if not colidx in self.convex_cols: self.convex_cols.append(colidx)
                 self.mat_x2y_regs_1_[colidx] = ConvexRegression()
+            if colidx in self.nonstrict_mono_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.nonstrict_mono_cols):
+                is_centered = False
+            else:
+                is_centered = True
+
             x1a = x1
             self.mat_x_values_1_[colidx] = x1
             y1a = self.mat_x2y_regs_1_[colidx].fit_transform(x1, y1)
             self.mat_y_values_1_[colidx] = 1*center_log_odds + y1a
             
-            if len(set(x1a)) == 1 or len(set(y1a)) == 1:
+            if colidx in self.excluded_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.excluded_cols):
+                self.mat_x_values_0_[colidx] = x1
+                self.mat_x2y_regs_0_[colidx] = ColumnTransformer([], remainder='passthrough')
+                self.mat_y_values_0_[colidx] = x1
+                self.mat_y2x_regs_0_[colidx] = ColumnTransformer([], remainder='passthrough')           
+            elif len(set(x1a)) == 1 or len(set(y1a)) == 1:
                 self.mat_x_values_0_[colidx] = [0] # x-values
                 self.mat_x2y_regs_0_[colidx] = AlwaysConstantRegressor(0)  # regressors
                 self.mat_y_values_0_[colidx] = [0] # y-value
@@ -1169,7 +1203,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 y2a = self.mat_x2y_regs_2_[colidx].fit_transform(x2, y2)
                 self.mat_y_values_2_[colidx] = 1*center_log_odds + y2a
 
-                if (postCIR_mov_avg_window_size <= 0) or self.are_variables_categorical_[colidx]:
+                if (self.postCIR_mov_avg_window_size <= 0) or self.are_variables_categorical_[colidx]:
                     self.mat_x_values_0_[colidx] = self.mat_x_values_2_[colidx]
                     self.mat_x2y_regs_0_[colidx] = self.mat_x2y_regs_2_[colidx]
                     self.mat_y_values_0_[colidx] = self.mat_y_values_2_[colidx]
@@ -1199,41 +1233,42 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 self.mat_y_values_0_[colidx] = y1 # y-value
                 #self.mat_y2x_regs_0_[colidx] = SciPyPiecewiseLinearRegressor().fit_transform(y1, x1) # inverse may not exist
 
-        self._set_feature_importances(['f2l'])
-        
-        self.irrelevant_feature_indexes_ = []
-        effect_size_to_pvals = self._get_feature_importances('h0_assume_correlation_pvalue', self.feat_pvalue_method_)
-        effect_size_eq0_pvals = self._get_feature_importances('pvalue', self.feat_pvalue_method_)
-        for colidx in range(X.shape[1]):
-            pvalue = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
+        if self.set_feature_importances:
+            self._set_feature_importances(['f2l'])
             
-            assuming_some_effect_fails = (effect_size_to_pvals[self.feat_effect_size_thres][colidx] < self.feat_pvalue_thres)
-            assuming_zero_effect_fails = (effect_size_eq0_pvals[colidx] > self.feat_pvalue_thres)
-            assumption_fails = (assuming_zero_effect_fails if self.feat_effect_size_thres == 0 else assuming_some_effect_fails)
-            
-            if assumption_fails:
-                self.irrelevant_feature_indexes_.append(colidx)
-                #assert effect_size_to_pvals[self.feat_effect_size_thres][colidx]
-                if self.feat_pvalue_warn:
-                    colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
-                    pval = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
+            self.irrelevant_feature_indexes_ = []
+            effect_size_to_pvals = self._get_feature_importances('h0_assume_correlation_pvalue', self.feat_pvalue_method_)
+            effect_size_eq0_pvals = self._get_feature_importances('pvalue', self.feat_pvalue_method_)
+            for colidx in range(X.shape[1]):
+                pvalue = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
+                
+                assuming_some_effect_fails = (effect_size_to_pvals[self.feat_effect_size_thres][colidx] < self.feat_pvalue_thres)
+                assuming_zero_effect_fails = (effect_size_eq0_pvals[colidx] > self.feat_pvalue_thres)
+                assumption_fails = (assuming_zero_effect_fails if self.feat_effect_size_thres == 0 else assuming_some_effect_fails)
+                
+                if assumption_fails:
+                    self.irrelevant_feature_indexes_.append(colidx)
+                    #assert effect_size_to_pvals[self.feat_effect_size_thres][colidx]
+                    if self.feat_pvalue_warn:
+                        colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
+                        pval = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
+                        if self.feat_pvalue_drop:
+                            warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant and is dropped (not kept) at '
+                                    + F'pvalue={pval} pvalue_thres={self.feat_pvalue_thres} ES={self.feat_effect_size_thres}. ')
+                        else:
+                            warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant but is still kept (not dropped) at '
+                                    + F'pvalue={pval} pvalue_thres={self.feat_pvalue_thres} ES={self.feat_effect_size_thres}. ')
                     if self.feat_pvalue_drop:
-                        warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant and is dropped (not kept) at '
-                                + F'pvalue={pval} pvalue_thres={self.feat_pvalue_thres} ES={self.feat_effect_size_thres}. ')
-                    else:
-                        warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant but is still kept (not dropped) at '
-                                + F'pvalue={pval} pvalue_thres={self.feat_pvalue_thres} ES={self.feat_effect_size_thres}. ')
-                if self.feat_pvalue_drop:
-                    self.mat_x2y_regs_0_[colidx] = AlwaysConstantRegressor(0)
+                        self.mat_x2y_regs_0_[colidx] = AlwaysConstantRegressor(0)
+        
         log_ratios = self._transform(X, add_measure_error=add_measure_error, is_inverse=False)
-        #self.lr_X_ = np.hstack([log_ratios, exX])
-        #self.lr_y_ = y
-        #self.lr_params_ = kwargs
-        self._internal_predictor.fit(np.hstack([log_ratios, exX]), y, **kwargs)
+        #self._internal_predictor.fit(np.hstack([log_ratios, exX]), y, **kwargs)
+        self._internal_predictor.fit(log_ratios, y, **kwargs)
         if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
         self.n_features_in_ = X1.shape[1]
+        if self.set_feature_importances: self._set_feature_importances(['f2f', 'f2l2f'])
+        
         self._is_fitted = True
-        self._set_feature_importances(['f2f', 'f2l2f'])
         return self
     
     def get_average_y(self):
@@ -1257,7 +1292,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
     def get_centered_2_log_odds(self):
         return self.mat_y_values_3_
 
-    def get_kernel_width_n_minority_samples(self):
+    def get_kernel_width_covered_n_positives(self):
         return copy.deepcopy(self.kernel_width_n_minority_samples_)
     
     def get_adaDKE_X(self):
@@ -1307,12 +1342,13 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         X = np.array(X1)
         X = self._prep_input(X)
         if column_idx != None: return self._transform(X, add_measure_error=add_measure_error, is_inverse=is_inverse, column_idx=column_idx)
-        inX, exX, inIdxs, exIdxs = self._split(X, True)
-        test_orX = self._transform(inX, add_measure_error=add_measure_error, is_inverse=is_inverse)
-        X2 = np.zeros((X.shape[0], X.shape[1]))
-        X2[:,inIdxs] = test_orX
-        X2[:,exIdxs] = exX
-        return X2
+        return self._transform(X, add_measure_error=add_measure_error, is_inverse=is_inverse)
+        #inX, exX, inIdxs, exIdxs = self._split(X, True)
+        #test_orX = self._transform(inX, add_measure_error=add_measure_error, is_inverse=is_inverse)
+        #X2 = np.zeros((X.shape[0], X.shape[1]))
+        #X2[:,inIdxs] = test_orX
+        #X2[:,exIdxs] = exX
+        #return X2
     
     def inverse_transform(self, X1, column_idx=None):
         """
@@ -1335,10 +1371,11 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         return self.transform(X1, add_measure_error=transform_add_measure_error)
     
     def _extract_features(self, X):
-        inX, exX, inIdxs, exIdxs = self._split(X, True)
-        test_orX = self._transform(inX, add_measure_error=False, is_inverse=False)
-        return np.hstack([test_orX, exX])
-    
+        #inX, exX, inIdxs, exIdxs = self._split(X, True)
+        #test_orX = self._transform(inX, add_measure_error=False, is_inverse=False)
+        #return np.hstack([test_orX, exX])
+        return self._transform(X, add_measure_error=False, is_inverse=False)
+ 
     def predict(self, X1):
         """ scikit-learn predict using logistic regression built on top of isotonic scaler """
         check_is_fitted(self)
@@ -1535,14 +1572,19 @@ def test_with_simulation(tasks=['classification', 'regression'], n_samples_s=[2*
         random.seed(seed_val)
         np.random.seed(seed_val)
         drop_feat = seed_val%10//5
+        increasings = (True, False, True, (True if seed_val%4//2 else False), (True if seed_val%4%2 else False)) if (seed_val%5) else []
+        increasing_cols, decreasing_cols = [], []
+        for i, inc in enumerate(increasings):
+            if inc==True: increasing_cols.append(i)
+            if inc==False: decreasing_cols.append(i)
         # NOTE: some common cause of test-run failure:
         # feat_pvalue_thres being too high or feat_effect_size_thres being too high
         # C being too high (e.g., C=1)
         if task == 'classification':
             lr_predictor = LogisticRegression(C=0.1)
-            ilr = IsotonicLogisticRegression(task=task, feat_pvalue_thres=1e-3, feat_effect_size_thres=0.10, feat_pvalue_drop=drop_feat, final_predictor=lr_predictor)
+            ilr = IsotonicLogisticRegression(task=task, feat_pvalue_thres=1e-3, feat_effect_size_thres=0.10, feat_pvalue_drop=drop_feat, final_predictor=lr_predictor, increasing_cols=increasing_cols, decreasing_cols=decreasing_cols)
         else:
-            ilr = IsotonicLogisticRegression(task=task, feat_pvalue_thres=1e-3, feat_effect_size_thres=0.10, feat_pvalue_drop=drop_feat)
+            ilr = IsotonicLogisticRegression(task=task, feat_pvalue_thres=1e-3, feat_effect_size_thres=0.10, feat_pvalue_drop=drop_feat, increasing_cols=increasing_cols, decreasing_cols=decreasing_cols)
         Xtrain = np.array([[i, -i, i + 0.2*float(scipy.stats.norm.rvs(size=1)), 0, 0.2*float(scipy.stats.norm.rvs(size=1))] for i in range(n_samples)])
         ytrain_odds = np.exp((np.array(range(n_samples)) * 2 - (n_samples-1)) * 5 / n_samples) # 2**2 / (1 + np.array(range(n_samples)))
 
@@ -1552,8 +1594,8 @@ def test_with_simulation(tasks=['classification', 'regression'], n_samples_s=[2*
         else:
             ytrain = ytrain_odds
 
-        increasings = (True, False, True, (True if seed_val%4//2 else False), (True if seed_val%4%2 else False)) if (seed_val%5) else None
-        for_trans_vals = ilr.fit_transform(create_random_typed_mat(Xtrain), create_random_typed_mat(ytrain), increasings=increasings)
+        
+        for_trans_vals = ilr.fit_transform(create_random_typed_mat(Xtrain), create_random_typed_mat(ytrain))
         inv_trans_vals = ilr.inverse_transform(create_random_typed_mat(for_trans_vals))
         inv_trans_vals2 = np.array(inv_trans_vals)
         logging.log(LOGLEVEL_DEBUG1, F'inv_trans_vals2={inv_trans_vals2}\nXtrain={Xtrain}')
@@ -1564,6 +1606,7 @@ def test_with_simulation(tasks=['classification', 'regression'], n_samples_s=[2*
         if task == 'classification':
             Xpred_odds = np.exp(for_trans_vals) * ilr.get_odds_offset()
             ypred_probas = ilr.predict_proba(create_random_typed_mat(Xtrain))
+            #print(F'Predicted probabilities {ypred_probas} from {Xtrain}')
         else:
             Xpred_odds = for_trans_vals
         ypred_labels = ilr.predict(create_random_typed_mat(Xtrain))
@@ -1573,7 +1616,7 @@ def test_with_simulation(tasks=['classification', 'regression'], n_samples_s=[2*
         logging.log(LOGLEVEL_DEBUG1, F'mannwhitneyu_retval={ilr.mannwhitneyu_retval_}')
         logging.log(LOGLEVEL_DEBUG1, F'spearmanr_retval={ilr.spearmanr_retval_}')
         logging.log(LOGLEVEL_DEBUG1, F'Xpred_odds=\n{Xpred_odds}')
-        logging.info(F'>>> Kernel_sizes={ilr.get_kernel_width_n_minority_samples()}')
+        logging.info(F'>>> Kernel_sizes={ilr.get_kernel_width_covered_n_positives()}')
 
         rt, frac2, rt2, frac3, rt3, frac4, rt4 = 3.0, 0.95, 2.5, 0.85, 2.0, 0.7, 1.5  # relative tolerance
         edgedist = 0 # this seems to be irrelevant
@@ -1606,6 +1649,7 @@ def test_with_simulation(tasks=['classification', 'regression'], n_samples_s=[2*
         check_close(Xpred_odds [edgedist:-1-edgedist:1,1], ytrain_odds [edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4)
         check_close(Xpred_odds [edgedist:-1-edgedist:1,2], ytrain_odds [edgedist:-1-edgedist:1], rt*1.5, frac2, rt2*1.5, frac3, rt3*1.5, frac4, rt4*1.5) 
         if task == 'classification':
+            #print(f'ypred_probas={ypred_probas} ytrain_probs={ytrain_probs}')
             check_close(ypred_probas[edgedist:-1-edgedist:1,1], ytrain_probs[edgedist:-1-edgedist:1], rt, frac2, rt2, frac3, rt3, frac4, rt4)
             rmat = [list(x) + [y] for x, y in zip(list(Xtrain), list(ypred_labels))]
             rmat='\n'.join(str(_) for _ in rmat)
@@ -1712,11 +1756,11 @@ def test_like_ratio_test():
 if __name__ == '__main__':
     test_like_ratio_test()
     ilr1 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='classification')
-    ilr2 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='regression')
-    test_with_simulation() #(tasks=['classification', 'regression'])
+    ilr2 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='regression')    
     #test_inverse_transform(ilr1)
     #test_fit_and_predict_proba(ilr1)
     test_fit_and_predict_with_dups(ilr1)
     test_fit_and_predict_with_dups(ilr2)
     test_fit_and_predict_with_convex(ilr2)
-    
+    test_with_simulation() #(tasks=['classification', 'regression'])
+
