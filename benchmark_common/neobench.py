@@ -231,34 +231,49 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'RobustScaler'        : RobustScaler(),
     'StandardScaler'      : StandardScaler(),
     # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
-    F'{NG_default}'         : IsotonicLogisticRegression(excluded_cols=['ln_NumTested']),
     
-    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[              ]),
-    'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[              ]),    
-    'NG_withoutNumTested_BW2':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=2),
-    'NG_withoutNumTested_BW3':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=3),
+    # NeoGuider
+    F'{NG_default}'         : IsotonicLogisticRegression(excluded_cols=['ln_NumTested']),
+    'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[              ]),
 
-    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=1),
-    'NG_withNumTested_BW2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=2),
-    'NG_withNumTested_BW3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=3),
-    'NG_withNumTested_BW5'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=5),
-    'NG_withNumTested_BW8'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
-    'NG_withNumTested_BW13' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=13),
+    # For testing purpose: these NeoGuider variants should perform at similar level compared with NG_default
+    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[              ]),    
+    #'NG_withoutNumTested_BW2':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=2),
+    #'NG_withoutNumTested_BW3':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=3),
+
+    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW12' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW24' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
+    #'NG_withNumTested_BW8'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
+    #'NG_withNumTested_BW13' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=13),
 
     'NG_withNumTested_RS0'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
     'NG_withNumTested_RS1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
     'NG_withNumTested_RS2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
-    'NG_withNumTested_RS3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+3),
+    #'NG_withNumTested_RS3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+3),
 
-    'NG_withNumTested_RS0_F': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed),           feat_pvalue_drop=False),
-    'NG_withNumTested_BW3_F': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=3, feat_pvalue_drop=False),
-    'NG_withNumTested_F'    : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'],                                          feat_pvalue_drop=False),
+    'NG_withNumTested_noIso': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1),
+    'NG_withNumTested_12Iso': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_freeform_min_width=12),
+    'NG_withNumTested_36Iso': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_freeform_min_width=36),
     
-    # For testing purpose
-    #'TestNg_rand0_rep1'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
-    #'TestNg_rand0_rep2'   : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
-    #'TestNg_rand1_rep1'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
-    #'TestNg_rand1_rep2'   : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
+    'NG_withNumTested_pow2' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=2),
+    'NG_withNumTested_pow5' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=5),
+    'NG_withNumTested_5dot9': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
+    'NG_withNumTested_5dot5': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
+    
+    'NG_withNumTested_mAvg2': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], postCIR_mov_avg_window_size=2),
+    'NG_withNumTested_mAvg3': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], postCIR_mov_avg_window_size=3),
+    
+    'NG_withNumTested_RS0_AllFts': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed),       feat_pvalue_drop=False),
+    'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_AllFts'    : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'],                                      feat_pvalue_drop=False),
+  
+    # For debugging random-number generations
+    #'TestNg_rand0_rep1'    : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand0_rep2'    : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand1_rep1'    : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand1_rep2'    : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
 }
 
 # Let StandardScaler represent IdentityTransformer, MaxAbsScaler, MinMaxScaler, and RobustScaler since they are all linear maps
@@ -1139,7 +1154,7 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*6)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*8)
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage2', 
@@ -1339,36 +1354,66 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     feat_importance_df.to_csv(f'{output}_feat_imp.tsv', index='feature_names', sep='\t')
 
     ilr = ft_preproc_tech
+
+    s0x = ilr.get_adaDKE_X()
+    #s0y = ilr.transform(s0x)
+    s0x2= ilr.get_adaDKE_width()
+
     s1x = ilr.get_density_estimated_X()
     s1y = ilr.get_density_estimated_log_odds()
     s2x = ilr.get_isotonic_X()
     s2y = ilr.get_isotonic_log_odds()
     s3x = ilr.get_centered_isotonic_X()
     s3y = ilr.get_centered_isotonic_log_odds()
+    s4x = ilr.get_centered_2_X()
+    s4y = ilr.get_centered_2_log_odds()
+    print(F's4x={s4x}')
+    print(F's4x={s4y}')
+    kernel_coverages = ilr.get_kernel_width_covered_n_positives()
 
     # feature analysis phase 2: feature importance plot
     if 'fa2' in tasks:
         with PdfPages(f'{output}_feat.pdf') as pdf:
             for feature_idx, feature_name in enumerate(ft_preproc_tech_feature_names):
-                fig, axes = plt.subplots(2, 1, height_ratios=[1, 1], layout='constrained')
-                fig.set_figheight(1.500*2.222)
-                fig.set_figwidth(2.250*3.333)
+                fig, axes = plt.subplots(2, 1, height_ratios=[1.25, 2], layout='constrained')
+                fig.set_figheight(1.500*3.333)
+                fig.set_figwidth(3.00*3.333)
                 x1 = [x for (x,y) in zip(train_X[feature_name], big_y) if y == 1]
                 x0 = [x for (x,y) in zip(train_X[feature_name], big_y) if y == 0]
+                minx, maxx = min(x0+x1), max(x0+x1)                
                 axes[0].hist([x1, x0],
                         label=['Tested positive ($A_f$)', 'Tested negative ($B_f$)'],
                         color=[(0.75, 0.00, 0.00), (0.25, 0.25, 0.25)],
                         bins=40,
                         log=True)
+                #axes[2].scatter(s0x[feature_idx],s0x2[feature_idx], alpha=0.333)
+                #axes[2].set_ylabel('Kernel bandwidth\n(min # positives convered)')
+
                 #print(F'Plot {len(s1x[feature_idx])} {len(s1y)}')
-                axes[1].plot(s1x[feature_idx], s1y[feature_idx], label='After step 1: adaptive KDE',             alpha = 0.200, marker = '^', linewidth=0.5, markersize=(16*3)**0.5)
-                axes[1].plot(s2x[feature_idx], s2y[feature_idx], label='After step 2: isotonic regression (IR)', alpha = 0.300, marker = '<', linewidth=0.5, markersize=(16*2)**0.5)
-                axes[1].plot(s3x[feature_idx], s3y[feature_idx], label='After step 3: centered IR (CIR)',        alpha = 0.600, marker = '>', linewidth=0.5, markersize=(16*1)**0.5)
+                axes[1].plot(s1x[feature_idx], s1y[feature_idx], label='After step 1: adaptive KDE',             alpha = 0.200, marker = '^', linewidth=0.5, markersize=(16*4)**0.5)
+                axes[1].plot(s2x[feature_idx], s2y[feature_idx], label='After step 2: isotonic regression (IR)', alpha = 0.300, marker = '>', linewidth=0.5, markersize=(16*3)**0.5)
+                axes[1].plot(s3x[feature_idx], s3y[feature_idx], label='After step 3: centered IR (CIR)',        alpha = 0.600, marker = 'v', linewidth=0.5, markersize=(16*2)**0.5)
+                if len(s4x[feature_idx]) > 0:
+                    axes[1].plot(s4x[feature_idx], s4y[feature_idx], label='After step 4: moving average',           alpha = 0.600, marker = '<', linewidth=0.25,markersize=(16*1)**0.5)
+
+                #bandwidth_ys = ilr.transform(s0x[feature_idx], column_idx=feature_idx)
+                #for bandwidth_x, bandwidth_y, bandwidth_n in zip(s0x[feature_idx], bandwidth_ys, s0x2[feature_idx]):
+                #    axes[1].text(bandwidth_x, bandwidth_y, str(bandwidth_n), ha='center', va='center', color='black')
+                
                 impp = ft_preproc_tech_feature_importances_p1[feature_idx]
                 imp1, imp2, imp3 = ft_preproc_tech_feature_importances_1[feature_idx], ft_preproc_tech_feature_importances_2[feature_idx], ft_preproc_tech_feature_importances_3[feature_idx]
-                axes[1].set_xlabel(feature_name + F' percentile\nimportances: p_value={impp:.2G}, to_label={imp1:.4f}, to_features={imp2:.4f}, to_both_combined={imp3:.4f}')
+                axes[1].set_xlabel(feature_name + 
+                        F'  kernel_covered_n_positives={kernel_coverages[feature_idx]:.4f}  domain=[{minx:.2G},{maxx:.2G}]'
+                        F'\nimportances: p_value={impp:.2G}, to_label={imp1:.4f}, to_features={imp2:.4f}, to_both_combined={imp3:.4f}')
                 axes[1].set_ylabel('Estimated log odds')
                 axes[1].legend(title='Feature values')
+                if minx > 0 and maxx > 2:
+                    axes[0].set_xscale('log')
+                    axes[1].set_xscale('log')
+                elif minx >= 0 and maxx > 2:
+                    axes[0].set_xscale('symlog', linthresh=10**(int(np.log10(max_x/100))))
+                    axes[1].set_xscale('symlog', linthresh=10**(int(np.log10(max_x/100))))
+
                 pdf.savefig()
                 plt.close()
 
