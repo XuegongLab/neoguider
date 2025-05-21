@@ -233,47 +233,47 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
     
     # NeoGuider
-    F'{NG_default}'         : IsotonicLogisticRegression(excluded_cols=['ln_NumTested']),
-    'NG_withoutNumTested'   : IsotonicLogisticRegression(excluded_cols=[              ]),
+    F'{NG_default}'         : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
+    'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]),
 
     # For testing purpose: these NeoGuider variants should perform at similar level compared with NG_default
-    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(excluded_cols=[              ]),    
-    #'NG_withoutNumTested_BW2':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=2),
-    #'NG_withoutNumTested_BW3':IsotonicLogisticRegression(excluded_cols=[              ], random_state=-1, min_n_adaKDE_samples=3),
+    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(nontransformed_cols=[              ]),    
+    #'NG_withoutNumTested_BW2':IsotonicLogisticRegression(nontransformed_cols=[              ], random_state=-1, min_n_adaKDE_samples=2),
+    #'NG_withoutNumTested_BW3':IsotonicLogisticRegression(nontransformed_cols=[              ], random_state=-1, min_n_adaKDE_samples=3),
 
-    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_BW12' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_BW24' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
-    #'NG_withNumTested_BW8'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
-    #'NG_withNumTested_BW13' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=13),
+    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
+    #'NG_withNumTested_BW8'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
+    #'NG_withNumTested_BW13' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=13),
 
-    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
-    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
-    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
-    #'NG_withNumTested_RS3'  : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed)+3),
+    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
+    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
+    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
+    #'NG_withNumTested_RS3'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+3),
 
-    'NG_withNumTested_noIso': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1),
-    'NG_withNumTested_12Iso': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_freeform_min_width=12),
-    'NG_withNumTested_36Iso': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_freeform_min_width=36),
+    'NG_withNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1),
+    'NG_withNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=12),
+    'NG_withNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=36),
     
-    'NG_withNumTested_pow2' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=2),
-    'NG_withNumTested_pow5' : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=5),
-    'NG_withNumTested_5dot9': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
-    'NG_withNumTested_5dot5': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
+    'NG_withNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=2),
+    'NG_withNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5),
+    'NG_withNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
+    'NG_withNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
     
-    'NG_withNumTested_mAvg2': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], postCIR_mov_avg_window_size=2),
-    'NG_withNumTested_mAvg3': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], postCIR_mov_avg_window_size=3),
+    'NG_withNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=2),
+    'NG_withNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=3),
     
-    'NG_withNumTested_RS0_AllFts': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=(args1.randseed),       feat_pvalue_drop=False),
-    'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(excluded_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_AllFts'    : IsotonicLogisticRegression(excluded_cols=['ln_NumTested'],                                      feat_pvalue_drop=False),
+    'NG_withNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed),       feat_pvalue_drop=False),
+    'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_AllFts'    : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'],                                      feat_pvalue_drop=False),
   
     # For debugging random-number generations
-    #'TestNg_rand0_rep1'    : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
-    #'TestNg_rand0_rep2'    : IsotonicLogisticRegression(random_state=0, excluded_cols=['ln_NumTested']),
-    #'TestNg_rand1_rep1'    : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
-    #'TestNg_rand1_rep2'    : IsotonicLogisticRegression(random_state=1, excluded_cols=['ln_NumTested']),
+    #'TestNg_rand0_rep1'    : IsotonicLogisticRegression(random_state=0, nontransformed_cols=['ln_NumTested']),
+    #'TestNg_rand0_rep2'    : IsotonicLogisticRegression(random_state=0, nontransformed_cols=['ln_NumTested']),
+    #'TestNg_rand1_rep1'    : IsotonicLogisticRegression(random_state=1, nontransformed_cols=['ln_NumTested']),
+    #'TestNg_rand1_rep2'    : IsotonicLogisticRegression(random_state=1, nontransformed_cols=['ln_NumTested']),
 }
 
 # Let StandardScaler represent IdentityTransformer, MaxAbsScaler, MinMaxScaler, and RobustScaler since they are all linear maps
@@ -650,7 +650,7 @@ kwargs = {
     'random_state': 0, 
     'feat_pvalue_drop': feat_pvalue_drop, 
     'nan_policy': nan_policy,
-    'excluded_cols': ['ln_NumTested']}
+    'nontransformed_cols': ['ln_NumTested']}
 
 #for tech in [HPARAM_TUNED_FT_PREPROC_NAME2TECH, HPARAM_DEFLT_FT_PREPROC_NAME2TECH]:
 #    tech[F'{NG_default}']       = IsotonicLogisticRegression(**kwargs)

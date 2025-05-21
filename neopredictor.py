@@ -357,7 +357,7 @@ def main():
         ilrs = []
         for features in listof_features:
             big_train_X = big_train_df.loc[:, features].copy()
-            iso_scaler = IsotonicLogisticRegression(excluded_cols=['ln_NumTested']) # excluded_cols is used for better extrapolation
+            iso_scaler = IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']) # nontransformed_cols is used for better extrapolation
             iso_scaler.fit(big_train_X, big_train_y)
             ilrs.append(iso_scaler)
         

@@ -407,7 +407,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
 
     def __init__(self,
             categorical_cols='auto',
-            excluded_cols=[],
+            nontransformed_cols=[],
             increasing_cols=[],
             decreasing_cols=[],
             nonstrict_mono_cols=[],
@@ -454,7 +454,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         categorical_cols: list of str or the special value ``auto``,
             columns to denote categorical features. The special str value ``auto`` means auto infer from the data (features with less than five distinct values are assumed to be categorical).
 
-        excluded_cols: list of str
+        nontransformed_cols: list of str
             columns to remain untransformed
 
         increasing_cols: list of str
@@ -560,7 +560,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         super().__init__()
 
-        self.excluded_cols = excluded_cols
+        self.nontransformed_cols = nontransformed_cols
         self.categorical_cols = categorical_cols
         self.increasing_cols = increasing_cols
         self.decreasing_cols = decreasing_cols
@@ -646,14 +646,14 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
     def _split(self, X, is_already_splitted=False):
         X1 = np.array(X)
         if not is_already_splitted:
-            excluded_cols = set(self.excluded_cols)
+            nontransformed_cols = set(self.nontransformed_cols)
             ex_colidxs = []            
             for colidx in range(X1.shape[1]):
-                if colidx in self.excluded_cols:
+                if colidx in self.nontransformed_cols:
                     ex_colidxs.append(i)
             if hasattr(X, 'columns'):
                 for colidx, colname in enumerate(X.columns):
-                    if colname in self.excluded_cols:
+                    if colname in self.nontransformed_cols:
                         ex_colidxs.append(colidx)
             self.ex_colidxs = sorted(list(set(ex_colidxs)))
         ex_colidxs = self.ex_colidxs
@@ -1181,7 +1181,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             y1a = self.mat_x2y_regs_1_[colidx].fit_transform(x1, y1)
             self.mat_y_values_1_[colidx] = 1*center_log_odds + y1a
             
-            if colidx in self.excluded_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.excluded_cols):
+            if colidx in self.nontransformed_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.nontransformed_cols):
                 self.mat_x_values_0_[colidx] = x1
                 self.mat_x2y_regs_0_[colidx] = ColumnTransformer([], remainder='passthrough')
                 self.mat_y_values_0_[colidx] = x1
@@ -1420,7 +1420,7 @@ def test_fit_and_predict_proba(ilr=None):
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,1,1,0,0,0,0,0,1,0,0,0,0])
     
-    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, excluded_cols=['col3'])
+    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, nontransformed_cols=['col3'])
     ilr.fit(X, y)
     Xtest = np.array([
         [0,    0, 0],
@@ -1468,7 +1468,7 @@ def test_fit_and_predict_with_dups(ilr=None, task='classification'):
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([1,1,0,0,1, 0,0,1,0,1, 0,0,1,0,0, 0])
 
-    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, excluded_cols=['col3'], task=task)
+    if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, nontransformed_cols=['col3'], task=task)
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
@@ -1509,7 +1509,7 @@ def test_fit_and_predict_with_convex(ilr=None, task='classification'):
     X = pd.DataFrame(X, columns = ['col1', 'col2', 'col3'])
     y = np.array([9,8,8,6,6,4,3,2,1,0,1,2,3,4,5,6])
     
-    if not ilr : ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, excluded_cols=['col3'],convex_cols=['col2'], task='regression')
+    if not ilr : ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, nontransformed_cols=['col3'],convex_cols=['col2'], task='regression')
     ilr.set_random_state(42+0)
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)

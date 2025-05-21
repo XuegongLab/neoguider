@@ -6,7 +6,7 @@ import scipy
 
 class TargetEncoder:
     
-    def __init__(self, excluded_cols = [], pseudocount=0.5, random_state=0):
+    def __init__(self, pseudocount=0.5, random_state=0):
         """ Initialize """
         self.pseudocount = pseudocount
         self.random_state = random_state
