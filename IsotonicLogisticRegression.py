@@ -1214,8 +1214,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                     eps2 = 3 * sys.float_info.epsilon * abs(x1a[-1])
                     x2list = [x1a[0]-eps1] + x2list + [x1a[-1]+eps2]
                     y2list = [y1a[0]]      + y2list + [y1a[-1]]
-                    x3 = _moving_average(np.array(x2list), postCIR_mov_avg_window_size)
-                    y3 = _moving_average(np.array(y2list), postCIR_mov_avg_window_size)
+                    x3 = _moving_average(np.array(x2list), self.postCIR_mov_avg_window_size)
+                    y3 = _moving_average(np.array(y2list), self.postCIR_mov_avg_window_size)
                     
                     self.mat_x_values_3_[colidx] = x3
                     y3a = self.mat_x2y_regs_3_[colidx].fit_transform(x3, y3)
