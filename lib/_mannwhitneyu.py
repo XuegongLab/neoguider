@@ -193,7 +193,7 @@ def _get_mwu_z(U, n1, n2, ranks, axis=0, continuity=True):
     # no problem evaluating the norm SF at an infinity
     with np.errstate(divide='ignore', invalid='ignore'):
         z = numerator / s
-    return z, numerator, s
+    return z, (U - mu), s
 
 
 def _mwu_input_validation(x, y, use_continuity, alternative, axis, method):
