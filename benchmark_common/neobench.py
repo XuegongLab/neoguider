@@ -1154,7 +1154,7 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*8)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*9)
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage2', 
@@ -1411,8 +1411,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                     axes[0].set_xscale('log')
                     axes[1].set_xscale('log')
                 elif minx >= 0 and maxx > 2:
-                    axes[0].set_xscale('symlog', linthresh=10**(int(np.log10(max_x/100))))
-                    axes[1].set_xscale('symlog', linthresh=10**(int(np.log10(max_x/100))))
+                    axes[0].set_xscale('symlog', linthresh=10**(int(np.log10(maxx/100))))
+                    axes[1].set_xscale('symlog', linthresh=10**(int(np.log10(maxx/100))))
 
                 pdf.savefig()
                 plt.close()
