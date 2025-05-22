@@ -1265,7 +1265,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             self.irrelevant_feature_indexes_ = []
             effect_size_to_pvals = self._get_feature_importances('h0_assume_correlation_pvalue', self.feat_pvalue_method_)
             effect_size_eq0_pvals = self._get_feature_importances('pvalue', self.feat_pvalue_method_)
-            for colidx in range(X.shape[1]):
+            for colidx, colname in enumerate(inColumns):
                 pvalue = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
                 
                 assuming_some_effect_fails = (effect_size_to_pvals[self.feat_effect_size_thres][colidx] < self.feat_pvalue_thres)
@@ -1284,7 +1284,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                         else:
                             warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant but is still kept (not dropped) at '
                                     + F'pvalue={pval} pvalue_thres={self.feat_pvalue_thres} ES={self.feat_effect_size_thres}. ')
-                    if self.feat_pvalue_drop:
+                    if self.feat_pvalue_drop and not _is_any_in([colidx, colname], setof_nontransformed_cols):
                         self.mat_x2y_regs_0_[colidx] = AlwaysConstantRegressor(0)
         
         log_ratios = self._transform(X, add_measure_error=add_measure_error, is_inverse=False)
