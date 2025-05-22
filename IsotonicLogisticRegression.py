@@ -32,6 +32,12 @@ def _abbrevshow(alist, anum=5):
     if len(alist) <= anum*2: return [alist]
     else: return [alist[0:anum], alist[(len(alist)-anum):len(alist)]]
 
+def _is_any_in(alist, bset):
+    ret = 0
+    for a in alist:
+        if a in bset: ret += 1
+    return ret
+
 def _transform_and_partition(x, y):
     if len(x) == 0:
         return []
@@ -887,7 +893,14 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #if feat_pvalue_thres == None: feat_pvalue_thres = self.feat_pvalue_thres
         #if feat_pvalue_warn == None: feat_pvalue_warn = self.feat_pvalue_warn
         #if feat_pvalue_drop == None: feat_pvalue_drop = self.feat_pvalue_drop
-        
+        setof_nontransformed_cols = set(self.nontransformed_cols)
+        setof_categorical_cols = set(self.categorical_cols)
+        setof_increasing_cols = set(self.increasing_cols)
+        setof_decreasing_cols = set(self.decreasing_cols)
+        setof_nonstrict_mono_cols = set(self.nonstrict_mono_cols)
+        setof_convex_cols = set(self.convex_cols)
+        setof_freeform_cols = set(self.freeform_cols)
+
         if self.final_predictor:
             self._internal_predictor = self.final_predictor
         else:
@@ -910,19 +923,19 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         X = np.array(X1)
         y = np.array(y1)
 
-        inColumns = X1.columns if hasattr(X1, 'columns') else ([''] * (X.shape[1]))
+        inColumns = list(X1.columns) if hasattr(X1, 'columns') else ([''] * (X.shape[1]))
         self.feature_names_in_ = [(inColumn if inColumn != '' else inIdx) for inIdx, inColumn in enumerate(inColumns)] 
 
         if self.categorical_cols == 'auto':
             self.are_variables_categorical_ = [(len(set(list(X[:,i]))) <= 5) for i in range(len(inColumns))]
         else:
-            self.are_variables_categorical_ = [(True if (colidx in self.categorical_cols or colname in self.categorical_cols) else False) for colidx, colname in enumerate(inColumns)]
+            self.are_variables_categorical_ = [(True if _is_any_in([colidx, colname], setof_categorical_cols) else False) for colidx, colname in enumerate(inColumns)]
 
         self.increasings_ = ['auto' for i in inColumns]
         for (inIdx, inColname) in enumerate(inColumns):
-            if inIdx in self.increasing_cols or inColname in self.increasing_cols:
+            if _is_any_in([inIdx, inColname], setof_increasing_cols):
                 self.increasings_[inIdx] = True
-            if inIdx in self.decreasing_cols or inColname in self.decreasing_cols:
+            if _is_any_in([inIdx, inColname], setof_decreasing_cols):
                 assert self.increasings_[inIdx] != True, F'The column {inColname} at index {inIdx} cannot be both increasing and decreasing!'
                 self.increasings_[inIdx] = False
         self.increasings_ = np.array(self.increasings_)
@@ -993,7 +1006,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             raise TypeError(F'The p-value computation method {self.feat_pvalue_method_} (derived from {self.feat_pvalue_method}) is invalid'
                     F' (only `auto`, `mannwhitneyu`, and `spearmanr` are valid)!')
 
-        for colidx in range(X.shape[1]): 
+        for colidx, colname in enumerate(inColumns): 
             x = X[:,colidx]
             if self.task == 'regression':                
                 xylist = sorted(zip(x,y))
@@ -1167,11 +1180,11 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             test_statistic = self._get_feature_importances('statistic', self.feat_pvalue_method_)[colidx]
             pvalue_observed = self._get_feature_importances('pvalue', self.feat_pvalue_method_)[colidx]
             is_inc_or_dec = self._get_feature_importances('trend', self.feat_pvalue_method_)[colidx]
-                        
-            if colidx in self.convex_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.convex_cols):
-                if not colidx in self.convex_cols: self.convex_cols.append(colidx)
+            
+            if _is_any_in([colidx, colname], setof_convex_cols):
+                # if not colidx in self.convex_cols: self.convex_cols.append(colidx)
                 self.mat_x2y_regs_1_[colidx] = ConvexRegression()
-            if colidx in self.nonstrict_mono_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.nonstrict_mono_cols):
+            if _is_any_in([colidx, colname], setof_nonstrict_mono_cols):
                 is_centered = False
             else:
                 is_centered = True
@@ -1181,7 +1194,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             y1a = self.mat_x2y_regs_1_[colidx].fit_transform(x1, y1)
             self.mat_y_values_1_[colidx] = 1*center_log_odds + y1a
             
-            if colidx in self.nontransformed_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.nontransformed_cols):
+            if _is_any_in([colidx, colname], setof_nontransformed_cols):
                 self.mat_x_values_0_[colidx] = x1
                 self.mat_x2y_regs_0_[colidx] = ColumnTransformer([], remainder='passthrough')
                 self.mat_y_values_0_[colidx] = x1
@@ -1225,7 +1238,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                     self.mat_x2y_regs_0_[colidx] = self.mat_x2y_regs_3_[colidx]
                     self.mat_y_values_0_[colidx] = self.mat_y_values_2_[colidx]
                     self.mat_y2x_regs_0_[colidx].fit_transform(y3, x3)
-            is_freeform_1 = (colidx in self.freeform_cols or (hasattr(X_in, 'columns') and X_in.columns[colidx] in self.freeform_cols))
+            is_freeform_1 = _is_any_in([colidx, colname], setof_freeform_cols)
             is_freeform_2 = (self.kernel_width_n_minority_samples_[colidx] >= self.adaKDE_freeform_min_width)
             if is_freeform_1 or is_freeform_2:
                 self.mat_x_values_0_[colidx] = x1 # x-values
