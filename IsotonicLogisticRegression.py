@@ -899,7 +899,12 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         kwargs: dict
             Used only to maintain compatibility with other sklearn APIs. 
         """
-        X1, y1 = X, y
+        
+        X_orig, y_orig = X, y
+        #inX, exX, inIdxs, exIdxs = self._split(X_orig)
+        X = np.array(X_orig)
+        y = np.array(y_orig)
+
         effect_sizes = copy.deepcopy(self.effect_sizes)
         if self.feat_effect_size_thres not in effect_sizes: effect_sizes.append(self.feat_effect_size_thres)
         effect_sizes = sorted(effect_sizes)
@@ -907,6 +912,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #if feat_pvalue_warn == None: feat_pvalue_warn = self.feat_pvalue_warn
         #if feat_pvalue_drop == None: feat_pvalue_drop = self.feat_pvalue_drop
         setof_nontransformed_cols = set(self.nontransformed_cols)
+        logging.debug(F'setof_nontransformed_cols={setof_nontransformed_cols} from {self.nontransformed_cols}')
         setof_categorical_cols = set(self.categorical_cols)
         setof_increasing_cols = set(self.increasing_cols)
         setof_decreasing_cols = set(self.decreasing_cols)
@@ -931,12 +937,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         def powermean(arr, p=1): return 1.0/len(arr) * (sum(ele**p for ele in arr))**p
         add_measure_error = self.get_default(add_measure_error, self.fit_add_measure_error, False)
         data_clear = self.get_default(data_clear, self.fit_data_clear, False)
-        
-        #inX, exX, inIdxs, exIdxs = self._split(X1)
-        X = np.array(X1)
-        y = np.array(y1)
-
-        inColumns = list(X1.columns) if hasattr(X1, 'columns') else ([''] * (X.shape[1]))
+                
+        inColumns = list(X_orig.columns) if hasattr(X_orig, 'columns') else ([''] * (X.shape[1]))
         self.feature_names_in_ = [(inColumn if inColumn != '' else inIdx) for inIdx, inColumn in enumerate(inColumns)] 
 
         if self.categorical_cols == 'auto':
@@ -956,8 +958,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.feat_odds_spearman_rs_ = [None for _ in range(X.shape[1])]
         self.feat_odds_spearman_pvalues_ = [None for _ in range(X.shape[1])]
         
-        assert X.shape[0] > 0, F'The input {X1} does not have any rows'
-        assert X.shape[1] > 0, F'The input {X1} does not have any columns'
+        assert X.shape[0] > 0, F'The input {X} does not have any rows'
+        assert X.shape[1] > 0, F'The input {X} does not have any columns'
         
         raw_log_odds = self.raw_log_odds_ = [None for _ in range(X.shape[1])]
         inv0 = self.mat_y2x_regs_0_ = [SciPyPiecewiseLinearRegressor() for i in range(X.shape[1])]
@@ -988,15 +990,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         X = self._prep_input(X)        
         if self.task == 'regression':
             self._assert_input(X, y, is_binary_clf_asserted=False)
-            X0 = self.X0_ = X[y<=np.mean(y),:]
-            X1 = self.X1_ = X[y> np.mean(y),:]            
+            self.X0_ = X[y<=np.mean(y),:]
+            self.X1_ = X[y> np.mean(y),:]            
             self.prevalence_odds_ = np.nan
             if self.feat_pvalue_method == 'auto': self.feat_pvalue_method_ = 'spearmanr'
         elif self.task == 'classification':
             self._assert_input(X, y, is_binary_clf_asserted=True)
-            X0 = self.X0_ = X[y==0,:]
-            X1 = self.X1_ = X[y==1,:]
-            self.prevalence_odds_ = len(X1) / len(X0)
+            self.X0_ = X[y==0,:]
+            self.X1_ = X[y==1,:]
+            self.prevalence_odds_ = len(self.X1_) / float(len(self.X0_))
             if self.feat_pvalue_method == 'auto': self.feat_pvalue_method_ = 'mannwhitneyu'
         else:
             raise TypeError(F'The task name {self.task} is invalid (only `classification` and `regression` are valid)!')        
@@ -1184,8 +1186,6 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 x1 = np.array(xcenters)
                 y1 = relative_log_odds = raw_log_odds - center_log_odds
                 
-            X_in = X1
-            
             spearman_r, pvalue_observed = spearmanr(x1, y1)
             self.feat_odds_spearman_rs_[colidx] = spearman_r
             self.feat_odds_spearman_pvalues_[colidx] = pvalue_observed
@@ -1276,7 +1276,6 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                     self.irrelevant_feature_indexes_.append(colidx)
                     #assert effect_size_to_pvals[self.feat_effect_size_thres][colidx]
                     if self.feat_pvalue_warn:
-                        colname = (X_in.columns[colidx] if hasattr(X_in, 'columns') else 'Unnamed column')
                         pval = effect_size_to_pvals[self.feat_effect_size_thres][colidx]
                         if self.feat_pvalue_drop:
                             warnings.warn(F'The feature {colname} at column index {colidx} seems to be irrelevant and is dropped (not kept) at '
@@ -1291,7 +1290,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #self._internal_predictor.fit(np.hstack([log_ratios, exX]), y, **kwargs)
         self._internal_predictor.fit(log_ratios, y, **kwargs)
         if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
-        self.n_features_in_ = X1.shape[1]
+        self.n_features_in_ = X.shape[1]
         if self.set_feature_importances: self._set_feature_importances(['f2f', 'f2l2f'])
         
         self._is_fitted = True
@@ -1317,6 +1316,10 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         return self.mat_x_values_3_
     def get_centered_2_log_odds(self):
         return self.mat_y_values_3_
+    def get_final_pre_transformed(self):
+        return self.mat_x_values_0_
+    def get_final_post_transformed(self):
+        return self.mat_y_values_0_
 
     def get_kernel_width_covered_n_positives(self):
         return copy.deepcopy(self.kernel_width_n_minority_samples_)
@@ -1496,6 +1499,7 @@ def test_fit_and_predict_with_dups(ilr=None, task='classification'):
 
     if not ilr: ilr = IsotonicLogisticRegression(feat_pvalue_thres=2.0, nontransformed_cols=['col3'], task=task)
     ilr.set_random_state(42+0)
+    logging.info(F'self_nontransformed_cols={ilr.nontransformed_cols}')
     X2 = ilr.fit_transform(X, y)
     X3 = ilr.transform(X)
     y1 = ilr.predict(X)
@@ -1781,8 +1785,8 @@ def test_like_ratio_test():
 
 if __name__ == '__main__':
     test_like_ratio_test()
-    ilr1 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='classification')
-    ilr2 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='regression')    
+    ilr1 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='classification', nontransformed_cols=['col3'])
+    ilr2 = IsotonicLogisticRegression(feat_pvalue_drop=False, task='regression', nontransformed_cols=['col3'])
     #test_inverse_transform(ilr1)
     #test_fit_and_predict_proba(ilr1)
     test_fit_and_predict_with_dups(ilr1)

@@ -340,7 +340,7 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamDefault_QDA': QuadraticDiscriminantAnalysis(),
     
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
-    'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html
+    'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed, solver='saga'), # Not listed in plot_classifier_comparison.html
     #'hParamRand0_LR'   : LogisticRegression(random_state=0), # Not listed in plot_classifier_comparison.html
     #'hParamRand1_LR'   : LogisticRegression(random_state=1), # Not listed in plot_classifier_comparison.html
 
@@ -1370,6 +1370,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     print(F's4x={s4x}')
     print(F's4x={s4y}')
     kernel_coverages = ilr.get_kernel_width_covered_n_positives()
+    final_x = ilr.get_final_pre_transformed() 
+    final_y = ilr.get_final_post_transformed()
 
     # feature analysis phase 2: feature importance plot
     if 'fa2' in tasks:
@@ -1395,6 +1397,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 axes[1].plot(s3x[feature_idx], s3y[feature_idx], label='After step 3: centered IR (CIR)',        alpha = 0.600, marker = 'v', linewidth=0.5, markersize=(16*2)**0.5)
                 if len(s4x[feature_idx]) > 0:
                     axes[1].plot(s4x[feature_idx], s4y[feature_idx], label='After step 4: moving average',           alpha = 0.600, marker = '<', linewidth=0.25,markersize=(16*1)**0.5)
+                axes[1].plot(final_x[feature_idx], final_y[feature_idx], label='Final transformed values',        alpha = 0.800, marker = '<', linewidth=0.01,markersize=(16*0.75)**0.5)
 
                 #bandwidth_ys = ilr.transform(s0x[feature_idx], column_idx=feature_idx)
                 #for bandwidth_x, bandwidth_y, bandwidth_n in zip(s0x[feature_idx], bandwidth_ys, s0x2[feature_idx]):
