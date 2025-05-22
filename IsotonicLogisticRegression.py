@@ -267,7 +267,7 @@ def _bootstrap_H0_assume_some_effect_size_pval(test_meth, group1, group2, effect
     if is_mannwhit: logging.log(LOGLEVEL_DEBUG1, f'ret={ret}')
     return ret
 
-# Two one-dimension regressors
+# Three one-dimension regressors
 
 class AlwaysConstantRegressor(BaseEstimator, ClassifierMixin, RegressorMixin):
     def __init__(self, predicted_value=0):
@@ -282,6 +282,19 @@ class AlwaysConstantRegressor(BaseEstimator, ClassifierMixin, RegressorMixin):
         return self.transform(X)
     def predict(self, X):
         return np.full(X.shape[0], self.predicted_value)
+
+class IdentityRegressor(BaseEstimator, ClassifierMixin, RegressorMixin):
+    def __init__(self):
+        pass
+    def fit(self, X, y=None):
+        return self
+    def transform(self, X):
+        return copy.deepcopy(X)
+    def fit_transform(self, X, y):
+        self.fit(X, y)
+        return self.transform(X)
+    def predict(self, X):
+        return copy.deepcopy(X)
 
 class SciPyPiecewiseLinearRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, fill_value="extrapolate"):
@@ -1196,9 +1209,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             
             if _is_any_in([colidx, colname], setof_nontransformed_cols):
                 self.mat_x_values_0_[colidx] = x1
-                self.mat_x2y_regs_0_[colidx] = ColumnTransformer([], remainder='passthrough')
+                self.mat_x2y_regs_0_[colidx] = IdentityRegressor() # ColumnTransformer([], remainder='passthrough')
                 self.mat_y_values_0_[colidx] = x1
-                self.mat_y2x_regs_0_[colidx] = ColumnTransformer([], remainder='passthrough')           
+                self.mat_y2x_regs_0_[colidx] = IdentityRegressor()
             elif len(set(x1a)) == 1 or len(set(y1a)) == 1:
                 self.mat_x_values_0_[colidx] = [0] # x-values
                 self.mat_x2y_regs_0_[colidx] = AlwaysConstantRegressor(0)  # regressors
