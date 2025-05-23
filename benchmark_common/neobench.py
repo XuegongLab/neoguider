@@ -30,7 +30,13 @@ from matplotlib import pyplot as plt
 matplotlib.use('Agg')  # Use a non-GUI backend
 import seaborn as sns
 
-import imblearn # Bonus points
+# WARNING: we may want to downsample data for some classifiers. 
+# Some classifiers (SVM, GaussianProcess, etc.) can only handle small data due to superlinear mem and/or running-time required with respect to data size.
+# The imblearn lib can downsample data.
+# Unfortunately, there is some potential bug in the interaction between its RandomUnderSampler constructor and its make_pipeline function.
+# This bug causes the training log_loss to increase as the number of features grows, which should not happen. 
+# Therefore, classifiers that require downsampling are not evaluated. 
+import imblearn
 
 # From https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 #  and https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
@@ -49,9 +55,9 @@ from sklearn.feature_selection import VarianceThreshold
 
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, SGDClassifier
 
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, log_loss
 from sklearn.model_selection import cross_val_predict, cross_val_score, GroupKFold
 
 from sklearn.naive_bayes import GaussianNB
@@ -97,7 +103,7 @@ sys.path.append(ISO_DIR)
 logging.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} ISO_NAME={ISO_NAME} ISO_MODULE={ISO_MODULE} ISO_EXT={ISO_EXT}')
 IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
-NG_default = 'NG_withNumTested'
+NG_default = 'NG_withNumTested_default'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
 from custom_models import FixedOneLogisticRegression  # Now pickleable!
@@ -234,6 +240,7 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     
     # NeoGuider
     F'{NG_default}'         : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
+    'NG_withNumTested'      : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
     'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]),
 
     # For testing purpose: these NeoGuider variants should perform at similar level compared with NG_default
@@ -288,7 +295,8 @@ HPARAM_TUNED_FT_PREPROC_NAME2TECH = {
     'PowerTransformer'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['PowerTransformer']),
     'QuantileTransformer' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['QuantileTransformer']),
     'StandardScaler'      : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['StandardScaler']),
-    F'{NG_default}'       : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']),
+    #F'{NG_default}'       : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']),
+    'NG_withNumTested'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withNumTested']),
     'NG_withoutNumTested' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withoutNumTested']),
 }
 
@@ -314,6 +322,7 @@ RF_best_hparams = collections.OrderedDict([
         ('min_weight_fraction_leaf', 0.015260491812400271), 
         ('n_estimators', 56)])
 
+other_LR_params = {} # {'class_weight': 'balanced'} does not work
 # All classifiers from https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 # The classifiers with runtime error are commented out (or provided with ideas to work around the error)
 HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
@@ -340,7 +349,30 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamDefault_QDA': QuadraticDiscriminantAnalysis(),
     
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
-    'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed, solver='saga'), # Not listed in plot_classifier_comparison.html
+    
+    'hParamDefault_LR' : LogisticRegression(), # Not listed in plot_classifier_comparison.html
+    
+    'hParamDefault_LR_LB0' : LogisticRegression(random_state=args1.randseed, solver='lbfgs', max_iter=200, tol=1e-8, **other_LR_params),
+    'hParamDefault_LR_LL0' : LogisticRegression(random_state=args1.randseed, solver='liblinear', max_iter=200, tol=1e-8, **other_LR_params),
+    'hParamDefault_LR_NC0' : LogisticRegression(random_state=args1.randseed, solver='newton-cholesky', max_iter=2000, tol=1e-8, **other_LR_params),
+    
+    'hParamDefault_LR_SAG0' : LogisticRegression(random_state=args1.randseed, solver='sag', max_iter=2000, tol=1e-8, **other_LR_params),
+    'hParamDefault_LR_SGD0' : SGDClassifier(random_state=args1.randseed+0, loss='log_loss', max_iter=200, tol=1e-8, **other_LR_params),
+
+    #'hParamDefault_LR_SAGA0' : LogisticRegression(random_state=args1.randseed+0, solver='saga', max_iter=2000, tol=1e-4, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    #'hParamDefault_LR_SAGA1' : LogisticRegression(random_state=args1.randseed+1, solver='saga', max_iter=2000, tol=1e-4, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    #'hParamDefault_LR_SAGA2' : LogisticRegression(random_state=args1.randseed+2, solver='saga', max_iter=2000, tol=1e-4), # Not listed in plot_classifier_comparison.html
+    
+    #'hParamDefault_LR_SAGA_C0.1' : LogisticRegression(random_state=args1.randseed+1, solver='saga', max_iter=2000, tol=1e-4, C=0.1, **other_LR_params), # Not listed in plot_classifier_comparison.html
+
+    #'hParamDefault_LR_LBFGS' : LogisticRegression(random_state=args1.randseed, max_iter=2000, tol=1e-8, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    #'hParamDefault_LR_LBFGS_C0.1' : LogisticRegression(random_state=args1.randseed, max_iter=2000, tol=1e-8, C=0.1, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    
+    #'hParamDefault_LR_SGD1'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    #'hParamDefault_LR_SGD_A1e-3'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, alpha=1e-3, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    #'hParamDefault_LR_SGD_A1e-5'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, alpha=1e-5, **other_LR_params), # Not listed in plot_classifier_comparison.html
+    #'hParamDefault_LR_SGD_A1e-6'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, alpha=1e-6, **other_LR_params), # Not listed in plot_classifier_comparison.html
+
     #'hParamRand0_LR'   : LogisticRegression(random_state=0), # Not listed in plot_classifier_comparison.html
     #'hParamRand1_LR'   : LogisticRegression(random_state=1), # Not listed in plot_classifier_comparison.html
 
@@ -410,7 +442,7 @@ FINAL_FT_PREPROC_NAMES = (
     'RobustScaler'       ,
     'StandardScaler'     ,
     NG_default           ,
-    'NG_withoutNumTested'
+    #'NG_withoutNumTested'
 )
 
 FINAL_CLASSIFIER_NAMES = HPARAM_TUNED_CLASSIFIER_LIST + HPARAM_DEFLT_CLASSIFIER_LIST
@@ -421,7 +453,7 @@ CLASSIFIERS_REQUIRING_STRONG_BALANCE = set([
     'hParamDefault_SVC', 'hParamTuned_SVC',
 ])
 
-CLASSIFIERS_REQUIRING_BALANCE = set(HPARAM_TUNED_CLASSIFIER_NAME2TECH.keys())
+CLASSIFIERS_REQUIRING_BALANCE = set(HPARAM_TUNED_CLASSIFIER_NAME2TECH.keys()) | set(HPARAM_DEFLT_CLASSIFIER_NAME2TECH.keys())
 
 SOFT_NAME_TO_MANUSCRIPT_NAME = {
     'Score_EL': 'NetMHCpan_ScoreEL',
@@ -433,7 +465,7 @@ SOFT_NAME_TO_MANUSCRIPT_NAME = {
 }
 
 SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS = {
-    NG_default : 'NG',
+    #NG_default : 'NG',
     'ln_NumTested' : 'NumTested',
     'mhcflurry_aff_percentile'         : 'MHCflurry_aff_%',
     'mhcflurry_presentation_percentile': 'MHCflurry_presentation_%',
@@ -593,10 +625,10 @@ parser.add_argument('--partition', default='', help='Column name used for the st
 parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBUG_SKLEARN_PIPE}: test sklearn pipeline. ')
 
 # Maintain consistency with Muller et al., 2023, Immunity
-parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation. ')
+parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
 parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
-parser.add_argument('--max_n_negatives', type=int, default=500*1000, help='Maximum number of negatives') # Five times higher than the one from Muller et al., 2023, Immunity
+parser.add_argument('--max_n_negatives', type=int, default=10*1000*1000, help='Maximum number of negatives') # 100 times higher than the one from Muller et al., 2023, Immunity
 
 parser.add_argument('--njobs', type=int, default=24, help='Number of jobs to run in parallel')
 
@@ -793,7 +825,10 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
                     continue
                 ml_pipename = comb(ft_preproc_name, classifier_name)
                 was_balancing_performed, imbalearn_selector = make_imbalearn_selector(classifier_name, n_positives, n_negatives)
-                ml_pipe = imblearn.pipeline.make_pipeline(imbalearn_selector, copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier_tech))
+                if was_balancing_performed:
+                    ml_pipe = imblearn.pipeline.make_pipeline(imbalearn_selector, copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier_tech))
+                else:
+                    ml_pipe = sklearn.pipeline.make_pipeline(copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier_tech))
                 ret.append((ml_pipename, ml_pipe))
                 if DEBUG_SKLEARN_PIPE in args.debug and not was_balancing_performed and hyperparam_tuning_strategy == 'hyperparam_deflt':
                     # TODO: report the UNEXPECTED_BEHAVIOR to the sklearn team. 
@@ -844,7 +879,12 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
             with open(err_filename, 'wb') as file:
                 pickle.dump(ml_pipe, file)
             logging.info(F'Saved the ML pipeline {ml_pipename} with its runtime training error at {err_filename}')
-            raise err        
+            raise err
+        if hasattr(ml_pipe, 'fit_resample'):
+            sub_X, sub_y = ml_pipe.fit_resample(X, y)
+            if len(sub_X) < 20000:
+                sub_X['Label'] = y
+                sub_X.to_csv(F'{modeldir}/{ml_pipename_in_fname}_training_data.tsv.gz', sep='\t', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         with open(prefilename, 'wb') as file:
             pickle.dump(ml_pipe, file)
         logging.info(F'Performed training of {ml_pipename}')
@@ -934,7 +974,7 @@ def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hPar
         pat2score[pat] = sum(np.exp(-0.02*(rank_df['rank']-1))) # https://www.cell.com/immunity/fulltext/S1074-7613(23)00406-5#sectitle0030
     return len([label for label in (df.loc[df['rank']<=topN,:][labelcol]) if label == 1]), pat2score
 
-def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labelcol, title_in_colname):
+def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labelcol, title_in_colname, feature_set):
     pat2score = {}
     if colname in colname2rocauc:
         #print(F'colname2rocauc[{colname}]={colname2rocauc[colname]}')
@@ -955,8 +995,14 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
         if metric_name == 'top':
             roc_auc, pat2score = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
-        else:
+        elif metric_name == 'roc_auc':
             roc_auc = roc_auc_score(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
+        else:
+            assert metric_name == 'log_loss'
+            if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
+                roc_auc = 1.0/log_loss(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
+            else:
+                roc_auc = np.nan
         #fpr, tpr, thresholds = metrics.roc_curve(train_df['response'], train_df[clfname], pos_label=1)
         #auc_df.loc[ft_preproc_name,classifier_name] = metrics.auc(fpr, tpr)
         roc_auc_std = np.nan
@@ -986,7 +1032,8 @@ def benchmark_perf_2(
     if len(df_ins) < n_subfigs: df_ins = [df_ins[0]] * n_subfigs
     if len(colname2rocauc_list) < n_subfigs: colname2rocauc_list = [colname2rocauc_list[0]] * n_subfigs
     if len(metric_thresholds) < n_subfigs: metric_thresholds = [metric_thresholds[0]] * n_subfigs
-    
+   
+    len_df = 0
     fig_1, ax_1 = plt.subplots(figsize=(6*max((1.5,n_subfigs)), figheight))
     ax_1.set_axis_off()
     gs = gridspec.GridSpec(2, n_subfigs, height_ratios=[1, 25])
@@ -1013,7 +1060,7 @@ def benchmark_perf_2(
         colnames = sorted(set(features + ex_feats + colnames))
         colnames = [colname for colname in colnames if colname in df_in.columns]
         metric_results = Parallel(n_jobs=24)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
-            df_in[['Patient', labelcol, colname]], labelcol, title_in_colname) for colname in colnames)
+            df_in[['Patient', labelcol, colname]], labelcol, title_in_colname, set(features + ex_feats)) for colname in colnames)
         
         logging.info(F'Started tabulating and performing statistical analyses on rank_score')
         meth2pat2score = {fpt_clf_comb: pat2score for (fpt_clf_comb, roc_auc, moe, roc_auc_std, pat2score) in metric_results}
@@ -1067,7 +1114,7 @@ def benchmark_perf_2(
         ypos = list(range(len(long_df)))
         #auroc_method_class_list = zip(long_df[title_in_colname], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
         def meth2id(x):
-            if x.startswith(NG_default) or x.startswith('NG_withoutNumTested'): return (0 if '/hParamTuned_' in x else 1)
+            if x.startswith('NG_withNumTested') or x.startswith('NG_withoutNumTested'): return (0 if '/hParamTuned_' in x else 1)
             if x in features: return 4
             if x in ex_feats: return 5
             return (2 if '/hParamTuned_' in x else 3)
@@ -1095,6 +1142,7 @@ def benchmark_perf_2(
             long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'], ascending=True)
         else: raise ValueError(f'The sort_type {sort_type} is invalid. ')
         long_df['ypos'] = np.array(list(range(len(long_df))))
+        len_df = max([len_df, len(long_df)])
         methclass_df_iterable = long_df.groupby('MethClass')
         hbars_list = []
         methclass_list = []
@@ -1127,6 +1175,9 @@ def benchmark_perf_2(
         if ax_idx == 0: legend_ax.legend(hbars_list, [methclass2desc[i] for i in sorted(methclass_list)], title='Feature-preprocessing-technique/classifier combinations',
                 ncol=get_ncols(len(long_df['MethClass'].unique()), n_subfigs),
                 loc='center', fontsize=12, title_fontsize=18)
+    
+    new_max_figheight = 12*(1+len_df)/50.0
+    if fig_1.get_figheight() > new_max_figheight: fig_1.set_figheight(new_max_figheight)
 
     plt.tight_layout()
     logging.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
@@ -1198,6 +1249,7 @@ def prepare_df(df, labelcol, na_op, max_peplen):
             logging.info(F'Added the column ln_NumTested')
         else:
             assert np.allclose(ret['ln_NumTested'], np.array(newcol))
+        #ret['ln_NumTested'] = np.log(stats.poisson.rvs(np.exp(ret['ln_NumTested'])-1, random_state=0) + 1)  # Poisson-noise
     if not ('Patient' in ret.columns): ret['Patient'] = (ret[patientcol] if patientcol else list(range(len(df))))
     if na_op == 'drop':
         ret = ret.loc[df[labelcol] != -1] # -1 means NotAvailable
@@ -1307,13 +1359,15 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     train_X = train_X.apply(pd.to_numeric)
     big_y   = big_y.apply(pd.to_numeric)
 
-    ft_preproc_tech = HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']
+    ft_preproc_tech = copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}'])
     #train_X = QuantileTransformer(random_state=args1.randseed).fit_transform(train_X)
     #train_X = pd.DataFrame(train_X, columns=features)
+    ft_preproc_tech.final_pred_fit_params = {'verbose': 1}
     big_transformed_X = ft_preproc_tech.fit_transform(train_X, big_y)
     ft_preproc_tech_feature_names = ft_preproc_tech.get_feature_names()
     ft_preproc_tech_feature_importances_1 = ft_preproc_tech.get_feature_importances('f2l')
     ft_preproc_tech_feature_importances_2 = ft_preproc_tech.get_feature_importances('f2f')
+    logging.info(f'LogOddsImprtances={list(zip(ft_preproc_tech_feature_names,ft_preproc_tech_feature_importances_2))}')
     ft_preproc_tech_feature_importances_3 = ft_preproc_tech.get_feature_importances('f2l2f')
 
     ft_preproc_tech_feature_importances_p1 = ft_preproc_tech.get_feature_importances('pvalue', 'mannwhitneyu')
@@ -1424,6 +1478,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     if 'fa3' in tasks:
         big_transformed_df = pd.DataFrame(np.append(big_transformed_X, np.array([[v] for v in big_y]), axis=1), columns=list(features)+[labelcol])
         big_transformed_df = big_transformed_df.apply(pd.to_numeric)
+        big_transformed_df.to_csv(f'{output}_transformed_data.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+        
         big_trans_df0 = big_transformed_df.loc[big_transformed_df[labelcol]==0,:] #.sample(n=100, random_state=args1.randseed)
         big_trans_df1 = big_transformed_df.loc[big_transformed_df[labelcol]==1,:] #.sample(n=100, random_state=args1.randseed)
 
@@ -1511,6 +1567,9 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         benchmark_performance(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}', 
             features, ex_feats, labelcol, [{}], 
             metric_name='roc_auc', metric_thresholds=[0], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
+        benchmark_performance(test_dfs, f'{output}_0_{train_or_test}_log_loss_{{}}', 
+            features, ex_feats, labelcol, [{}], 
+            metric_name='log_loss', metric_thresholds=[0], titles=get_filenames(test_fnames, '(1/LogLoss) with\nfeature_set='))
 
     cv_pred_dfs = []
     pipename2score_list = []
