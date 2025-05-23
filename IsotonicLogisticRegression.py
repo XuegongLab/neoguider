@@ -283,18 +283,20 @@ class AlwaysConstantRegressor(BaseEstimator, ClassifierMixin, RegressorMixin):
     def predict(self, X):
         return np.full(X.shape[0], self.predicted_value)
 
-class IdentityRegressor(BaseEstimator, ClassifierMixin, RegressorMixin):
-    def __init__(self):
-        pass
+class ScalingRegressor1D(BaseEstimator, ClassifierMixin, RegressorMixin):
+    def __init__(self, shift_scaling_factor=0.0, scale_factor=1.0):
+        self.shift_scaling_factor = shift_scaling_factor
+        self.scale_factor = scale_factor
     def fit(self, X, y=None):
+        self.mean_ = np.nanmean(np.array(X).flatten())
         return self
     def transform(self, X):
-        return copy.deepcopy(X)
+        return copy.deepcopy((X - self.mean_ * self.shift_scaling_factor) * self.scale_factor)
     def fit_transform(self, X, y):
         self.fit(X, y)
         return self.transform(X)
     def predict(self, X):
-        return copy.deepcopy(X)
+        return self.transform(X)
 
 class SciPyPiecewiseLinearRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, fill_value="extrapolate"):
@@ -435,13 +437,14 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
 
             task='classification',
             final_predictor=None, # (ElasticNetCV() if taks=='regression' else LogisticRegression()),
-            
+            final_pred_init_params={},
+
             random_state=-1,
             # adaKDE_* are only used when random_state<0
             adaKDE_min_width=2,
             adaKDE_width_adjust_factor=1.0, # 0.9 for Silverman's rule (but 0.5 in practice)
             adaKDE_exponent_inverse=3,
-            adaKDE_freeform_min_width=1e99,
+            adaKDE_freeform_min_width=36, #1e99,
             
             postCIR_mov_avg_window_size=0,
             
@@ -589,6 +592,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         self.task = task
         self.final_predictor = final_predictor
+        self.final_pred_init_params = final_pred_init_params
         # Probability can be calibrated with:
         # n_splits=5, random_state=1, cccv_n_jobs=-1,
         # sklearn.calibration.CalibratedClassifierCV(estimator=None, *, method='sigmoid', cv=KFold(n_splits=5, shuffle=True, random_state=1), n_jobs=-1, ensemble=True)
@@ -924,12 +928,12 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             self._internal_predictor = self.final_predictor
         else:
             if self.task == 'regression':
-                self._internal_predictor = LinearRegression()
+                self._internal_predictor = LinearRegression(**self.final_pred_init_params)
                 # self._internal_predictor = ElasticNetCV()
             else:
                 # The default-param logistic regression: different trained params from the same training data on different machines
                 # Therefore, the following logistic regression is used
-                self._internal_predictor = LogisticRegression(random_state=0, solver='saga')
+                self._internal_predictor = LogisticRegression(random_state=0, solver='liblinear', tol=1e-8, **self.final_pred_init_params)
         self.irrelevant_feature_indexes_ = []
         
         #def triangular_kernel(val, mid, lo, hi): return max((0, ((val-lo) / (mid-lo) if (val < mid) else (hi-val) / (hi-mid))))
@@ -1209,9 +1213,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             
             if _is_any_in([colidx, colname], setof_nontransformed_cols):
                 self.mat_x_values_0_[colidx] = x1
-                self.mat_x2y_regs_0_[colidx] = IdentityRegressor() # ColumnTransformer([], remainder='passthrough')
-                self.mat_y_values_0_[colidx] = x1
-                self.mat_y2x_regs_0_[colidx] = IdentityRegressor()
+                self.mat_x2y_regs_0_[colidx] = ScalingRegressor1D().fit(x1) # ColumnTransformer([], remainder='passthrough')
+                self.mat_y_values_0_[colidx] = self.mat_x2y_regs_0_[colidx].transform(x1)
+                self.mat_y2x_regs_0_[colidx] = ScalingRegressor1D().fit(x1)
             elif len(set(x1a)) == 1 or len(set(y1a)) == 1:
                 self.mat_x_values_0_[colidx] = [0] # x-values
                 self.mat_x2y_regs_0_[colidx] = AlwaysConstantRegressor(0)  # regressors
@@ -1288,7 +1292,7 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         
         log_ratios = self._transform(X, add_measure_error=add_measure_error, is_inverse=False)
         #self._internal_predictor.fit(np.hstack([log_ratios, exX]), y, **kwargs)
-        self._internal_predictor.fit(log_ratios, y, **kwargs)
+        self._internal_predictor.fit(log_ratios, y)
         if data_clear: self.clear_intermediate_internal_data(data_clear_steps)
         self.n_features_in_ = X.shape[1]
         if self.set_feature_importances: self._set_feature_importances(['f2f', 'f2l2f'])
@@ -1323,7 +1327,6 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
 
     def get_kernel_width_covered_n_positives(self):
         return copy.deepcopy(self.kernel_width_n_minority_samples_)
-    
     def get_adaDKE_X(self):
         check_is_fitted(self)
         return self.winsizes_X_
