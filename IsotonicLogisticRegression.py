@@ -195,8 +195,8 @@ def _approx_H0_assume_some_effect_size_pval(statistics, n, effect_sizes, mus, sd
                 pvalue = _fisher_transform(stat, n, effect_size)
             elif stat_test == 'mannwhitneyu':
                 # mus and sds are not tie-corrected
-                if not np.allclose(abs(-mus[i]), abs(stat)):
-                    raise ValueError('{mus[i]}=={stat} failed (ignoring sign)!')
+                if not np.allclose(abs(-mus[i]), abs(stat), atol=1e-7):
+                    raise ValueError(F'{mus[i]}=={stat} failed (ignoring sign)!')
                 if sds[i] == 0:
                     pvalue = 1 if abs(stat) > effect_size else 0
                 else:
@@ -931,9 +931,9 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
                 self._internal_predictor = LinearRegression(**self.final_pred_init_params)
                 # self._internal_predictor = ElasticNetCV()
             else:
-                # The default-param logistic regression: different trained params from the same training data on different machines
-                # Therefore, the following logistic regression is used
-                self._internal_predictor = LogisticRegression(random_state=0, solver='liblinear', tol=1e-8, **self.final_pred_init_params)
+                # L-BFGS, the default logistic-regression (LR) solver used by the current sklearn version, generates different coefficients from the same training data on different machines
+                # Therefore, we use liblinear, the default LR solver in the previous sklearn versions, to solve LR
+                self._internal_predictor = LogisticRegression(random_state=0, solver='liblinear', **self.final_pred_init_params)
         self.irrelevant_feature_indexes_ = []
         
         #def triangular_kernel(val, mid, lo, hi): return max((0, ((val-lo) / (mid-lo) if (val < mid) else (hi-val) / (hi-mid))))
