@@ -27,6 +27,7 @@ import matplotlib.gridspec as gridspec
 
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib import pyplot as plt
+from matplotlib.patches import Patch
 matplotlib.use('Agg')  # Use a non-GUI backend
 import seaborn as sns
 
@@ -90,9 +91,10 @@ from xgboost import XGBClassifier
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
 
-#logger = logging.getLogger(__name__)
-def config_logging(function_name=''): logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s {function_name} - %(message)s')
-config_logging('MAIN')
+logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s - %(message)s')
+
+def myGetLogger(function_name=''): return logging.getLogger(function_name)
+main_logger = myGetLogger('MAIN')
 
 isopath = args1.isolib.split('#')[0]
 isolibname = args1.isolib.split('#')[1]
@@ -100,7 +102,7 @@ ISO_DIR = os.path.dirname(isopath)
 ISO_NAME = os.path.basename(isopath)
 ISO_MODULE, ISO_EXT = os.path.splitext(ISO_NAME)
 sys.path.append(ISO_DIR)
-logging.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} ISO_NAME={ISO_NAME} ISO_MODULE={ISO_MODULE} ISO_EXT={ISO_EXT}')
+main_logger.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} ISO_NAME={ISO_NAME} ISO_MODULE={ISO_MODULE} ISO_EXT={ISO_EXT}')
 IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 NG_default = 'NG_withNumTested_default'
@@ -295,8 +297,8 @@ HPARAM_TUNED_FT_PREPROC_NAME2TECH = {
     'PowerTransformer'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['PowerTransformer']),
     'QuantileTransformer' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['QuantileTransformer']),
     'StandardScaler'      : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['StandardScaler']),
-    #F'{NG_default}'       : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']),
-    'NG_withNumTested'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withNumTested']),
+    F'{NG_default}'       : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']),
+    #'NG_withNumTested'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withNumTested']),
     'NG_withoutNumTested' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withoutNumTested']),
 }
 
@@ -350,37 +352,21 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     
     'hParamDefault_LDA': LinearDiscriminantAnalysis(), # Not listed in plot_classifier_comparison.html
     
-    'hParamDefault_LR' : LogisticRegression(), # Not listed in plot_classifier_comparison.html
-    
-    'hParamDefault_LR_LB0' : LogisticRegression(random_state=args1.randseed, solver='lbfgs', max_iter=200, tol=1e-8, **other_LR_params),
-    'hParamDefault_LR_LL0' : LogisticRegression(random_state=args1.randseed, solver='liblinear', max_iter=200, tol=1e-8, **other_LR_params),
-    'hParamDefault_LR_NC0' : LogisticRegression(random_state=args1.randseed, solver='newton-cholesky', max_iter=2000, tol=1e-8, **other_LR_params),
-    
-    'hParamDefault_LR_SAG0' : LogisticRegression(random_state=args1.randseed, solver='sag', max_iter=2000, tol=1e-8, **other_LR_params),
-    'hParamDefault_LR_SGD0' : SGDClassifier(random_state=args1.randseed+0, loss='log_loss', max_iter=200, tol=1e-8, **other_LR_params),
+    # liblinear was the default in previous sklearn versions (lbfgs generates different results from different machines)
+    'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed, solver='liblinear'), # Not listed in plot_classifier_comparison.html
 
-    #'hParamDefault_LR_SAGA0' : LogisticRegression(random_state=args1.randseed+0, solver='saga', max_iter=2000, tol=1e-4, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    #'hParamDefault_LR_SAGA1' : LogisticRegression(random_state=args1.randseed+1, solver='saga', max_iter=2000, tol=1e-4, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    #'hParamDefault_LR_SAGA2' : LogisticRegression(random_state=args1.randseed+2, solver='saga', max_iter=2000, tol=1e-4), # Not listed in plot_classifier_comparison.html
-    
-    #'hParamDefault_LR_SAGA_C0.1' : LogisticRegression(random_state=args1.randseed+1, solver='saga', max_iter=2000, tol=1e-4, C=0.1, **other_LR_params), # Not listed in plot_classifier_comparison.html
-
-    #'hParamDefault_LR_LBFGS' : LogisticRegression(random_state=args1.randseed, max_iter=2000, tol=1e-8, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    #'hParamDefault_LR_LBFGS_C0.1' : LogisticRegression(random_state=args1.randseed, max_iter=2000, tol=1e-8, C=0.1, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    
-    #'hParamDefault_LR_SGD1'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    #'hParamDefault_LR_SGD_A1e-3'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, alpha=1e-3, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    #'hParamDefault_LR_SGD_A1e-5'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, alpha=1e-5, **other_LR_params), # Not listed in plot_classifier_comparison.html
-    #'hParamDefault_LR_SGD_A1e-6'  : SGDClassifier(random_state=args1.randseed+1, loss='log_loss', max_iter=2000, tol=1e-8, alpha=1e-6, **other_LR_params), # Not listed in plot_classifier_comparison.html
-
-    #'hParamRand0_LR'   : LogisticRegression(random_state=0), # Not listed in plot_classifier_comparison.html
-    #'hParamRand1_LR'   : LogisticRegression(random_state=1), # Not listed in plot_classifier_comparison.html
+    'hParamTest_LB0_LR'  : LogisticRegression(random_state=args1.randseed, solver='lbfgs',           **other_LR_params),
+    'hParamTest_LL0_LR'  : LogisticRegression(random_state=args1.randseed, solver='liblinear',       **other_LR_params),
+    'hParamTest_NC0_LR'  : LogisticRegression(random_state=args1.randseed, solver='newton-cholesky', **other_LR_params),
+    'hParamTest_SAG0_LR' : LogisticRegression(random_state=args1.randseed, solver='sag',             **other_LR_params),
+    'hParamTest_SAGA0_LR': LogisticRegression(random_state=args1.randseed, solver='saga',            **other_LR_params)
+    'hParamTest_SGD0_LR' : SGDClassifier     (random_state=args1.randseed, loss='log_loss'),
 
     'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
     
     'UnitCoefficient_LR': FixedOneLogisticRegression(),
     # 'ET': ExtraTreesClassifier(random_state=args1.randseed)      , # Not listed in plot_classifier_comparison.html and performs worse than RF
-    # 'GB': GradientBoostingClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and similar to XGB but runs much slower
+    # 'GB': GradientBoostingClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and performs similar to XGB but runs much slower
 }
 
 # Other authors also performed split in patient-unspecific manner (the same patient's peptides are used for both training and assessing hyperparam-goodness)
@@ -423,7 +409,13 @@ HPARAM_TUNED_CLASSIFIER_NAME2TECH = {
 # These are the classifiers at https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 # that did not run into any errors (including excessive runtime, i.e., O(n^2) runtime where n is the size of training set)
 # plus LogisticRegression (LR)
-HPARAM_DEFLT_CLASSIFIER_LIST = ['hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF', 
+HPARAM_DEFLT_CLASSIFIER_LIST = [
+    'hParamDefault_AB',
+    'hParamDefault_DT',
+    'hParamDefault_GNB',
+    'hParamDefault_MLP',
+    'hParamDefault_QDA',
+    'hParamDefault_RF', 
     'hParamDefault_LR',
     'UnitCoefficient_LR', # from Comment 5-2
     ]
@@ -442,7 +434,7 @@ FINAL_FT_PREPROC_NAMES = (
     'RobustScaler'       ,
     'StandardScaler'     ,
     NG_default           ,
-    #'NG_withoutNumTested'
+    'NG_withoutNumTested'
 )
 
 FINAL_CLASSIFIER_NAMES = HPARAM_TUNED_CLASSIFIER_LIST + HPARAM_DEFLT_CLASSIFIER_LIST
@@ -605,13 +597,13 @@ parser.add_argument('-o', '--output', required=True, #(scriptdir+'/tmp/default_o
 parser.add_argument('-m', '--model',  default=(None),
         help='The prefix of the directory containing model files in pickle format')
 
-parser.add_argument('-1', '--hparam_deflt_ft_preproc_names', nargs='*', default=[x for x in HPARAM_DEFLT_FT_PREPROC_NAME2TECH],
+parser.add_argument('-1', '--hparam_deflt_ft_preproc_names', nargs='*', default=[x for x in HPARAM_DEFLT_FT_PREPROC_NAME2TECH], choices=list(HPARAM_DEFLT_FT_PREPROC_NAME2TECH.keys()),
         help='Names of the feature preprocessing techniques to be assessed')
-parser.add_argument('-2', '--hparam_deflt_classifier_names', nargs='*', default=[x for x in HPARAM_DEFLT_CLASSIFIER_NAME2TECH],
+parser.add_argument('-2', '--hparam_deflt_classifier_names', nargs='*', default=[x for x in HPARAM_DEFLT_CLASSIFIER_NAME2TECH], choices=list(HPARAM_DEFLT_CLASSIFIER_NAME2TECH.keys()),
         help='Names of the machine-learning classifiers to be assessed')
-parser.add_argument('-3', '--hparam_tuned_ft_preproc_names', nargs='*', default=[x for x in HPARAM_TUNED_FT_PREPROC_NAME2TECH],
+parser.add_argument('-3', '--hparam_tuned_ft_preproc_names', nargs='*', default=[x for x in HPARAM_TUNED_FT_PREPROC_NAME2TECH], choices=list(HPARAM_TUNED_FT_PREPROC_NAME2TECH.keys()),
         help='Names of the feature preprocessing techniques to be assessed with hyperparameter tuning')
-parser.add_argument('-4', '--hparam_tuned_classifier_names', nargs='*', default=[x for x in HPARAM_TUNED_CLASSIFIER_NAME2TECH],
+parser.add_argument('-4', '--hparam_tuned_classifier_names', nargs='*', default=[x for x in HPARAM_TUNED_CLASSIFIER_NAME2TECH], choices=list(HPARAM_TUNED_CLASSIFIER_NAME2TECH.keys()),
         help='Names of the machine-learning classifiers with hyperparameter tuning to be assessed')
 parser.add_argument('--inc', default=None, help='Assume that label as a function of each feature is increasing (0, 1, "auto", or None denoting false, true, auto, and inferred)')
 parser.add_argument('--sep', default=None, help='csv column separator')
@@ -634,6 +626,9 @@ parser.add_argument('--njobs', type=int, default=24, help='Number of jobs to run
 
 args = parser.parse_args(remaining_argv)
 para_n_jobs = args.njobs
+if 'keep-final' in args.tasks:
+    HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {x:y for (x,y) in sorted(HPARAM_DEFLT_FT_PREPROC_NAME2TECH.items()) if x in FINAL_FT_PREPROC_NAMES}
+    HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {x:y for (x,y) in sorted(HPARAM_DEFLT_CLASSIFIER_NAME2TECH.items()) if x in FINAL_CLASSIFIER_NAMES}
 
 if args.output and not args.model: model_dir_prefix = args.output
 elif args.model: model_dir_prefix = args.model
@@ -674,7 +669,7 @@ else:
 if increasing in [True, False]: feat_pvalue_drop = False
 else: feat_pvalue_drop = True
 
-logging.info(F'feat_pvalue_drop={feat_pvalue_drop}')
+main_logger.info(F'feat_pvalue_drop={feat_pvalue_drop}')
 
 nan_policy='raise' #'mean'
 kwargs = {
@@ -706,7 +701,7 @@ def compute_hla_mat(df, hlacol, labelcol, patientcol):
 
 def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     if hlacol not in df.columns:
-        logging.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing HLA allotype distributions!')
+        main_logger.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing HLA allotype distributions!')
         return -1
     matrix = compute_hla_mat(df, hlacol, labelcol, patientcol)
     g = sns.clustermap(
@@ -744,7 +739,7 @@ def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}
 
 def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR'):
     if hlacol not in df.columns:
-        logging.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing patterns of assocation between HLA allotype and performance!')
+        main_logger.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing patterns of assocation between HLA allotype and performance!')
         return -1
 
     matrix = compute_hla_mat(df, hlacol, labelcol, patientcol)
@@ -777,7 +772,7 @@ def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patien
     #g.ax_heatmap.grid(which='major', color='blue', linestyle='dotted', linewidth=0.5)
     plt.tight_layout()
     plt.savefig(figout)
-    logging.info(F'In analyze_performance_per_hla: saved clustermap to {figout}')
+    main_logger.info(F'In analyze_performance_per_hla: saved clustermap to {figout}')
     plt.close()
     return matrix2
 
@@ -796,17 +791,17 @@ def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
         if n_negatives > 2*args.max_n_negatives: label2nsamples[0] = args.max_n_negatives # new_n_pos = n_positives # min((n_positives, args.max_n_negatives))
         if n_positives > 2*args.max_n_negatives: label2nsamples[1] = args.max_n_negatives # new_n_neg = between(n_negatives, n_positives, args.max_n_negatives)
     else:
-        logging.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
+        main_logger.info(F'Classifier {classifier_name} was ignored by random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # IdentityTransformer VarianceThreshold() # RandomUnderSampler(sampling_strategy=0.0001, random_state=args1.randseed)
     if len(label2nsamples.items()) > 0: # new_n_neg > new_n_pos:
-        logging.info(F'Classifier {classifier_name} went through random sampling with n_positives={n_positives}, n_negatives={n_negatives}, and label2nsamples={label2nsamples}!')
+        main_logger.info(F'Classifier {classifier_name} went through random sampling with n_positives={n_positives}, n_negatives={n_negatives}, and label2nsamples={label2nsamples}!')
         #minor_over_major = (new_n_pos/new_n_neg)
         #if minor_over_major > 1.0:
-        #    logging.warning(F'RandomUnderSampler does not work with the minority/majority ratio of {minor_over_major} (classifier={classifier_name}), so convert the ratio to 1/{minor_over_major} instead!')
+        #    main_logger.warning(F'RandomUnderSampler does not work with the minority/majority ratio of {minor_over_major} (classifier={classifier_name}), so convert the ratio to 1/{minor_over_major} instead!')
         #    minor_over_major = 1.0 / minor_over_major
         return 1, imblearn.under_sampling.RandomUnderSampler(sampling_strategy=label2nsamples, random_state=args1.randseed)
     else:
-        logging.info(F'Classifier {classifier_name} was not through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
+        main_logger.info(F'Classifier {classifier_name} was not through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # VarianceThreshold()
 
 def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_preproc_tech_dict, hparam_tuned_classifier_dict, y):
@@ -819,7 +814,11 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
             ('hyperparam_deflt', HPARAM_DEFLT_FT_PREPROC_NAME2TECH, HPARAM_DEFLT_CLASSIFIER_NAME2TECH, args.hparam_deflt_ft_preproc_names, args.hparam_deflt_classifier_names)]:
         for     ft_preproc_name, ft_preproc_tech in sorted(FT_PREPROC_NAME2TECH.items()):
             for classifier_name, classifier_tech in sorted(CLASSIFIER_NAME2TECH.items()):
-                if (ft_preproc_name, classifier_name) in [('IdentityTransformer', 'hParamTuned_MLP')]: continue # data
+                # Hyperparam-tuning of MLP generates error from non-transformed data
+                if (ft_preproc_name, classifier_name) in [('IdentityTransformer', 'hParamTuned_MLP')]: continue
+                # Skip testing abnormal LR behavior (i.e., saga not converging) on other feature preprocessors
+                if (ft_preproc_name != NG_default) and classifier_name.startswith('hParamTest_'): continue
+
                 if not (ft_preproc_name in ft_preproc_names
                     and classifier_name in classifier_names): 
                     continue
@@ -850,16 +849,16 @@ def drop_feat_from_X(ml_pipename, X):
     #for colname in X.columns:
     #    if colname in ASCENDING_FEATURES: 
     #        X.loc[:,colname] = -X[colname]
-    #        logging.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
+    #        main_logger.info(F'Performed negation to the column {colname} (CHECK_FOR_BUG)')
     if (not 'ln_NumTested' in X.columns) or 'withNumTested' in ml_pipename:
         return X.copy()
     else:
         return X.drop(columns=['ln_NumTested'])
 
 def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):    
-    config_logging('FIT')
+    sub_logger = myGetLogger('FIT')
     taskname = F'training {ml_pipename}'
-    logging.info(F'Started {taskname} with input_shape={X.shape}')
+    sub_logger.info(F'Started {taskname} with input_shape={X.shape}')
     random.seed(args.sub_randseed)
     np.random.seed(args.sub_randseed)
 
@@ -870,7 +869,7 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
     if os.path.exists(prefilename):
         with open(prefilename, 'rb') as file:
             ml_pipe = pickle.load(file)
-        logging.info(F'Used already-trained {ml_pipename}')
+        sub_logger.info(F'Used already-trained {ml_pipename}')
     else:
         try:
             ml_pipe.fit(X, y)
@@ -878,7 +877,7 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
             err_filename = F'{modeldir}/{ml_pipename_in_fname}_model_error.pickle'
             with open(err_filename, 'wb') as file:
                 pickle.dump(ml_pipe, file)
-            logging.info(F'Saved the ML pipeline {ml_pipename} with its runtime training error at {err_filename}')
+            sub_logger.info(F'Saved the ML pipeline {ml_pipename} with its runtime training error at {err_filename}')
             raise err
         if hasattr(ml_pipe, 'fit_resample'):
             sub_X, sub_y = ml_pipe.fit_resample(X, y)
@@ -887,17 +886,17 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
                 sub_X.to_csv(F'{modeldir}/{ml_pipename_in_fname}_training_data.tsv.gz', sep='\t', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         with open(prefilename, 'wb') as file:
             pickle.dump(ml_pipe, file)
-        logging.info(F'Performed training of {ml_pipename}')
+        sub_logger.info(F'Performed training of {ml_pipename}')
     prob_pred = ml_pipe.predict_proba(X)
 
     assert_prob_arr(prob_pred, taskname)
-    logging.info(F'Ended {taskname}')
+    sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
 def predict_with_ml_pipe(ml_pipename, ml_pipe, X, modeldir):
-    config_logging('PREDICT')
+    sub_logger = myGetLogger('PREDICT')
     taskname = F'predicting test-set labels using {ml_pipename}'
-    logging.info(F'Started {taskname} with input_shape={X.shape}')
+    sub_logger.info(F'Started {taskname} with input_shape={X.shape}')
     random.seed(args.sub_randseed)
     np.random.seed(args.sub_randseed)
    
@@ -913,17 +912,17 @@ def predict_with_ml_pipe(ml_pipename, ml_pipe, X, modeldir):
             y22 = ml_pipe2.predict_proba(X2)
             assert np.allclose(y21, y22), F'The ML pipeline {ml_pipename} was not saved properly because {y21} is not all-approx-equal to {y22}!'
         except NotFittedError as exc:
-            logging.info(f"Model {ml_pipename} has not been trained in this run. ")
+            sub_logger.info(f"Model {ml_pipename} has not been trained in this run. ")
     prob_pred = ml_pipe2.predict_proba(X)
 
     assert_prob_arr(prob_pred, taskname)
-    logging.info(F'Ended {taskname}')
+    sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
 def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
-    config_logging('CROSS_VAL_PREDICT')
+    sub_logger = myGetLogger('CROSS_VAL_PREDICT')
     taskname = F'predicting out-of-fold labels by cross validation using {ml_pipename}'
-    logging.info(F'Start {taskname} with input_shape={X.shape}')
+    sub_logger.info(F'Start {taskname} with input_shape={X.shape}')
     random.seed(args.sub_randseed)
     np.random.seed(args.sub_randseed)
 
@@ -940,13 +939,13 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx)
             pickle.dump(prob_pred, file)
 
     assert_prob_arr(prob_pred, taskname)
-    logging.info(F'Ended {taskname}')
+    sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
 def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
-    config_logging('CROSS_VAL_SCORE')
+    sub_logger = myGetLogger('CROSS_VAL_SCORE')
     taskname = F'scoring by cross validation using {ml_pipename}'
-    logging.info(F'Started {taskname} with input_shape={X.shape}')
+    sub_logger.info(F'Started {taskname} with input_shape={X.shape}')
     random.seed(args.sub_randseed)
     np.random.seed(args.sub_randseed)
 
@@ -963,7 +962,7 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
             pickle.dump(scores, file)
     
     # assert_prob_arr(scores, taskname)
-    logging.info(F'Ended {taskname}')
+    sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, scores)
 
 def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR', topN=20, ranking_mult=1):
@@ -990,7 +989,7 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
     else:
         ranking_mult = (-1 if colname in ASCENDING_FEATURES else 1)
         sign2corr = {-1: 'negative', 1: 'positive'}
-        logging.info(F'Computing the ({title_in_colname}) of {colname} with {sign2corr[ranking_mult]} feature-label correlation')
+        main_logger.info(F'Computing the ({title_in_colname}) of {colname} with {sign2corr[ranking_mult]} feature-label correlation')
         #y_true = np.where(df_in[labelcol], 1 , 0)
         if metric_name == 'top':
             roc_auc, pat2score = compute_topN(df_in, labelcol, patientcol='Patient', predcol=colname, topN=metric_val, ranking_mult=ranking_mult)
@@ -1008,6 +1007,11 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
         roc_auc_std = np.nan
         moe = np.nan
     return (colname, roc_auc, moe, roc_auc_std, pat2score)
+
+def get_bar_pattern_color(featPrepType):
+    if featPrepType < 0: return 'black'
+    if featPrepType % 2 == 0: return 'black'
+    return 'gray'
 
 def benchmark_perf_2(
         df_ins,
@@ -1036,10 +1040,12 @@ def benchmark_perf_2(
     len_df = 0
     fig_1, ax_1 = plt.subplots(figsize=(6*max((1.5,n_subfigs)), figheight))
     ax_1.set_axis_off()
-    gs = gridspec.GridSpec(2, n_subfigs, height_ratios=[1, 25])
-    legend_ax = fig_1.add_subplot(gs[0,:])
-    legend_ax.set_axis_off()
-    axes = [fig_1.add_subplot(gs[1,j]) for j in range(n_subfigs)]
+    gs = gridspec.GridSpec(3, n_subfigs, height_ratios=[1, 1, 25])
+    legend_ax1 = fig_1.add_subplot(gs[0,:])
+    legend_ax1.set_axis_off()
+    legend_ax2 = fig_1.add_subplot(gs[1,:])
+    legend_ax2.set_axis_off()
+    axes = [fig_1.add_subplot(gs[2,j]) for j in range(n_subfigs)]
     for ax_idx, (df_in, colname2rocauc, metric_val, title) in enumerate(zip(df_ins, colname2rocauc_list, metric_thresholds, titles)):        
         def replace_non_alphanumeric(text): return ''.join([c if c.isalnum() else '_' for c in text])
         title_in_fname = '_' + replace_non_alphanumeric(title)
@@ -1059,10 +1065,10 @@ def benchmark_perf_2(
         colnames = add_redundant_names(colnames1)
         colnames = sorted(set(features + ex_feats + colnames))
         colnames = [colname for colname in colnames if colname in df_in.columns]
-        metric_results = Parallel(n_jobs=24)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
+        metric_results = Parallel(n_jobs=para_n_jobs)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
             df_in[['Patient', labelcol, colname]], labelcol, title_in_colname, set(features + ex_feats)) for colname in colnames)
         
-        logging.info(F'Started tabulating and performing statistical analyses on rank_score')
+        main_logger.info(F'Started tabulating and performing statistical analyses on rank_score')
         meth2pat2score = {fpt_clf_comb: pat2score for (fpt_clf_comb, roc_auc, moe, roc_auc_std, pat2score) in metric_results}
         df_meth_x_pat_score = pd.DataFrame.from_dict(meth2pat2score, orient='index')
         if ax_idx == 0 and df_meth_x_pat_score.shape[1] >= 2:
@@ -1078,7 +1084,7 @@ def benchmark_perf_2(
                         stat_test = stats.wilcoxon(scores1 - scores2)
                         meths2pval[meth1][meth2] = stat_test.pvalue * pval_mult
             pd.DataFrame.from_dict(meths2pval, orient='index').to_csv(out_fname_fmt.format('rank_score_signed_pval' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
-        logging.info(F'Ended tabulating and performing statistical analyses on rank_score')
+        main_logger.info(F'Ended tabulating and performing statistical analyses on rank_score')
 
         rows = []
         for colname, roc_auc, moe, roc_auc_std, pat2score in metric_results:
@@ -1113,12 +1119,7 @@ def benchmark_perf_2(
         ax.set_yticklabels([])
         ypos = list(range(len(long_df)))
         #auroc_method_class_list = zip(long_df[title_in_colname], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
-        def meth2id(x):
-            if x.startswith('NG_withNumTested') or x.startswith('NG_withoutNumTested'): return (0 if '/hParamTuned_' in x else 1)
-            if x in features: return 4
-            if x in ex_feats: return 5
-            return (2 if '/hParamTuned_' in x else 3)
-        methclass2desc = {
+        featPrepType2desc = {
             0: ('NeoGuider/hyperparameter-tuned classifier'),
             1: ('NeoGuider/default-hyperparameter classifier'),
             2:     ('Other/hyperparameter-tuned classifier'),
@@ -1126,15 +1127,40 @@ def benchmark_perf_2(
             4: ('Single feature (included in model)'),
             5: ('Single feature (not included in model)')
         }
+        def meth2featPrepType(x):
+            if x.startswith('NG_withNumTested') or x.startswith('NG_withoutNumTested'): return (0 if '/hParamTuned_' in x else 1)
+            if x in features: return 4
+            if x in ex_feats: return 5
+            return (2 if '/hParamTuned_' in x else 3)
+        clfType2desc = {idx:name for idx,name in enumerate([
+            'LR', 'MLP',
+            'GNB', 'QDA',
+            'DT', 'RF', 
+            'XGB', 'Others'])}
+        desc2clfType = {v:k for k,v in clfType2desc.items()}
+        def meth2clfType(x):
+            # 'hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF', 'hParamDefault_LR', 'UnitCoefficient_LR',
+            toks = x.split('/')
+            if len(toks) == 2:
+                subtoks = toks[1].split('_')
+                if len(subtoks) == 2:
+                    if subtoks[1] in desc2clfType:
+                        return desc2clfType[subtoks[1]]
+            return desc2clfType['Others']
+        
+        cmap = matplotlib.colormaps['tab20']
+        featPrepType2color= list(cmap.colors)[0:len(featPrepType2desc)]
+        clfType2hatch = ['/', '/*', '\\', '\\*', '|', '|*', '|X', '.', '...', '***', '---'][0:len(clfType2desc)]
         # Method with higher priority is ranked before the one with lower priority to break a tie
         # We used these rules, based on the Occam's razor, to assign tie-breaking priorities:
         # Rule 1: single-feature model before multiple-feature model
         # Rule 2: model with default hyperparameters before model with tuned hyperparameters
         # Rule 3: more interpretable model before less interpretable model 
         #         (e.g., linear is more interpretable than non-linear, IC50 is more interpretable than %RankBA)
-        methclass2priority = [1, 3, 0, 2, 5, 4]
-        long_df['MethClass'] = long_df['Method'].apply(meth2id)
-        long_df['MethClassPriority'] = [methclass2priority[mc] for mc in long_df['MethClass']]
+        featPrepType2priority = [1, 3, 0, 2, 5, 4]
+        long_df['MethFeatPrepType'] = long_df['Method'].apply(meth2featPrepType)
+        long_df['MethClassPriority'] = [featPrepType2priority[mc] for mc in long_df['MethFeatPrepType']]
+        long_df['MethClfType'] = long_df['Method'].apply(meth2clfType)
         if sort_type == 1:
             long_df['Clf'] = long_df['Method'].str.split('_').str[-1]
             long_df = long_df.sort_values(by=['MethClassPriority','Clf','Method',title_in_colname], ascending=True)
@@ -1143,17 +1169,18 @@ def benchmark_perf_2(
         else: raise ValueError(f'The sort_type {sort_type} is invalid. ')
         long_df['ypos'] = np.array(list(range(len(long_df))))
         len_df = max([len_df, len(long_df)])
-        methclass_df_iterable = long_df.groupby('MethClass')
+        featPrepType_df_iterable = long_df.groupby('MethFeatPrepType')
         hbars_list = []
-        methclass_list = []
-        cmap = matplotlib.colormaps['tab20']
-        smallest_fontsize = min((9, 50*figheight / (1.0 + len(long_df))))
-        for classidx, (methclass, df) in enumerate(sorted(methclass_df_iterable)):
-            xerr = (df[title_in_colname+'_moe']).fillna(0)
-            hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=methclass2desc[methclass], color=cmap.colors[classidx], xerr=xerr)
-            ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
-            hbars_list.append(hbars)
-            methclass_list.append(methclass)
+        featPrepType_list = []
+        smallest_fontsize = min((9, 50*figheight / (10.0 + len(long_df))))
+        for idx_1, (featPrepType, featPrepType_df) in enumerate(sorted(featPrepType_df_iterable)):
+            for idx_2, (clfType, df) in enumerate(sorted(featPrepType_df.groupby('MethClfType'))):
+                xerr = (df[title_in_colname+'_moe']).fillna(0)
+                hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=featPrepType2desc[featPrepType]+' '+clfType2desc[clfType],
+                        color=featPrepType2color[featPrepType], hatch=clfType2hatch[clfType], xerr=xerr, linewidth=0.5, edgecolor=get_bar_pattern_color(featPrepType))
+                ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
+                hbars_list.append(hbars)
+            featPrepType_list.append(featPrepType)
 
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME.get(x, x) for x in long_df['Method']]
         for x in SOFT_NAME_TO_MANUSCRIPT_NAME:
@@ -1172,15 +1199,23 @@ def benchmark_perf_2(
             n_cols = int(round(min((1.0*n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
-        if ax_idx == 0: legend_ax.legend(hbars_list, [methclass2desc[i] for i in sorted(methclass_list)], title='Feature-preprocessing-technique/classifier combinations',
-                ncol=get_ncols(len(long_df['MethClass'].unique()), n_subfigs),
-                loc='center', fontsize=12, title_fontsize=18)
-    
-    new_max_figheight = 12*(1+len_df)/50.0
+        if ax_idx == 0:
+            #legend_ax.legend(hbars_list, [featPrepType2desc[i] for i in sorted(featPrepType_list)], title='Feature-preprocessing-technique/classifier combinations',
+            #    ncol=get_ncols(len(long_df['MethFeatPrepType'].unique()), n_subfigs),
+            #    loc='center', fontsize=12, title_fontsize=18)
+            color_legend_elements = [Patch(facecolor=color, label=featPrepType2desc[featPrepType]) for featPrepType, color in enumerate(featPrepType2color)]
+            color_legend = legend_ax1.legend(handles=color_legend_elements, title='Feature-preprocessing-technique/classifier combinations', loc='center', fontsize=12, title_fontsize=18,
+                    ncol=get_ncols(len(featPrepType2color), n_subfigs))
+        if ax_idx == 1:
+            hatch_legend_elements = [Patch(facecolor='white', edgecolor=get_bar_pattern_color(-1), hatch=hatch, label=clfType2desc[clfType]) for clfType, hatch in enumerate(clfType2hatch)]
+            hatch_legend = legend_ax2.legend(handles=hatch_legend_elements, title='Classifiers', loc='center', fontsize=12, title_fontsize=18,
+                    ncol=get_ncols(len(clfType2hatch), n_subfigs))
+
+    new_max_figheight = 12*(10+len_df)/50.0
     if fig_1.get_figheight() > new_max_figheight: fig_1.set_figheight(new_max_figheight)
 
     plt.tight_layout()
-    logging.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
+    main_logger.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
     plt.savefig(out_fname_fmt.format('with_both')+'.pdf')
     plt.savefig(out_fname_fmt.format('with_both')+'.png', dpi=600)
     plt.close()
@@ -1246,7 +1281,7 @@ def prepare_df(df, labelcol, na_op, max_peplen):
         if 'ln_NumTested' not in ret.columns:
             ret['ln_NumTested'] = newcol
             added_feats.append('ln_NumTested')
-            logging.info(F'Added the column ln_NumTested')
+            main_logger.info(F'Added the column ln_NumTested')
         else:
             assert np.allclose(ret['ln_NumTested'], np.array(newcol))
         #ret['ln_NumTested'] = np.log(stats.poisson.rvs(np.exp(ret['ln_NumTested'])-1, random_state=0) + 1)  # Poisson-noise
@@ -1277,8 +1312,8 @@ def add_more(df, fpath):
         df3 = df2[['binding score', 'immunogenic score']]
         df3.columns = DHP_FEATS
         ret = pd.concat([df, df3], axis=1)
-        logging.info(F'Concatenate with {dhp_fname} to return {ret}')
-    else: logging.warning(F'The filepath {dhp_fname} does not exist. ')
+        main_logger.info(F'Concatenate with {dhp_fname} to return {ret}')
+    else: main_logger.warning(F'The filepath {dhp_fname} does not exist. ')
     return ret
 
 def get_filenames(filepaths, prefix=''):
@@ -1306,10 +1341,11 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     
     HLA_COLS= ['HLA_type', 'HLA_type_y', 'HLA_allele', 'mutant_best_alleles_netMHCpan'] # HLA_type_x can contain comma
     # setup
-    hparam_deflt_ft_preproc_name2tech = {x: HPARAM_DEFLT_FT_PREPROC_NAME2TECH[x] for x in args.hparam_deflt_ft_preproc_names}
-    hparam_deflt_classifier_name2tech = {x: HPARAM_DEFLT_CLASSIFIER_NAME2TECH[x] for x in args.hparam_deflt_classifier_names}
-    hparam_tuned_ft_preproc_name2tech = {x: HPARAM_TUNED_FT_PREPROC_NAME2TECH[x] for x in args.hparam_tuned_ft_preproc_names}
-    hparam_tuned_classifier_name2tech = {x: HPARAM_TUNED_CLASSIFIER_NAME2TECH[x] for x in args.hparam_tuned_classifier_names}
+    hparam_deflt_ft_preproc_name2tech = {x: HPARAM_DEFLT_FT_PREPROC_NAME2TECH[x] for x in args.hparam_deflt_ft_preproc_names if x in HPARAM_DEFLT_FT_PREPROC_NAME2TECH}
+    hparam_deflt_classifier_name2tech = {x: HPARAM_DEFLT_CLASSIFIER_NAME2TECH[x] for x in args.hparam_deflt_classifier_names if x in HPARAM_DEFLT_CLASSIFIER_NAME2TECH}
+    hparam_tuned_ft_preproc_name2tech = {x: HPARAM_TUNED_FT_PREPROC_NAME2TECH[x] for x in args.hparam_tuned_ft_preproc_names if x in HPARAM_TUNED_FT_PREPROC_NAME2TECH}
+    hparam_tuned_classifier_name2tech = {x: HPARAM_TUNED_CLASSIFIER_NAME2TECH[x] for x in args.hparam_tuned_classifier_names if x in HPARAM_TUNED_CLASSIFIER_NAME2TECH}
+    
     ALL_FEATURES = []
     for fts in LISTOF_FEATURES:
         ALL_FEATURES.extend(fts)
@@ -1344,14 +1380,14 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         else:
             in_df, _ = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
         if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
-            logging.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
+            main_logger.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
         in_dfs.append(in_df)
     features_superset1 = copy.deepcopy(features)
     train_df = pd.concat(in_dfs, join="inner")
     if 'hla1' in tasks: analyze_hla(train_df, hlacol, labelcol, f'{output}_train_hla_stats.pdf')
 
     features = [f for f in features if f in train_df.columns]
-    logging.info(F'Selected, from {train_fnames}, the features {features} (n={len(features)})')
+    main_logger.info(F'Selected, from {train_fnames}, the features {features} (n={len(features)})')
 
     # feature analysis phase 1: feature importance
     train_X = train_df.loc[:, features].copy()
@@ -1367,7 +1403,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     ft_preproc_tech_feature_names = ft_preproc_tech.get_feature_names()
     ft_preproc_tech_feature_importances_1 = ft_preproc_tech.get_feature_importances('f2l')
     ft_preproc_tech_feature_importances_2 = ft_preproc_tech.get_feature_importances('f2f')
-    logging.info(f'LogOddsImprtances={list(zip(ft_preproc_tech_feature_names,ft_preproc_tech_feature_importances_2))}')
+    main_logger.info(f'LogOddsImprtances={list(zip(ft_preproc_tech_feature_names,ft_preproc_tech_feature_importances_2))}')
     ft_preproc_tech_feature_importances_3 = ft_preproc_tech.get_feature_importances('f2l2f')
 
     ft_preproc_tech_feature_importances_p1 = ft_preproc_tech.get_feature_importances('pvalue', 'mannwhitneyu')
@@ -1487,20 +1523,20 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         big_trans1_df1 = big_trans_df1.loc[:,features] #.sample(n=100, random_state=args1.randseed)
 
         dfsize = min((len(big_trans_df0), len(big_trans_df1)))
-        logging.info(F'Min_nrows={dfsize}')
+        main_logger.info(F'Min_nrows={dfsize}')
         dfsize = min((dfsize, 100))
-        logging.info(F'Start plotting all neoepitope candidates')
+        main_logger.info(F'Start plotting all neoepitope candidates')
         plot_ret = pairplot_showing_pretrans_feat_vals(big_trans1_df0.sample(n=dfsize, random_state=args1.randseed), big_trans1_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
-        logging.info(F'Mid plotting all neoepitope candidates')
+        main_logger.info(F'Mid plotting all neoepitope candidates')
         #sns.pairplot(pd.concat([big_trans_df0.sample(n=dfsize, random_state=args1.randseed), big_trans_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
         plt.savefig(f'{output}_pairwiseLogOdds.pdf')
         plt.close()
-        logging.info(F'End plotting all neoepitope candidates')
+        main_logger.info(F'End plotting all neoepitope candidates')
         if 'mhcflurry_presentation_percentile' in big_transformed_df.columns:
             big_trans2_df0 = big_trans_df0.loc[big_trans_df0['mhcflurry_presentation_percentile']<=5,features] #big_transformed_df.loc[big_transformed_df[labelcol]==0,:].sample(n=100, random_state=args1.randseed)
             big_trans2_df1 = big_trans_df1.loc[big_trans_df1['mhcflurry_presentation_percentile']<=5,features]
             dfsize = min((len(big_trans2_df0), len(big_trans2_df1)))
-            logging.info(F'Min_nrows={dfsize}')
+            main_logger.info(F'Min_nrows={dfsize}')
             dfsize = min((dfsize, 100))
             dfsize_0 = min((len(big_trans2_df0), 1000))
             #plot_ret = sns.pairplot(pd.concat([big_trans2_df0.sample(n=dfsize_0, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
@@ -1515,19 +1551,19 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     train_y = train_df.loc[:, labelcol].copy()
     train_X = train_X.fillna({col : np.mean(train_X[col]) for col in features})
     
-    logging.info(F'Start training')
-    train_results = Parallel(n_jobs=24)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir) for ml_pipename, ml_pipe in ml_pipes)
-    logging.info(F'End training')
+    main_logger.info(F'Start training')
+    train_results = Parallel(n_jobs=para_n_jobs)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir) for ml_pipename, ml_pipe in ml_pipes)
+    main_logger.info(F'End training')
     if not os.path.exists(f'{output}_train.csv.gz.done'):
-        logging.info(F'Start saving training-set predictions to {output}_train.csv.gz')
+        main_logger.info(F'Start saving training-set predictions to {output}_train.csv.gz')
         for result in train_results:
             ml_pipename, ml_pipe, ml_pipe_predicted = result
             train_df[ml_pipename] = ml_pipe_predicted
         train_df.to_csv(f'{output}_train.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         with open(f'{output}_train.csv.gz.done', 'w') as file: file.write('done')
-        logging.info(F'End saving training-set predictions to {output}_train.csv.gz')
+        main_logger.info(F'End saving training-set predictions to {output}_train.csv.gz')
     else:
-        logging.info(F'Skip saving pre-saved training-set predictions at {output}_train.csv.gz')
+        main_logger.info(F'Skip saving pre-saved training-set predictions at {output}_train.csv.gz')
     
     test_dfs = []
     for fidx, test_fname in enumerate(test_fnames):
@@ -1560,9 +1596,9 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
         if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_stats.pdf')
         if 'hla2' in tasks:
-            logging.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
+            main_logger.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
             analyze_performance_per_hla(df, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_bench.pdf')
-            logging.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
+            main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
     if test_dfs:
         benchmark_performance(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}', 
             features, ex_feats, labelcol, [{}], 
@@ -1598,11 +1634,11 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             for partition_name_1 in THE_PARTITION_NAMES:
                 if partition_name_1 in df.columns:
                     if partition_name != None:
-                        logging.error(F'The partition names {partition_name} and {partition_name_1} cannot co-exist in the tabular file {fname}, keep using {partition_name}! ')
+                        main_logger.error(F'The partition names {partition_name} and {partition_name_1} cannot co-exist in the tabular file {fname}, keep using {partition_name}! ')
                     else: partition_name = partition_name_1
             #assert partition_name != None, F'The file {fname} does not contain any of the partitions names {THE_PARTITION_NAMES} as its column name! '
             if partition_name == None:
-                logging.warning(
+                main_logger.warning(
                         F'The file {fname} does not contain any of the partitions names {THE_PARTITION_NAMES} as its column name! '
                         F'Insert the column DUMMY_PARTITION to the DataFrame from {fname}, making a new partition to each row to perform non-stratified cross validation. ')
                 df['DUMMY_PARTITION'] = list(range(len(df)))
@@ -1636,7 +1672,6 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             features, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
         
 def main():
-    config_logging('main')
     output = args.output    
     os.makedirs(modeldir, exist_ok=True)
     os.system(F'cp {scriptpath} {modeldir}')
@@ -1649,7 +1684,7 @@ def main():
     tr_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'tr' in args.input[i-1].split(','))]
     te_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'te' in args.input[i-1].split(','))]
     cv_filenames = [filename for i, filename in enumerate(args.input) if ((i % 2 == 1) and 'cv' in args.input[i-1].split(','))]
-    logging.info(F'tr_files={tr_filenames} te_files={te_filenames} cv_files={cv_filenames}')
+    main_logger.info(F'tr_files={tr_filenames} te_files={te_filenames} cv_files={cv_filenames}')
     with open(args.output + '.info', 'w') as infofile:
         infofile.write('\t'.join(sys.argv) + '\n')
         infofile.write(str(args))
