@@ -359,7 +359,7 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamTest_LL0_LR'  : LogisticRegression(random_state=args1.randseed, solver='liblinear',       **other_LR_params),
     'hParamTest_NC0_LR'  : LogisticRegression(random_state=args1.randseed, solver='newton-cholesky', **other_LR_params),
     'hParamTest_SAG0_LR' : LogisticRegression(random_state=args1.randseed, solver='sag',             **other_LR_params),
-    'hParamTest_SAGA0_LR': LogisticRegression(random_state=args1.randseed, solver='saga',            **other_LR_params)
+    'hParamTest_SAGA0_LR': LogisticRegression(random_state=args1.randseed, solver='saga',            **other_LR_params),
     'hParamTest_SGD0_LR' : SGDClassifier     (random_state=args1.randseed, loss='log_loss'),
 
     'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
@@ -1132,25 +1132,31 @@ def benchmark_perf_2(
             if x in features: return 4
             if x in ex_feats: return 5
             return (2 if '/hParamTuned_' in x else 3)
-        clfType2desc = {idx:name for idx,name in enumerate([
+        clfType2short = {idx:name for idx,name in enumerate([
             'LR', 'MLP',
             'GNB', 'QDA',
             'DT', 'RF', 
             'XGB', 'Others'])}
-        desc2clfType = {v:k for k,v in clfType2desc.items()}
+        short2clfType = {v:k for k,v in clfType2short.items()}
+        clfType2desc = {idx:name for idx,name in enumerate([
+            'Logistic regression', 'Multilayer perceptron',
+            'Gaussian naïve Bayes', 'Quadratic discriminant analysis',
+            'Decision tree', 'Random forest', 
+            'XGBoost', 'Others'])}
+
         def meth2clfType(x):
             # 'hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF', 'hParamDefault_LR', 'UnitCoefficient_LR',
             toks = x.split('/')
             if len(toks) == 2:
                 subtoks = toks[1].split('_')
                 if len(subtoks) == 2:
-                    if subtoks[1] in desc2clfType:
-                        return desc2clfType[subtoks[1]]
-            return desc2clfType['Others']
+                    if subtoks[1] in short2clfType:
+                        return short2clfType[subtoks[1]]
+            return short2clfType['Others']
         
         cmap = matplotlib.colormaps['tab20']
         featPrepType2color= list(cmap.colors)[0:len(featPrepType2desc)]
-        clfType2hatch = ['/', '/*', '\\', '\\*', '|', '|*', '|X', '.', '...', '***', '---'][0:len(clfType2desc)]
+        clfType2hatch = ['|', '||', '/', '//', '\\', '\\\\', 'X', 'XX', '+', '++', '-', '--'][0:len(clfType2desc)]
         # Method with higher priority is ranked before the one with lower priority to break a tie
         # We used these rules, based on the Occam's razor, to assign tie-breaking priorities:
         # Rule 1: single-feature model before multiple-feature model
@@ -1176,7 +1182,7 @@ def benchmark_perf_2(
         for idx_1, (featPrepType, featPrepType_df) in enumerate(sorted(featPrepType_df_iterable)):
             for idx_2, (clfType, df) in enumerate(sorted(featPrepType_df.groupby('MethClfType'))):
                 xerr = (df[title_in_colname+'_moe']).fillna(0)
-                hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=featPrepType2desc[featPrepType]+' '+clfType2desc[clfType],
+                hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=featPrepType2desc[featPrepType]+'/'+clfType2desc[clfType],
                         color=featPrepType2color[featPrepType], hatch=clfType2hatch[clfType], xerr=xerr, linewidth=0.5, edgecolor=get_bar_pattern_color(featPrepType))
                 ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
                 hbars_list.append(hbars)
@@ -1196,7 +1202,7 @@ def benchmark_perf_2(
         ax.set_xlabel(titles[ax_idx], fontsize=14)
         #ax.legend(fontsize=14)
         def get_ncols(n_labels, n_cols):
-            n_cols = int(round(min((1.0*n_cols, n_labels))))
+            n_cols = int(round(min((1.35*n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
         if ax_idx == 0:
