@@ -1314,7 +1314,7 @@ def add_more(df, fpath):
     if os.path.exists(dhp_fname):
         df2 = pd.read_csv(dhp_fname, header=0)
         assert list(df2.columns) == 'Annotation,HLA,Peptide,binding score,immunogenic score'.split(',')
-        assert len(df2) == len(df), F'{len(df2)} == {len(df1)} failed!'
+        assert len(df2) == len(df), F'{len(df2)} == {len(df)} failed!'
         df3 = df2[['binding score', 'immunogenic score']]
         df3.columns = DHP_FEATS
         ret = pd.concat([df, df3], axis=1)
