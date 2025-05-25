@@ -365,7 +365,8 @@ def main():
         else:
             origdata = origdata[origdata['PatientID'] == args.truth_patientID]
         origdata['peptideMHC'] = origdata['MT_pep'].astype(str) + '/' + norm_hla(origdata['HLA_type'])
-        
+        origdata.reset_index(drop=True, inplace=True)
+
         keptdata = pd.read_csv(args.output_file + '.expansion', sep='\t')
         keptdata = keptdata[keptdata['ET_pep'] == keptdata['MT_pep']]
         keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + norm_hla(keptdata['HLA_type'])
@@ -374,11 +375,11 @@ def main():
         data1 = data1.sort_values(['%Rank_EL', 'MT_BindAff'])
 
         combdata1 = pd.merge(origdata, data1, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
-        combdata1.to_csv(args.output_file + '.validation' , header=1, sep='\t', index=0, na_rep = 'NA', float_format=THE_FLOAT_FORMAT)
+        combdata1.to_csv(args.output_file + '.validation' , sep='\t', header=True, index=False, na_rep = 'NA', float_format=THE_FLOAT_FORMAT)
         
         data2 = data1.drop_duplicates(subset=['MT_pep'], keep='first', inplace=False)
         combdata2 = pd.merge(origdata, data2, how='left', left_on='MT_pep', right_on='MT_pep')
-        combdata1.to_csv(args.output_file + '.peptide-validation' , header=1, sep='\t', index=0, na_rep = 'NA', float_format=THE_FLOAT_FORMAT)
+        combdata1.to_csv(args.output_file + '.peptide-validation', sep='\t', header=True, index=False, na_rep = 'NA', float_format=THE_FLOAT_FORMAT)
         
         exit(0)
     
@@ -647,10 +648,10 @@ def main():
     keptdata = keptdata.sort_values(['HLA_type', 'MTlen', 'MT_pep', 'EXpep', 'NmInfET', 'ET_pep'])
     col2last(keptdata, 'SourceAlterationDetail')
     col2last(keptdata, 'PepTrace')
-    keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
-    dropcols(keptdata, ['PepTrace']).to_csv(args.output_file + '.expansion.untraced', sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    dropcols(keptdata, ['PepTrace']).to_csv(args.output_file + '.expansion.untraced', sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
 
-    keptdata2.to_csv(args.output_file,               sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    keptdata2.to_csv(args.output_file,               sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
