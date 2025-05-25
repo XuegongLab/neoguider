@@ -1136,13 +1136,13 @@ def benchmark_perf_2(
             'LR', 'MLP',
             'GNB', 'QDA',
             'DT', 'RF', 
-            'XGB', 'Others'])}
+            'AB', 'Others'])}
         short2clfType = {v:k for k,v in clfType2short.items()}
         clfType2desc = {idx:name for idx,name in enumerate([
             'Logistic regression', 'Multilayer perceptron',
             'Gaussian naïve Bayes', 'Quadratic discriminant analysis',
             'Decision tree', 'Random forest', 
-            'XGBoost', 'Others'])}
+            'AdaBoost', 'Others'])}
 
         def meth2clfType(x):
             # 'hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF', 'hParamDefault_LR', 'UnitCoefficient_LR',
@@ -1156,7 +1156,7 @@ def benchmark_perf_2(
         
         cmap = matplotlib.colormaps['tab20']
         featPrepType2color= list(cmap.colors)[0:len(featPrepType2desc)]
-        clfType2hatch = ['|', '||', '/', '//', '\\', '\\\\', 'X', 'XX', '+', '++', '-', '--'][0:len(clfType2desc)]
+        clfType2hatch = ['|', '||', '/', '//', '\\', '\\\\', 'XX', '', '+', '++', '-', '--'][0:len(clfType2desc)]
         # Method with higher priority is ranked before the one with lower priority to break a tie
         # We used these rules, based on the Occam's razor, to assign tie-breaking priorities:
         # Rule 1: single-feature model before multiple-feature model
@@ -1246,7 +1246,7 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*9)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*5+2)
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage2', 
@@ -1255,7 +1255,7 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3+2)
 
 def x_allin_y(X, Y):
     for x in X:
