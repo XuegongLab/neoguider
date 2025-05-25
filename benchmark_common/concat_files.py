@@ -38,5 +38,5 @@ for file in args.inputs:
     df = df.drop(columns=drop_cols)
     dfs.append(df)
 df = pd.concat(dfs)
-df.to_csv(args.output, sep=csvsep)
+df.to_csv(args.output, sep=csvsep, index=False)
 
