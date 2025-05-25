@@ -202,8 +202,8 @@ def patientwise_predict(tuple_arg):
             pipedf = pipedf.astype({"Rank":int})
             pipedf['ML_pipeline'] = pipeline_name
             other_pred = F'{outpref}.other_method_{(i+1):03d}.baseline'
-            #pipedf.to_csv(other_pred, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
-            pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=1, index=0, na_rep='NA', compression='gzip', float_format=THE_FLOAT_FORMAT)
+            #pipedf.to_csv(other_pred, sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            pipedf.iloc[range(min((len(pipedf),1000))),:].to_csv(other_pred + '.top1000.gz', sep='\t', header=True, index=False, na_rep='NA', compression='gzip', float_format=THE_FLOAT_FORMAT)
 
             if 'VALIDATED' in pipedf.columns:
                 evalres = assess_top20_top50_top100_ttif_fr_auprc(pipedf)
@@ -221,7 +221,7 @@ def patientwise_predict(tuple_arg):
             json.dump(evalres3, file, indent=2)
         with open(outpref + '.methods.performance.tsv', 'w') as file:
             eval_df = pd.DataFrame.from_dict(evaldict)
-            eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            eval_df.to_csv(file, sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     
     df = df1
     
@@ -249,8 +249,8 @@ def patientwise_predict(tuple_arg):
     col2last(df, 'PepTrace')
     dropcols(df, ['BindLevel', 'BindAff'])
     logger.info(F'N_rows={len(df)} N_cols={len(df.columns)} for {outpref}')
-    df.to_csv(outpref, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
-    df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    df.to_csv(outpref, sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    df.iloc[range(min((len(df),1000))),:].to_csv(outpref + '.top1000', sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
 
     if 'VALIDATED' in df.columns:
         evalres = assess_top20_top50_top100_ttif_fr_auprc(df)
@@ -266,7 +266,7 @@ def patientwise_predict(tuple_arg):
             evaldict[k].append(v)
         with open(outpref + '.performance.tsv', 'w') as file:
             eval_df = pd.DataFrame.from_dict(evaldict)
-            eval_df.to_csv(file, sep='\t', header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            eval_df.to_csv(file, sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     logger.info(F'END:   infile={infile}')
     return 0
 
@@ -280,6 +280,11 @@ def mapfunc(tuple_arg):
     pipe.fit(big_train_X, big_train_y)
     logger.info(F'END:   {pipename}')
     return pipe
+
+def find_col(columns, cnadidates):
+    for candidate in candidates:
+        if candidate in columns: return str(candidate)
+    return ''
 
 def main():
     
@@ -340,7 +345,12 @@ def main():
         pipelines = []
         big_train_X = big_train_df.loc[:, listof_features[0]].copy()
         if args.mintrain:
-            pd.concat([big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=1, index=0, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            pat_col = find_col(big_train_df.columns, ['PatientID', 'PatientID_x', 'PatientID_y']):
+            pep_col = find_col(big_train_df.columns, ['MT_pep', 'MT_pep_x', 'MT_pep_y']):
+            hla_col = find_col(big_train_df.columns, ['HLA_type', 'HLA_type_x', 'HLA_type_y']):
+            extra_cols = [c for c in [pat_col, pep_col, hla_col] if c]
+            big_train_extra = big_train_df.loc[:, extra_cols]
+            pd.concat([big_train_extra, big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
         big_train_X = pd.DataFrame(big_train_X)
         big_train_y = pd.Series(big_train_y)
         if ('method' in args.baseline.split(',')):
