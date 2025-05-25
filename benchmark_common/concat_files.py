@@ -25,7 +25,7 @@ with open(testfile) as file:
         else: raise RuntimeError(F'Cannot infer the column separator string from the first line of the file {testfile}!')
     else:
         csvsep = args.sep
-column_names = pd.read_csv(testfile, nrows=0, sep=csvsep).columns.tolist()
+column_names = []
 dfs = []
 for file in args.inputs:
     #print('Reading the file {file}')
@@ -33,8 +33,9 @@ for file in args.inputs:
     if len(df) == 0:
         warnings.warn(F'Skipping the file {file} because it represents an empty dataframe. ')
         continue
-    drop_cols =[col for col in DROP_COLS if col in df.columns]    
+    if not column_names: column_names = df.columns.tolist()
     assert list(df.columns) == column_names, F'The file {file} with columns\n{list(df.columns)}\ndoes not have the columns\n{column_names}\n!'
+    drop_cols =[col for col in DROP_COLS if col in df.columns]    
     df = df.drop(columns=drop_cols)
     dfs.append(df)
 df = pd.concat(dfs)
