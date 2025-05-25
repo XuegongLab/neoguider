@@ -348,7 +348,7 @@ def main():
             pat_col = find_col(big_train_df.columns, ['PatientID', 'PatientID_x', 'PatientID_y']):
             pep_col = find_col(big_train_df.columns, ['MT_pep', 'MT_pep_x', 'MT_pep_y']):
             hla_col = find_col(big_train_df.columns, ['HLA_type', 'HLA_type_x', 'HLA_type_y']):
-            extra_cols = [c for c in [pat_col, pep_col, hla_col] if c]
+            extra_cols = [c for c in [pat_col, hla_col, pep] if c]
             big_train_extra = big_train_df.loc[:, extra_cols]
             pd.concat([big_train_extra, big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
         big_train_X = pd.DataFrame(big_train_X)

@@ -359,6 +359,8 @@ def main():
     if not isna(args.truth_file):
         def norm_hla(h): return h.astype(str).str.replace('*', '', regex=False).str.replace('HLA-', '', regex=False).str.replace(':', '', regex=False).str.strip()
         origdata = pd.read_csv(args.truth_file)
+        for useless_col in ['Unnamed: 0', 'Unnamed: 1', 'Unnamed: 2']:
+            if useless_col in origdata.columns: origdata = origdata.drop(useless_col, axis=1)
         origdata['PatientID'] = origdata['PatientID'].astype(str)
         if args.truth_patientID_prefix:
             origdata = origdata[origdata['PatientID'].str.startswith(args.truth_patientID_prefix)]
@@ -372,7 +374,6 @@ def main():
         keptdata['peptideMHC'] = keptdata['MT_pep'].astype(str) + '/' + norm_hla(keptdata['HLA_type'])
         
         data1 = dropcols(keptdata)
-        data1 = data1.sort_values(['%Rank_EL', 'MT_BindAff'])
 
         combdata1 = pd.merge(origdata, data1, how = 'left', left_on = 'peptideMHC', right_on = 'peptideMHC')
         combdata1.to_csv(args.output_file + '.validation' , sep='\t', header=True, index=False, na_rep = 'NA', float_format=THE_FLOAT_FORMAT)
