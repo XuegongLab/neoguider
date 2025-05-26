@@ -281,7 +281,7 @@ def mapfunc(tuple_arg):
     logger.info(F'END:   {pipename}')
     return pipe
 
-def find_col(columns, cnadidates):
+def find_col(columns, candidates):
     for candidate in candidates:
         if candidate in columns: return str(candidate)
     return ''
@@ -345,10 +345,10 @@ def main():
         pipelines = []
         big_train_X = big_train_df.loc[:, listof_features[0]].copy()
         if args.mintrain:
-            pat_col = find_col(big_train_df.columns, ['PatientID', 'PatientID_x', 'PatientID_y']):
-            pep_col = find_col(big_train_df.columns, ['MT_pep', 'MT_pep_x', 'MT_pep_y']):
-            hla_col = find_col(big_train_df.columns, ['HLA_type', 'HLA_type_x', 'HLA_type_y']):
-            extra_cols = [c for c in [pat_col, hla_col, pep] if c]
+            pat_col = find_col(big_train_df.columns, ['PatientID', 'PatientID_x', 'PatientID_y'])
+            pep_col = find_col(big_train_df.columns, ['MT_pep', 'MT_pep_x', 'MT_pep_y'])
+            hla_col = find_col(big_train_df.columns, ['HLA_type', 'HLA_type_x', 'HLA_type_y'])
+            extra_cols = [c for c in [pat_col, hla_col, pep_col] if c]
             big_train_extra = big_train_df.loc[:, extra_cols]
             pd.concat([big_train_extra, big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
         big_train_X = pd.DataFrame(big_train_X)
@@ -365,11 +365,42 @@ def main():
         else:
             pipelines = Parallel(n_jobs=args.ncores)(delayed(mapfunc)(arg) for arg in map_args)
         ilrs = []
-        for features in listof_features:
+        for ft_idx, features in enumerate(listof_features):
             big_train_X = big_train_df.loc[:, features].copy()
-            iso_scaler = IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']) # nontransformed_cols is used for better extrapolation
-            iso_scaler.fit(big_train_X, big_train_y)
-            ilrs.append(iso_scaler)
+            ng_transformer = IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']) # nontransformed_cols is used for better extrapolation
+            ng_transformer.fit(big_train_X, big_train_y)
+            
+            ft_preproc_tech_feature_names = ng_transformer.get_feature_names()
+
+            ft_preproc_tech_feature_importances_1  = ng_transformer.get_feature_importances('f2l')
+            ft_preproc_tech_feature_importances_2  = ng_transformer.get_feature_importances('f2f')
+            ft_preproc_tech_feature_importances_3  = ng_transformer.get_feature_importances('f2l2f')
+
+            ft_preproc_tech_feature_importances_p1 = ng_transformer.get_feature_importances('pvalue', 'mannwhitneyu')
+            ft_preproc_tech_feature_importancesH01 = ng_transformer.get_feature_importances('h0_assume_correlation_pvalue', 'mannwhitneyu')
+
+            ft_preproc_tech_feature_importances_p2 = ng_transformer.get_feature_importances('pvalue', 'spearmanr')
+            ft_preproc_tech_feature_importancesH02 = ng_transformer.get_feature_importances('h0_assume_correlation_pvalue', 'spearmanr')
+
+            ft_preproc_tech_feature_importances_s1 = ng_transformer.get_feature_importances('statistic', 'mannwhitneyu')
+            ft_preproc_tech_feature_importances_s2 = ng_transformer.get_feature_importances('statistic', 'spearmanr')
+            
+            feat_importance_df = pd.DataFrame.from_dict({
+                'feature_names'            : ft_preproc_tech_feature_names,
+                'feat_to_label_importances': ft_preproc_tech_feature_importances_1,
+                'feat_to_feat_importances' : ft_preproc_tech_feature_importances_2,
+                'feat_to_lab_to_feat_imps' : ft_preproc_tech_feature_importances_3,
+                'effectSize=0_H0_mannwhitR_pvalue': ft_preproc_tech_feature_importances_p1,
+                'effectSize=0_H0_spearmanR_pvalue': ft_preproc_tech_feature_importances_p2,
+                'statistic_mannwhitR': ft_preproc_tech_feature_importances_s1,
+                'statistic_spearmanR': ft_preproc_tech_feature_importances_s2,
+            })
+            for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH01.items()):
+                feat_importance_df[F'effectSize>={effect_size}_H0_mannwhitR_pvalue'] = p_values
+            for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH02.items()):
+                feat_importance_df[F'effectSize>={effect_size}_H0_spearmanR_pvalue'] = p_values
+            feat_importance_df.to_csv(args.model + f'_{ft_idx}_feat_importances.tsv', sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            ilrs.append(ng_transformer)
         
         logger.info(F'Finished training. ')
 
