@@ -105,7 +105,7 @@ sys.path.append(ISO_DIR)
 main_logger.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} ISO_NAME={ISO_NAME} ISO_MODULE={ISO_MODULE} ISO_EXT={ISO_EXT}')
 IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
-NG_default = 'NG_withNumTested_default'
+# NG_default = 'NG_withNumTested_default'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
 from custom_models import FixedOneLogisticRegression  # Now pickleable!
@@ -241,26 +241,21 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     # 'NormalTransformer' : QuantileTransformer(random_state=args1.randseed, output_distribution='normal'), # not used with default value
     
     # NeoGuider
-    F'{NG_default}'         : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
+    # F'{NG_default}'         : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
     'NG_withNumTested'      : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
     'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]),
 
     # For testing purpose: these NeoGuider variants should perform at similar level compared with NG_default
     'NG_withNumTested_Exc'  : IsotonicLogisticRegression(nontransformed_cols=[              ]),    
-    #'NG_withoutNumTested_BW2':IsotonicLogisticRegression(nontransformed_cols=[              ], random_state=-1, min_n_adaKDE_samples=2),
-    #'NG_withoutNumTested_BW3':IsotonicLogisticRegression(nontransformed_cols=[              ], random_state=-1, min_n_adaKDE_samples=3),
 
     'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
-    #'NG_withNumTested_BW8'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=8),
-    #'NG_withNumTested_BW13' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, min_n_adaKDE_samples=13),
 
     'NG_withNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
     'NG_withNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
     'NG_withNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
-    #'NG_withNumTested_RS3'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+3),
 
     'NG_withNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1),
     'NG_withNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=12),
@@ -277,7 +272,33 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'NG_withNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed),       feat_pvalue_drop=False),
     'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
     'NG_withNumTested_AllFts'    : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'],                                      feat_pvalue_drop=False),
-  
+    
+     # withoutNumTested
+    'NG_withoutNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
+    'NG_withoutNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
+    'NG_withoutNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
+    'NG_withoutNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
+
+    'NG_withoutNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+0),
+    'NG_withoutNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+1),
+    'NG_withoutNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+2),
+
+    'NG_withoutNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=-1),
+    'NG_withoutNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=12),
+    'NG_withoutNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=36),
+    
+    'NG_withoutNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=2),
+    'NG_withoutNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5),
+    'NG_withoutNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
+    'NG_withoutNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
+    
+    'NG_withoutNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=[], postCIR_mov_avg_window_size=2),
+    'NG_withoutNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=[], postCIR_mov_avg_window_size=3),
+    
+    'NG_withoutNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed),       feat_pvalue_drop=False),
+    'NG_withoutNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
+    'NG_withoutNumTested_AllFts'    : IsotonicLogisticRegression(nontransformed_cols=[],                                      feat_pvalue_drop=False),
+
     # For debugging random-number generations
     #'TestNg_rand0_rep1'    : IsotonicLogisticRegression(random_state=0, nontransformed_cols=['ln_NumTested']),
     #'TestNg_rand0_rep2'    : IsotonicLogisticRegression(random_state=0, nontransformed_cols=['ln_NumTested']),
@@ -297,8 +318,8 @@ HPARAM_TUNED_FT_PREPROC_NAME2TECH = {
     'PowerTransformer'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['PowerTransformer']),
     'QuantileTransformer' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['QuantileTransformer']),
     'StandardScaler'      : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['StandardScaler']),
-    F'{NG_default}'       : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']),
-    #'NG_withNumTested'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withNumTested']),
+    #F'{NG_default}'       : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}']),
+    'NG_withNumTested'    : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withNumTested']),
     'NG_withoutNumTested' : copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH['NG_withoutNumTested']),
 }
 
@@ -433,8 +454,9 @@ FINAL_FT_PREPROC_NAMES = (
     'QuantileTransformer',
     'RobustScaler'       ,
     'StandardScaler'     ,
-    NG_default           ,
-    'NG_withoutNumTested'
+    #NG_default           ,
+    'NG_withNumTested',
+    'NG_withoutNumTested',
 )
 
 FINAL_CLASSIFIER_NAMES = HPARAM_TUNED_CLASSIFIER_LIST + HPARAM_DEFLT_CLASSIFIER_LIST
@@ -618,7 +640,8 @@ parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBU
 
 # Maintain consistency with Muller et al., 2023, Immunity
 parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
-parser.add_argument('-pf', '--peplen_flag', default=0x0, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
+# Positive peptides with lengths greater than 11: only one in NCI-train and four in HiTIDE, and the best practice is to remove them AFAIK. 
+parser.add_argument('-pf', '--peplen_flag', default=0x7, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
 parser.add_argument('--max_n_negatives', type=int, default=10*1000*1000, help='Maximum number of negatives') # 100 times higher than the one from Muller et al., 2023, Immunity
 
@@ -727,7 +750,7 @@ def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     plt.close()
     return matrix
 
-def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR', ranking_mult=1):
+def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR', ranking_mult=1):
     df = df.sort_values(predcol, ascending=(ranking_mult==-1))
     ranks = []
     patient2rank = collections.defaultdict(int)
@@ -737,7 +760,7 @@ def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{NG_default}
     df['rank'] = ranks
     return df
 
-def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR'):
+def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR'):
     if hlacol not in df.columns:
         main_logger.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing patterns of assocation between HLA allotype and performance!')
         return -1
@@ -817,7 +840,7 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
                 # Hyperparam-tuning of MLP generates error from non-transformed data
                 if (ft_preproc_name, classifier_name) in [('IdentityTransformer', 'hParamTuned_MLP')]: continue
                 # Skip testing abnormal LR behavior (i.e., saga not converging) on other feature preprocessors
-                if (ft_preproc_name != NG_default) and classifier_name.startswith('hParamTest_'): continue
+                if (ft_preproc_name not in ['NG_withoutNumTested', 'NG_withNumTested']) and classifier_name.startswith('hParamTest_'): continue
 
                 if not (ft_preproc_name in ft_preproc_names
                     and classifier_name in classifier_names): 
@@ -965,7 +988,7 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, scores)
 
-def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{NG_default}/hParamDefault_LR', topN=20, ranking_mult=1):
+def compute_topN(df, labelcol, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR', topN=20, ranking_mult=1):
     df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
     df2 = df.loc[df[labelcol]==1, [patientcol, 'rank']]
     pat2score = {}
@@ -1027,7 +1050,8 @@ def benchmark_perf_2(
         titles=[''],
         barh_fmt='%.4g',
         sort_type=2,
-        figheight=6*3):
+        figheight=6*3,
+        task_specific_NG_default='N/A'):
     n_subfigs = max((len(df_ins), len(colname2rocauc_list), len(metric_thresholds), len(titles)))
     assert len(df_ins) in [1, n_subfigs], F'Found {len(df_ins)} df_ins but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
     assert len(colname2rocauc_list) in [1, n_subfigs], F'Found {len(colname2rocauc_list)} colname2rocauc_list but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
@@ -1194,7 +1218,7 @@ def benchmark_perf_2(
                 methodnames = long_df['Method']
                 break
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS.get(x, x) for x in methodnames]
-        methodnames = [meth.replace(NG_default+'/', 'NG/') for meth in methodnames]
+        methodnames = [meth.replace(task_specific_NG_default+'/', 'NG/') for meth in methodnames]
         ax.set_yticks(long_df['ypos'], labels=methodnames, fontsize=smallest_fontsize)
         ax.set_ylim(-1, len(long_df))
         xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname] + long_df[title_in_colname+'_moe'].fillna(0))
@@ -1238,6 +1262,7 @@ def benchmark_performance(
         titles=[''],
         barh_fmt='%.4g'):
     
+    task_specific_NG_default = ('NG_withoutNumTested' if metric_name == 'top' else 'NG_withNumTested')
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage1', 
@@ -1246,16 +1271,18 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*5+2)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*7+2)
+    ft_preproc_names = [x for x in FINAL_FT_PREPROC_NAMES if ((not x.startswith('NG_')) or x == task_specific_NG_default)]
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage2', 
-        FINAL_FT_PREPROC_NAMES,
+        ft_preproc_names,
         FINAL_CLASSIFIER_NAMES,
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3+2)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3+2,
+        task_specific_NG_default=task_specific_NG_default)
 
 def x_allin_y(X, Y):
     for x in X:
@@ -1389,7 +1416,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             main_logger.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
         in_dfs.append(in_df)
     features_superset1 = copy.deepcopy(features)
-    train_df = pd.concat(in_dfs, join="inner")
+    train_df = pd.concat(in_dfs, axis=0, join="inner")
     if 'hla1' in tasks: analyze_hla(train_df, hlacol, labelcol, f'{output}_train_hla_stats.pdf')
 
     features = [f for f in features if f in train_df.columns]
@@ -1401,154 +1428,155 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     train_X = train_X.apply(pd.to_numeric)
     big_y   = big_y.apply(pd.to_numeric)
 
-    ft_preproc_tech = copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[F'{NG_default}'])
-    #train_X = QuantileTransformer(random_state=args1.randseed).fit_transform(train_X)
-    #train_X = pd.DataFrame(train_X, columns=features)
-    ft_preproc_tech.final_pred_fit_params = {'verbose': 1}
-    big_transformed_X = ft_preproc_tech.fit_transform(train_X, big_y)
-    ft_preproc_tech_feature_names = ft_preproc_tech.get_feature_names()
-    ft_preproc_tech_feature_importances_1 = ft_preproc_tech.get_feature_importances('f2l')
-    ft_preproc_tech_feature_importances_2 = ft_preproc_tech.get_feature_importances('f2f')
-    main_logger.info(f'LogOddsImprtances={list(zip(ft_preproc_tech_feature_names,ft_preproc_tech_feature_importances_2))}')
-    ft_preproc_tech_feature_importances_3 = ft_preproc_tech.get_feature_importances('f2l2f')
+    for out_short_name, ng_variant in [('without', 'NG_withoutNumTested'), ('with', 'NG_withNumTested')]:
+        ng_spec_output = output + '_' + ng_variant
+        ft_preproc_tech = copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[ng_variant])
+        #train_X = QuantileTransformer(random_state=args1.randseed).fit_transform(train_X)
+        #train_X = pd.DataFrame(train_X, columns=features)
+        ft_preproc_tech.final_pred_fit_params = {'verbose': 1}
+        big_transformed_X = ft_preproc_tech.fit_transform(train_X, big_y)
+        ft_preproc_tech_feature_names = ft_preproc_tech.get_feature_names()
+        ft_preproc_tech_feature_importances_1 = ft_preproc_tech.get_feature_importances('f2l')
+        ft_preproc_tech_feature_importances_2 = ft_preproc_tech.get_feature_importances('f2f')
+        main_logger.info(f'LogOddsImprtances={list(zip(ft_preproc_tech_feature_names,ft_preproc_tech_feature_importances_2))}')
+        ft_preproc_tech_feature_importances_3 = ft_preproc_tech.get_feature_importances('f2l2f')
 
-    ft_preproc_tech_feature_importances_p1 = ft_preproc_tech.get_feature_importances('pvalue', 'mannwhitneyu')
-    ft_preproc_tech_feature_importancesH01 = ft_preproc_tech.get_feature_importances('h0_assume_correlation_pvalue', 'mannwhitneyu')
+        ft_preproc_tech_feature_importances_p1 = ft_preproc_tech.get_feature_importances('pvalue', 'mannwhitneyu')
+        ft_preproc_tech_feature_importancesH01 = ft_preproc_tech.get_feature_importances('h0_assume_correlation_pvalue', 'mannwhitneyu')
 
-    ft_preproc_tech_feature_importances_p2 = ft_preproc_tech.get_feature_importances('pvalue', 'spearmanr')
-    ft_preproc_tech_feature_importancesH02 = ft_preproc_tech.get_feature_importances('h0_assume_correlation_pvalue', 'spearmanr')
+        ft_preproc_tech_feature_importances_p2 = ft_preproc_tech.get_feature_importances('pvalue', 'spearmanr')
+        ft_preproc_tech_feature_importancesH02 = ft_preproc_tech.get_feature_importances('h0_assume_correlation_pvalue', 'spearmanr')
 
-    ft_preproc_tech_feature_importances_p3 = ft_preproc_tech.get_feature_importances('pvalue', 'odds_spearmanr')
-    ft_preproc_tech_feature_importances_s1 = ft_preproc_tech.get_feature_importances('statistic', 'mannwhitneyu')
-    ft_preproc_tech_feature_importances_s2 = ft_preproc_tech.get_feature_importances('statistic', 'spearmanr')
-    ft_preproc_tech_feature_importances_s3 = ft_preproc_tech.get_feature_importances('statistic', 'odds_spearmanr')
-    ft_preproc_tech_feature_importances_t1 = ft_preproc_tech.get_feature_importances('trend', 'mannwhitneyu')
-    ft_preproc_tech_feature_importances_t2 = ft_preproc_tech.get_feature_importances('trend', 'spearmanr')
-    ft_preproc_tech_feature_importances_t3 = ft_preproc_tech.get_feature_importances('trend', 'odds_spearmanr')
+        ft_preproc_tech_feature_importances_p3 = ft_preproc_tech.get_feature_importances('pvalue', 'odds_spearmanr')
+        ft_preproc_tech_feature_importances_s1 = ft_preproc_tech.get_feature_importances('statistic', 'mannwhitneyu')
+        ft_preproc_tech_feature_importances_s2 = ft_preproc_tech.get_feature_importances('statistic', 'spearmanr')
+        ft_preproc_tech_feature_importances_s3 = ft_preproc_tech.get_feature_importances('statistic', 'odds_spearmanr')
+        ft_preproc_tech_feature_importances_t1 = ft_preproc_tech.get_feature_importances('trend', 'mannwhitneyu')
+        ft_preproc_tech_feature_importances_t2 = ft_preproc_tech.get_feature_importances('trend', 'spearmanr')
+        ft_preproc_tech_feature_importances_t3 = ft_preproc_tech.get_feature_importances('trend', 'odds_spearmanr')
 
-    feat_importance_df = pd.DataFrame.from_dict({
-            'feature_names'            : ft_preproc_tech_feature_names,
-            'feat_to_label_importances': ft_preproc_tech_feature_importances_1,
-            'feat_to_feat_importances' : ft_preproc_tech_feature_importances_2,
-            'feat_to_lab_to_feat_imps' : ft_preproc_tech_feature_importances_3,
-            'effectSize=0_H0_mannwhitR_pvalue': ft_preproc_tech_feature_importances_p1,
-            'effectSize=0_H0_spearmanR_pvalue': ft_preproc_tech_feature_importances_p2,
-            'effectSize=0_H0_odds_spearmanR_pvalue': ft_preproc_tech_feature_importances_p3,
-            'statistic_mannwhitR': ft_preproc_tech_feature_importances_s1,
-            'statistic_spearmanR': ft_preproc_tech_feature_importances_s2,
-            'statistic_odds_spearmanR': ft_preproc_tech_feature_importances_s3,
-            'trend_mannwhitR': ft_preproc_tech_feature_importances_t1,
-            'trend_spearmanR': ft_preproc_tech_feature_importances_t2,
-            'trend_odds_spearmanR': ft_preproc_tech_feature_importances_t3,
-    })
+        feat_importance_df = pd.DataFrame.from_dict({
+                'feature_names'            : ft_preproc_tech_feature_names,
+                'feat_to_label_importances': ft_preproc_tech_feature_importances_1,
+                'feat_to_feat_importances' : ft_preproc_tech_feature_importances_2,
+                'feat_to_lab_to_feat_imps' : ft_preproc_tech_feature_importances_3,
+                'effectSize=0_H0_mannwhitR_pvalue': ft_preproc_tech_feature_importances_p1,
+                'effectSize=0_H0_spearmanR_pvalue': ft_preproc_tech_feature_importances_p2,
+                'effectSize=0_H0_odds_spearmanR_pvalue': ft_preproc_tech_feature_importances_p3,
+                'statistic_mannwhitR': ft_preproc_tech_feature_importances_s1,
+                'statistic_spearmanR': ft_preproc_tech_feature_importances_s2,
+                'statistic_odds_spearmanR': ft_preproc_tech_feature_importances_s3,
+                'trend_mannwhitR': ft_preproc_tech_feature_importances_t1,
+                'trend_spearmanR': ft_preproc_tech_feature_importances_t2,
+                'trend_odds_spearmanR': ft_preproc_tech_feature_importances_t3,
+        })
 
-    for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH01.items()):
-        feat_importance_df[F'effectSize>={effect_size}_H0_mannwhitR_pvalue'] = p_values
-    for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH02.items()):
-        feat_importance_df[F'effectSize>={effect_size}_H0_spearmanR_pvalue'] = p_values
+        for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH01.items()):
+            feat_importance_df[F'effectSize>={effect_size}_H0_mannwhitR_pvalue'] = p_values
+        for effect_size, p_values in sorted(ft_preproc_tech_feature_importancesH02.items()):
+            feat_importance_df[F'effectSize>={effect_size}_H0_spearmanR_pvalue'] = p_values
 
-    feat_importance_df.to_csv(f'{output}_feat_imp.tsv', index='feature_names', sep='\t')
+        feat_importance_df.to_csv(f'{ng_spec_output}_feat_imp.tsv', index='feature_names', sep='\t')
 
-    ilr = ft_preproc_tech
+        ilr = ft_preproc_tech
 
-    s0x = ilr.get_adaDKE_X()
-    #s0y = ilr.transform(s0x)
-    s0x2= ilr.get_adaDKE_width()
+        s0x = ilr.get_adaDKE_X()
+        #s0y = ilr.transform(s0x)
+        s0x2= ilr.get_adaDKE_width()
 
-    s1x = ilr.get_density_estimated_X()
-    s1y = ilr.get_density_estimated_log_odds()
-    s2x = ilr.get_isotonic_X()
-    s2y = ilr.get_isotonic_log_odds()
-    s3x = ilr.get_centered_isotonic_X()
-    s3y = ilr.get_centered_isotonic_log_odds()
-    s4x = ilr.get_centered_2_X()
-    s4y = ilr.get_centered_2_log_odds()
-    print(F's4x={s4x}')
-    print(F's4x={s4y}')
-    kernel_coverages = ilr.get_kernel_width_covered_n_positives()
-    final_x = ilr.get_final_pre_transformed() 
-    final_y = ilr.get_final_post_transformed()
+        s1x = ilr.get_density_estimated_X()
+        s1y = ilr.get_density_estimated_log_odds()
+        s2x = ilr.get_isotonic_X()
+        s2y = ilr.get_isotonic_log_odds()
+        s3x = ilr.get_centered_isotonic_X()
+        s3y = ilr.get_centered_isotonic_log_odds()
+        s4x = ilr.get_centered_2_X()
+        s4y = ilr.get_centered_2_log_odds()
+        print(F's4x={s4x}')
+        print(F's4x={s4y}')
+        kernel_coverages = ilr.get_kernel_width_covered_n_positives()
+        final_x = ilr.get_final_pre_transformed() 
+        final_y = ilr.get_final_post_transformed()
 
-    # feature analysis phase 2: feature importance plot
-    if 'fa2' in tasks:
-        with PdfPages(f'{output}_feat.pdf') as pdf:
-            for feature_idx, feature_name in enumerate(ft_preproc_tech_feature_names):
-                fig, axes = plt.subplots(2, 1, height_ratios=[1.25, 2], layout='constrained')
-                fig.set_figheight(1.500*3.333)
-                fig.set_figwidth(3.00*3.333)
-                x1 = [x for (x,y) in zip(train_X[feature_name], big_y) if y == 1]
-                x0 = [x for (x,y) in zip(train_X[feature_name], big_y) if y == 0]
-                minx, maxx = min(x0+x1), max(x0+x1)                
-                axes[0].hist([x1, x0],
-                        label=['Tested positive ($A_f$)', 'Tested negative ($B_f$)'],
-                        color=[(0.75, 0.00, 0.00), (0.25, 0.25, 0.25)],
-                        bins=40,
-                        log=True)
-                #axes[2].scatter(s0x[feature_idx],s0x2[feature_idx], alpha=0.333)
-                #axes[2].set_ylabel('Kernel bandwidth\n(min # positives convered)')
+        # feature analysis phase 2: feature importance plot
+        if 'fa2' in tasks:
+            with PdfPages(f'{ng_spec_output}_feat.pdf') as pdf:
+                for feature_idx, feature_name in enumerate(ft_preproc_tech_feature_names):
+                    fig, axes = plt.subplots(2, 1, height_ratios=[1.25, 2], layout='constrained')
+                    fig.set_figheight(1.500*3.333)
+                    fig.set_figwidth(3.00*3.333)
+                    x1 = [x for (x,y) in zip(train_X[feature_name], big_y) if y == 1]
+                    x0 = [x for (x,y) in zip(train_X[feature_name], big_y) if y == 0]
+                    minx, maxx = min(x0+x1), max(x0+x1)                
+                    axes[0].hist([x1, x0],
+                            label=['Tested positive ($A_f$)', 'Tested negative ($B_f$)'],
+                            color=[(0.75, 0.00, 0.00), (0.25, 0.25, 0.25)],
+                            bins=40,
+                            log=True)
+                    #axes[2].scatter(s0x[feature_idx],s0x2[feature_idx], alpha=0.333)
+                    #axes[2].set_ylabel('Kernel bandwidth\n(min # positives convered)')
 
-                #print(F'Plot {len(s1x[feature_idx])} {len(s1y)}')
-                axes[1].plot(s1x[feature_idx], s1y[feature_idx], label='After step 1: adaptive KDE',             alpha = 0.200, marker = '^', linewidth=0.5, markersize=(16*4)**0.5)
-                axes[1].plot(s2x[feature_idx], s2y[feature_idx], label='After step 2: isotonic regression (IR)', alpha = 0.300, marker = '>', linewidth=0.5, markersize=(16*3)**0.5)
-                axes[1].plot(s3x[feature_idx], s3y[feature_idx], label='After step 3: centered IR (CIR)',        alpha = 0.600, marker = 'v', linewidth=0.5, markersize=(16*2)**0.5)
-                if len(s4x[feature_idx]) > 0:
-                    axes[1].plot(s4x[feature_idx], s4y[feature_idx], label='After step 4: moving average',           alpha = 0.600, marker = '<', linewidth=0.25,markersize=(16*1)**0.5)
-                axes[1].plot(final_x[feature_idx], final_y[feature_idx], label='Final transformed values',        alpha = 0.800, marker = '<', linewidth=0.01,markersize=(16*0.75)**0.5)
+                    #print(F'Plot {len(s1x[feature_idx])} {len(s1y)}')
+                    axes[1].plot(s1x[feature_idx], s1y[feature_idx], label='After step 1: adaptive KDE',             alpha = 0.200, marker = '^', linewidth=0.5, markersize=(16*4)**0.5)
+                    axes[1].plot(s2x[feature_idx], s2y[feature_idx], label='After step 2: isotonic regression (IR)', alpha = 0.300, marker = '>', linewidth=0.5, markersize=(16*3)**0.5)
+                    axes[1].plot(s3x[feature_idx], s3y[feature_idx], label='After step 3: centered IR (CIR)',        alpha = 0.600, marker = 'v', linewidth=0.5, markersize=(16*2)**0.5)
+                    if len(s4x[feature_idx]) > 0:
+                        axes[1].plot(s4x[feature_idx], s4y[feature_idx], label='After step 4: moving average',           alpha = 0.600, marker = '<', linewidth=0.25,markersize=(16*1)**0.5)
+                    axes[1].plot(final_x[feature_idx], final_y[feature_idx], label='Final transformed values',        alpha = 0.800, marker = '<', linewidth=0.01,markersize=(16*0.75)**0.5)
 
-                #bandwidth_ys = ilr.transform(s0x[feature_idx], column_idx=feature_idx)
-                #for bandwidth_x, bandwidth_y, bandwidth_n in zip(s0x[feature_idx], bandwidth_ys, s0x2[feature_idx]):
-                #    axes[1].text(bandwidth_x, bandwidth_y, str(bandwidth_n), ha='center', va='center', color='black')
-                
-                impp = ft_preproc_tech_feature_importances_p1[feature_idx]
-                imp1, imp2, imp3 = ft_preproc_tech_feature_importances_1[feature_idx], ft_preproc_tech_feature_importances_2[feature_idx], ft_preproc_tech_feature_importances_3[feature_idx]
-                axes[1].set_xlabel(feature_name + 
-                        F'  kernel_covered_n_positives={kernel_coverages[feature_idx]:.4f}  domain=[{minx:.2G},{maxx:.2G}]'
-                        F'\nimportances: p_value={impp:.2G}, to_label={imp1:.4f}, to_features={imp2:.4f}, to_both_combined={imp3:.4f}')
-                axes[1].set_ylabel('Estimated log odds')
-                axes[1].legend(title='Feature values')
-                if minx > 0 and maxx > 2:
-                    axes[0].set_xscale('log')
-                    axes[1].set_xscale('log')
-                elif minx >= 0 and maxx > 2:
-                    axes[0].set_xscale('symlog', linthresh=10**(int(np.log10(maxx/100))))
-                    axes[1].set_xscale('symlog', linthresh=10**(int(np.log10(maxx/100))))
+                    #bandwidth_ys = ilr.transform(s0x[feature_idx], column_idx=feature_idx)
+                    #for bandwidth_x, bandwidth_y, bandwidth_n in zip(s0x[feature_idx], bandwidth_ys, s0x2[feature_idx]):
+                    #    axes[1].text(bandwidth_x, bandwidth_y, str(bandwidth_n), ha='center', va='center', color='black')
+                    
+                    impp = ft_preproc_tech_feature_importances_p1[feature_idx]
+                    imp1, imp2, imp3 = ft_preproc_tech_feature_importances_1[feature_idx], ft_preproc_tech_feature_importances_2[feature_idx], ft_preproc_tech_feature_importances_3[feature_idx]
+                    axes[1].set_xlabel(feature_name + 
+                            F'  kernel_covered_n_positives={kernel_coverages[feature_idx]:.4f}  domain=[{minx:.2G},{maxx:.2G}]'
+                            F'\nimportances: p_value={impp:.2G}, to_label={imp1:.4f}, to_features={imp2:.4f}, to_both_combined={imp3:.4f}')
+                    axes[1].set_ylabel('Estimated log odds')
+                    axes[1].legend(title='Feature values')
+                    if minx > 0 and maxx > 2:
+                        axes[0].set_xscale('log')
+                        axes[1].set_xscale('log')
+                    elif minx >= 0 and maxx > 2:
+                        axes[0].set_xscale('symlog', linthresh=10**(int(np.log10(maxx/100))))
+                        axes[1].set_xscale('symlog', linthresh=10**(int(np.log10(maxx/100))))
 
-                pdf.savefig()
-                plt.close()
+                    pdf.savefig()
+                    plt.close()
 
-    # feature analysis phase 3: feature-vs-feature pair-plot
-    if 'fa3' in tasks:
-        big_transformed_df = pd.DataFrame(np.append(big_transformed_X, np.array([[v] for v in big_y]), axis=1), columns=list(features)+[labelcol])
-        big_transformed_df = big_transformed_df.apply(pd.to_numeric)
-        big_transformed_df.to_csv(f'{output}_transformed_data.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-        
-        big_trans_df0 = big_transformed_df.loc[big_transformed_df[labelcol]==0,:] #.sample(n=100, random_state=args1.randseed)
-        big_trans_df1 = big_transformed_df.loc[big_transformed_df[labelcol]==1,:] #.sample(n=100, random_state=args1.randseed)
+        # feature analysis phase 3: feature-vs-feature pair-plot
+        if 'fa3' in tasks:
+            big_transformed_df = pd.DataFrame(np.append(big_transformed_X, np.array([[v] for v in big_y]), axis=1), columns=list(features)+[labelcol])
+            big_transformed_df = big_transformed_df.apply(pd.to_numeric)
+            big_transformed_df.to_csv(f'{ng_spec_output}_transformed_data.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+            
+            big_trans_df0 = big_transformed_df.loc[big_transformed_df[labelcol]==0,:] #.sample(n=100, random_state=args1.randseed)
+            big_trans_df1 = big_transformed_df.loc[big_transformed_df[labelcol]==1,:] #.sample(n=100, random_state=args1.randseed)
 
-        big_trans1_df0 = big_trans_df0.loc[:,features] #.sample(n=100, random_state=args1.randseed)
-        big_trans1_df1 = big_trans_df1.loc[:,features] #.sample(n=100, random_state=args1.randseed)
+            big_trans1_df0 = big_trans_df0.loc[:,features] #.sample(n=100, random_state=args1.randseed)
+            big_trans1_df1 = big_trans_df1.loc[:,features] #.sample(n=100, random_state=args1.randseed)
 
-        dfsize = min((len(big_trans_df0), len(big_trans_df1)))
-        main_logger.info(F'Min_nrows={dfsize}')
-        dfsize = min((dfsize, 100))
-        main_logger.info(F'Start plotting all neoepitope candidates')
-        plot_ret = pairplot_showing_pretrans_feat_vals(big_trans1_df0.sample(n=dfsize, random_state=args1.randseed), big_trans1_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
-        main_logger.info(F'Mid plotting all neoepitope candidates')
-        #sns.pairplot(pd.concat([big_trans_df0.sample(n=dfsize, random_state=args1.randseed), big_trans_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
-        plt.savefig(f'{output}_pairwiseLogOdds.pdf')
-        plt.close()
-        main_logger.info(F'End plotting all neoepitope candidates')
-        if 'mhcflurry_presentation_percentile' in big_transformed_df.columns:
-            big_trans2_df0 = big_trans_df0.loc[big_trans_df0['mhcflurry_presentation_percentile']<=5,features] #big_transformed_df.loc[big_transformed_df[labelcol]==0,:].sample(n=100, random_state=args1.randseed)
-            big_trans2_df1 = big_trans_df1.loc[big_trans_df1['mhcflurry_presentation_percentile']<=5,features]
-            dfsize = min((len(big_trans2_df0), len(big_trans2_df1)))
+            dfsize = min((len(big_trans_df0), len(big_trans_df1)))
             main_logger.info(F'Min_nrows={dfsize}')
             dfsize = min((dfsize, 100))
-            dfsize_0 = min((len(big_trans2_df0), 1000))
-            #plot_ret = sns.pairplot(pd.concat([big_trans2_df0.sample(n=dfsize_0, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
-            plot_ret = pairplot_showing_pretrans_feat_vals(big_trans2_df0.sample(n=dfsize_0, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
-            plt.savefig(f'{output}_pairwiseLogOdds_mhcflurry_presentation_5perc.pdf')
+            main_logger.info(F'Start plotting all neoepitope candidates')
+            plot_ret = pairplot_showing_pretrans_feat_vals(big_trans1_df0.sample(n=dfsize, random_state=args1.randseed), big_trans1_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
+            main_logger.info(F'Mid plotting all neoepitope candidates')
+            #sns.pairplot(pd.concat([big_trans_df0.sample(n=dfsize, random_state=args1.randseed), big_trans_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
+            plt.savefig(f'{ng_spec_output}_pairwiseLogOdds.pdf')
             plt.close()
+            main_logger.info(F'End plotting all neoepitope candidates')
+            if 'MT_BindAff' in big_transformed_df.columns:
+                big_trans2_df0 = big_trans_df0.loc[big_trans_df0['MT_BindAff']<=500,features] #big_transformed_df.loc[big_transformed_df[labelcol]==0,:].sample(n=100, random_state=args1.randseed)
+                big_trans2_df1 = big_trans_df1.loc[big_trans_df1['MT_BindAff']<=500,features]
+                dfsize = min((len(big_trans2_df0), len(big_trans2_df1)))
+                main_logger.info(F'For MT_BindAff<=500, Min_nrows={dfsize}')
+                dfsize = min((dfsize, 100))
+                #plot_ret = sns.pairplot(pd.concat([big_trans2_df0.sample(n=dfsize_0, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed)]), hue=labelcol)
+                plot_ret = pairplot_showing_pretrans_feat_vals(big_trans2_df0.sample(n=dfsize, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
+                plt.savefig(f'{ng_spec_output}_pairwiseLogOdds_MT_BindAff_500nM.pdf')
+                plt.close()
 
     ml_pipes = construct_ml_pipes(hparam_deflt_ft_preproc_name2tech, hparam_deflt_classifier_name2tech, hparam_tuned_ft_preproc_name2tech, hparam_tuned_classifier_name2tech, big_y)
    
@@ -1571,47 +1599,56 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     else:
         main_logger.info(F'Skip saving pre-saved training-set predictions at {output}_train.csv.gz')
     
-    test_dfs = []
-    for fidx, test_fname in enumerate(test_fnames):
-        fidx += 1
-        if test_fname in train_fnames: train_or_test = 'train'
-        else: train_or_test = 'test'
-        df = pd.read_csv(test_fname, sep=csvsep)
-        df = add_more(df, test_fname)
-        df, added_feats = prepare_df(df, labelcol, na_op=untest_ops_test_examples, max_peplen=peplen_max_test_examples)
-        for f in added_feats: assert f in features, F'{f} in {features} failed!'
-        dfXy = df.loc[:,features + [labelcol]]
-        #assert (train_df.columns == test_df.columns).all(), F'{train_df.columns} == {test_df.columns} failed for the column names of the inputs {train_fnames} and {test_fname}'
-        # test phase
-        X = dfXy.loc[:, features].copy()
-        X = X.fillna({col : np.mean(X[col]) for col in features})
-        test_results = Parallel(n_jobs=para_n_jobs)(delayed(predict_with_ml_pipe)(ml_pipename, ml_pipe, X, modeldir) for ml_pipename, ml_pipe, _, in train_results)
-        for result in test_results:
-            ml_pipename, ml_pipe, ml_pipe_predicted = result
-            assert not np.isnan(ml_pipe_predicted).any()
-            df[ml_pipename] = ml_pipe_predicted
-        
-        if not os.path.exists(f'{output}_{fidx}_test.csv.gz.done'):
-            df.to_csv(F'{output}_{fidx}_test.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-            with open(f'{output}_{fidx}_test.csv.gz.done', 'w') as file: file.write('done')
-        df2 = df.fillna({col : np.mean(df[col]) for col in features})
-        test_dfs.append(df2)
-        if 'Patient' in df2.columns:
-            benchmark_performance([df2], F'{output}_{fidx}_{train_or_test}_topN_{{}}', 
+    for untest_ops_test_examples in ['zero', 'drop']:
+        test_dfs = []
+        for fidx, test_fname in enumerate(test_fnames):
+            if test_fname in train_fnames: train_or_test = 'train'
+            else: train_or_test = 'test'
+            df = pd.read_csv(test_fname, sep=csvsep)
+            df = add_more(df, test_fname)
+            assert not np.isnan(df[labelcol]).any()
+
+            df, added_feats = prepare_df(df, labelcol, na_op=untest_ops_test_examples, max_peplen=peplen_max_test_examples)
+            assert not np.isnan(df[labelcol]).any()
+
+            for f in added_feats: assert f in features, F'{f} in {features} failed!'
+            dfXy = df.loc[:,features + [labelcol]]
+            #assert (train_df.columns == test_df.columns).all(), F'{train_df.columns} == {test_df.columns} failed for the column names of the inputs {train_fnames} and {test_fname}'
+            # test phase
+            X = dfXy.loc[:, features].copy()
+            X = X.fillna({col : np.mean(X[col]) for col in features})
+            test_results = Parallel(n_jobs=para_n_jobs)(delayed(predict_with_ml_pipe)(ml_pipename, ml_pipe, X, modeldir) for ml_pipename, ml_pipe, _, in train_results)
+            
+            for result in test_results:
+                ml_pipename, ml_pipe, ml_pipe_predicted = result
+                assert not np.isnan(ml_pipe_predicted).any()
+                assert len(ml_pipe_predicted) == len(df), F'{len(ml_pipe_predicted)} == {len(df)} failed!'
+                df[ml_pipename] = ml_pipe_predicted # avoid warnings about the generation of fragmented dataframe
+            
+            test_output = F'{output}_{untest_ops_test_examples}_{fidx}_{train_or_test}'
+            if not os.path.exists(f'{test_output}.csv.gz.done'):
+                main_logger.info(f'start saving {test_output}.csv.gz')
+                df.to_csv(F'{test_output}.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+                with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('done')
+                main_logger.info(f'end saving {test_output}.csv.gz')
+            df2 = df.fillna({col : np.mean(df[col]) for col in features})
+            test_dfs.append(df2)
+            if 'Patient' in df2.columns:
+                benchmark_performance([df2], F'{test_output}_topN_{{}}', 
+                    features, ex_feats, labelcol, [{}],
+                    metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
+            if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{test_output}_hla_stats.pdf')
+            if 'hla2' in tasks:
+                main_logger.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{test_output}_hla_bench.pdf`)')
+                analyze_performance_per_hla(df, hlacol, labelcol, F'{test_output}_hla_bench.pdf')
+                main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{test_output}_hla_bench.pdf`)')
+        if test_dfs:
+            benchmark_performance(test_dfs, F'{output}_{untest_ops_test_examples}_0_{train_or_test}_roc_auc_{{}}',
+                features, ex_feats, labelcol, [{}], 
+                metric_name='roc_auc', metric_thresholds=[0], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
+            benchmark_performance(test_dfs, f'{output}_{untest_ops_test_examples}_0_{train_or_test}_log_loss_{{}}', 
                 features, ex_feats, labelcol, [{}],
-                metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
-        if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_stats.pdf')
-        if 'hla2' in tasks:
-            main_logger.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
-            analyze_performance_per_hla(df, hlacol, labelcol, F'{output}_{fidx}_{train_or_test}_hla_bench.pdf')
-            main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{fidx}_{train_or_test}_hla_bench.pdf`)')
-    if test_dfs:
-        benchmark_performance(test_dfs, F'{output}_0_{train_or_test}_roc_auc_{{}}', 
-            features, ex_feats, labelcol, [{}], 
-            metric_name='roc_auc', metric_thresholds=[0], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
-        benchmark_performance(test_dfs, f'{output}_0_{train_or_test}_log_loss_{{}}', 
-            features, ex_feats, labelcol, [{}], 
-            metric_name='log_loss', metric_thresholds=[0], titles=get_filenames(test_fnames, '(1/LogLoss) with\nfeature_set='))
+                metric_name='log_loss', metric_thresholds=[0], titles=get_filenames(test_fnames, '(1/LogLoss) with\nfeature_set='))
 
     cv_pred_dfs = []
     pipename2score_list = []
@@ -1678,6 +1715,9 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             features, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
         
 def main():
+    from warnings import simplefilter
+    simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+    
     output = args.output    
     os.makedirs(modeldir, exist_ok=True)
     os.system(F'cp {scriptpath} {modeldir}')
