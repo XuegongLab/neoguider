@@ -33,10 +33,15 @@ for file in args.inputs:
     if len(df) == 0:
         warnings.warn(F'Skipping the file {file} because it represents an empty dataframe. ')
         continue
+    print(F'Begin processing the file {file}. ')
     if not column_names: column_names = df.columns.tolist()
     assert list(df.columns) == column_names, F'The file {file} with columns\n{list(df.columns)}\ndoes not have the columns\n{column_names}\n!'
+    assert 'VALIDATED' in column_names, f'``VALIDATED`` in {column_names} failed!'
+    df_nan = df[df['HLA_type_y'].isna()]
+    df_not_nan = df[~df['HLA_type_y'].isna()]
+    assert (df_nan['VALIDATED']!=1).all(), f'The file {file} has positive examples that were not detected by our pipeline!'
     drop_cols =[col for col in DROP_COLS if col in df.columns]    
-    df = df.drop(columns=drop_cols)
+    df = df_not_nan.drop(columns=drop_cols)
     dfs.append(df)
 df = pd.concat(dfs)
 df.to_csv(args.output, sep=csvsep, index=False)
