@@ -108,7 +108,7 @@ IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 # NG_default = 'NG_withNumTested_default'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
-from custom_models import FixedOneLogisticRegression, FixedZeroLogisticRegression, FixedPatientLogisticRegression # make them pickleable
+from custom_models import FixedOneLogisticRegression, FixedZeroLogisticRegression # GroupEffectLogisticRegression
 
 HYPERPARAM_EPS = 1e-5
 
@@ -246,7 +246,8 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]),
 
     # For testing purpose: these NeoGuider variants should perform at similar level compared with NG_default
-    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(nontransformed_cols=[              ]),    
+    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(nontransformed_cols=[              ]),
+    'NG_withNumTested_only' : ColumnTransformer([("keeper", "passthrough",   ['ln_NumTested'])], remainder="drop"),
 
     'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
@@ -384,7 +385,7 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamTest_SGD0_LR' : SGDClassifier     (random_state=args1.randseed, loss='log_loss'),
     
     'hParamTest_UniformProb_LR': FixedZeroLogisticRegression(),
-    'hParamTest_TNBonlyProb_LR': FixedPatientLogisticRegression(),
+    #'hParamTest_TNBonlyProb_LR': GroupEffectLogisticRegression(),
 
     'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
     
@@ -766,7 +767,7 @@ def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     return matrix
 
 def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR', ranking_mult=1):
-    df = df.sort_values(predcol, ascending=(ranking_mult==-1))
+    df = df.sample(frac=1, random_state=0).sort_values(predcol, ascending=(ranking_mult==-1))
     ranks = []
     patient2rank = collections.defaultdict(int)
     for patient in df[patientcol]:
