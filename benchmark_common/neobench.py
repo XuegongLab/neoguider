@@ -58,7 +58,7 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 
-from sklearn.metrics import roc_auc_score, log_loss
+from sklearn.metrics import roc_auc_score, log_loss, mean_squared_error
 from sklearn.model_selection import cross_val_predict, cross_val_score, GroupKFold
 
 from sklearn.naive_bayes import GaussianNB
@@ -108,7 +108,7 @@ IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 # NG_default = 'NG_withNumTested_default'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
-from custom_models import FixedOneLogisticRegression  # Now pickleable!
+from custom_models import FixedOneLogisticRegression, FixedZeroLogisticRegression, FixedPatientLogisticRegression # make them pickleable
 
 HYPERPARAM_EPS = 1e-5
 
@@ -382,6 +382,9 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamTest_SAG0_LR' : LogisticRegression(random_state=args1.randseed, solver='sag',             **other_LR_params),
     'hParamTest_SAGA0_LR': LogisticRegression(random_state=args1.randseed, solver='saga',            **other_LR_params),
     'hParamTest_SGD0_LR' : SGDClassifier     (random_state=args1.randseed, loss='log_loss'),
+    
+    'hParamTest_UniformProb_LR': FixedZeroLogisticRegression(),
+    'hParamTest_TNBonlyProb_LR': FixedPatientLogisticRegression(),
 
     'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
     
@@ -602,6 +605,12 @@ ASCENDING_FEATURES = ('MT_BindAff,Agretopicity,%Rank_EL,%Rank_BA,PRIME_rank,PRIM
 
 DEBUG_SKLEARN_PIPE = 'sklearn-pipe'
 
+BURDEN_MUTATIONS = 'tmb'
+BURDEN_NEOPEPTIDES = 'neopep'
+BURDEN_N_TESTED = 'ntested'
+BURDEN_RANK_EL = 'rankEL'
+BURDEN_SCORE_EL = 'scoreEL'
+
 # Section on argparse
 
 parser = argparse.ArgumentParser(description='This script analyzes features (the features are typically the output of relevant software packages, such as kallisto, netMHCpan, mhcflurry, PRIME, ERGO, and netTCR). ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -632,6 +641,12 @@ parser.add_argument('--sep', default=None, help='csv column separator')
 parser.add_argument('--sub-randseed', default=-1, type=int, help='Seed for random number generation in subprocesses. If set to -1, then use the value of --randseed as the seed. ')
 parser.add_argument('--tasks', nargs='*', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='*', default=[], help='Column names denoting the input features (explanatory variable, i.e., pMHC binding affinity, stabilility, and agretopicity), auto infer if not provided')
+parser.add_argument('--burden', default=BURDEN_RANK_EL, help='The correlate of tumor neoantigen burden (such as tumor mutation burden, TMB) for normalizing probabilities within the same cohort', 
+        #choices=[BURDEN_MUTATIONS, BURDEN_NEOPEPTIDES, BURDEN_N_TESTED, BURDEN_RANK_EL]
+        )
+parser.add_argument('--burden-thres', default=2, type=float, help=F'The threshold of the {BURDEN_RANK_EL} or {BURDEN_SCORE_EL} for increasing the tumor burden of a patient')
+parser.add_argument('--burden-operator', default=-1, type=int, help='Integer, -2, -1, 0, 1, and 2 mean strictly-less-than, less-than-or-equal-to, equal-to, greater-than-or-equal-to, and strictly-greater-than the --burden-thres, respectively. ')
+
 parser.add_argument('--label', default='', help='Column name denoting the output label (response variable, i.e., immunogenicity), auto infer if not provided')
 parser.add_argument('--hla', default='', help='The latent factor that is suspected to influence performance (i.e., column denoting HLA allotype), auto infer if not provided')
 parser.add_argument('--partition', default='', help='Column name used for the stratified partitioning (i.e., grouping) of the rows into training/test sets, auto infer if not provided')
@@ -906,7 +921,7 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
             sub_X, sub_y = ml_pipe.fit_resample(X, y)
             if len(sub_X) < 20000:
                 sub_X['Label'] = y
-                sub_X.to_csv(F'{modeldir}/{ml_pipename_in_fname}_training_data.tsv.gz', sep='\t', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+                sub_X.to_csv(F'{modeldir}/{ml_pipename_in_fname}_training_data.tsv.gz', sep='\t', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         with open(prefilename, 'wb') as file:
             pickle.dump(ml_pipe, file)
         sub_logger.info(F'Performed training of {ml_pipename}')
@@ -1019,6 +1034,25 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
         elif metric_name == 'roc_auc':
             roc_auc = roc_auc_score(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
+        elif metric_name == 'patient_n_positives_mse':
+            if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
+                patient2true = collections.Counter() # collections.Counter(list(df_in['Patient']))
+                patient2pred = collections.Counter()
+                for patient, true_val, pred_val in zip(df_in['Patient'], df_in[labelcol], df_in[colname]):
+                    patient2true[patient] += true_val
+                    patient2pred[patient] += pred_val
+                y_true = [patient2true[p] for p in patient2true]
+                y_pred = [patient2pred[p] for p in patient2pred]
+                roc_auc = 1.0 / (mean_squared_error(y_true, y_pred) + sys.float_info.min)
+            else:
+                roc_auc = np.nan
+        elif metric_name == 'patient_averaged_log_loss':
+            if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
+                patient2ntested = collections.Counter(list(df_in['Patient']))
+                sample_weight = [(1.0 / patient2ntested[patient]) for patient in list(df_in['Patient'])]
+                roc_auc = 1.0/log_loss(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy(), sample_weight=sample_weight)
+            else:
+                roc_auc = np.nan
         else:
             assert metric_name == 'log_loss'
             if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
@@ -1030,6 +1064,46 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
         roc_auc_std = np.nan
         moe = np.nan
     return (colname, roc_auc, moe, roc_auc_std, pat2score)
+
+def compute_signed_wilcoxon_pval(meth1, meth2, score_dict):
+    """Compute pairwise comparison with shared score data"""
+    scores1 = score_dict[meth1]
+    scores2 = score_dict[meth2]
+    
+    if meth1 == meth2:
+        return (meth1, meth2, np.nan)  # Skip self-comparisons if desired
+    
+    if np.array_equal(scores1, scores2):
+        return (meth1, meth2, np.nan)
+    
+    try:
+        diff = scores1 - scores2
+        pval_mult = np.sign(diff.sum())  # More efficient than sum of signs
+        stat_test = stats.wilcoxon(diff, zero_method='pratt')
+        return (meth1, meth2, stat_test.pvalue * pval_mult)
+    except ValueError:
+        return (meth1, meth2, np.nan)  # Handle invalid test cases
+
+def compute_pairwise_pvalues(df_meth_x_pat_score, para_n_jobs=-1):
+    # Precompute scores dictionary
+    score_dict = {meth: row.values for meth, row in df_meth_x_pat_score.iterrows()}
+    methods = list(score_dict.keys())
+    
+    # Generate all unique pairs (n*(n-1)/2 comparisons)
+    pairs = itertools.product(methods, repeat=2)
+    
+    # Parallel computation
+    results = Parallel(n_jobs=para_n_jobs)(
+        delayed(compute_signed_wilcoxon_pval)(meth1, meth2, score_dict)
+        for meth1, meth2 in pairs
+    )
+    
+    # Build result dictionary
+    meths2pval = collections.defaultdict(dict)
+    for meth1, meth2, pval in results:
+        meths2pval[meth1][meth2] = pval
+    
+    return meths2pval
 
 def get_bar_pattern_color(featPrepType):
     if featPrepType < 0: return 'black'
@@ -1092,23 +1166,15 @@ def benchmark_perf_2(
         metric_results = Parallel(n_jobs=para_n_jobs)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
             df_in[['Patient', labelcol, colname]], labelcol, title_in_colname, set(features + ex_feats)) for colname in colnames)
         
-        main_logger.info(F'Started tabulating and performing statistical analyses on rank_score')
+        main_logger.info(F'Prepared tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
         meth2pat2score = {fpt_clf_comb: pat2score for (fpt_clf_comb, roc_auc, moe, roc_auc_std, pat2score) in metric_results}
         df_meth_x_pat_score = pd.DataFrame.from_dict(meth2pat2score, orient='index')
+        main_logger.info(F'Started tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
         if ax_idx == 0 and df_meth_x_pat_score.shape[1] >= 2:
             df_meth_x_pat_score.to_csv(out_fname_fmt.format('rank_score' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
-            meths2pval = {}
-            for meth1, scores1 in df_meth_x_pat_score.iterrows():
-                meths2pval[meth1] = {}
-                for meth2, scores2 in df_meth_x_pat_score.iterrows():
-                    if (scores1 == scores2).all():
-                        meths2pval[meth1][meth2] = np.nan
-                    else:
-                        pval_mult = np.sign(sum(np.sign(scores1 - scores2)))
-                        stat_test = stats.wilcoxon(scores1 - scores2)
-                        meths2pval[meth1][meth2] = stat_test.pvalue * pval_mult
+            meths2pval = compute_pairwise_pvalues(df_meth_x_pat_score, para_n_jobs=para_n_jobs)
             pd.DataFrame.from_dict(meths2pval, orient='index').to_csv(out_fname_fmt.format('rank_score_signed_pval' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
-        main_logger.info(F'Ended tabulating and performing statistical analyses on rank_score')
+        main_logger.info(F'Ended tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
 
         rows = []
         for colname, roc_auc, moe, roc_auc_std, pat2score in metric_results:
@@ -1124,9 +1190,8 @@ def benchmark_perf_2(
                 # print(F'{outf}: auc_df.loc[{ft_preproc_name},{classifier_name}] = {roc_auc} -> {auc_df.loc[ft_preproc_name, classifier_name]} = {roc_auc} # CHECK_01')
                 auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std
         long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_moe']) # AUROC -> title_in_colname
-        long_df.    to_csv(out_fname_fmt.format('with_both'                   + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
-        auc_series2.to_csv(out_fname_fmt.format('with_add_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
-        auc_series. to_csv(out_fname_fmt.format('with_raw_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
+        #auc_series2.to_csv(out_fname_fmt.format('with_add_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
+        #auc_series. to_csv(out_fname_fmt.format('with_raw_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
         auc_df.     to_csv(out_fname_fmt.format('with_featproc_clf_combs'     + title_in_fname) + '.pdf.tsv', sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
         auc_std_df. to_csv(out_fname_fmt.format('with_featproc_clf_combs_std' + title_in_fname) + '.pdf.tsv', sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
 
@@ -1198,6 +1263,8 @@ def benchmark_perf_2(
             long_df = long_df.sort_values(by=[title_in_colname,'MethClassPriority','Method'], ascending=True)
         else: raise ValueError(f'The sort_type {sort_type} is invalid. ')
         long_df['ypos'] = np.array(list(range(len(long_df))))
+        long_df.to_csv(out_fname_fmt.format('with_both' + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
+
         len_df = max([len_df, len(long_df)])
         featPrepType_df_iterable = long_df.groupby('MethFeatPrepType')
         hbars_list = []
@@ -1297,6 +1364,13 @@ def match_col(df, colnames):
             ret = colname
     return ret
 
+def cmp_op(operator, v1, v2):
+    if operator == -2: return (v1 <  v2)
+    if operator == -1: return (v1 <= v2)
+    if operator ==  0: return (v1 == v2)
+    if operator ==  1: return (v1 >  v2)
+    if operator ==  2: return (v1 >= v2)
+
 # We used the logic of Muller et al., 2023, Immunity at https://doi.org/10.1016/j.immuni.2023.09.002
 def prepare_df(df, labelcol, na_op, max_peplen): 
     ret = df.copy()
@@ -1308,8 +1382,31 @@ def prepare_df(df, labelcol, na_op, max_peplen):
     patientcol = match_col(ret, ['Patient', 'PatientID', 'patient'])
     if patientcol: # and 'ln_NumTested' not in ret.columns:
         patient2ntested = collections.defaultdict(int)
-        for patient, label in zip(ret[patientcol], ret[labelcol]):
-            patient2ntested[patient] += (1 if label in [0, 1] else 0)
+        if args.burden == BURDEN_MUTATIONS:
+            raise NotImplementedError('The burden type {BURDEN_MUTATIONS} is not implemented yet!')
+        elif args.burden == BURDEN_NEOPEPTIDES:
+            for patient in ret[patientcol]:
+                patient2ntested[patient] += 1
+        elif args.burden == BURDEN_N_TESTED:
+            for patient, label in zip(ret[patientcol], ret[labelcol]):
+                patient2ntested[patient] += (1 if label in [0, 1] else 0)
+        elif args.burden == BURDEN_RANK_EL:
+            ALLOWED_COL_LIST = ['%Rank_EL', 'RankEL', 'Rank_EL']
+            thres_col = match_col(ret, ALLOWED_COL_LIST)
+            assert thres_col, F'None of the names {ALLOWED_COL_LIST} is found in the columns {df.columns}'
+            for patient, value in zip(ret[patientcol], ret[thres_col]):
+                patient2ntested[patient] += (1 if value <= args.burden_thres else 0)
+        elif args.burden == BURDEN_SCORE_EL:
+            ALLOWED_COL_LIST = ['%Score_EL', 'ScoreEL', 'Score_EL']
+            thres_col = match_col(ret, ALLOWED_COL_LIST)
+            assert thres_col, F'None of the names {ALLOWED_COL_LIST} is found in the columns {df.columns}'
+            for patient, value in zip(ret[patientcol], ret[thres_col]):
+                patient2ntested[patient] += (1 if value >= args.burden_thres else 0)
+        else:
+            assert args.burden in df.columns, F'The tumor-neoantigen burden (TNB) correlate ``{args.burden}`` is found in the columns {df.columns}!'
+            for patient, value in zip(ret[patientcol], ret[args.burden]):
+                patient2ntested[patient] += (1 if cmp_op(args.burden_operator, value, args.burden_thres) else 0)
+
         newcol = [np.log(max((1, patient2ntested[p]))) for p in ret[patientcol]]
         if 'ln_NumTested' not in ret.columns:
             ret['ln_NumTested'] = newcol
@@ -1549,7 +1646,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         if 'fa3' in tasks:
             big_transformed_df = pd.DataFrame(np.append(big_transformed_X, np.array([[v] for v in big_y]), axis=1), columns=list(features)+[labelcol])
             big_transformed_df = big_transformed_df.apply(pd.to_numeric)
-            big_transformed_df.to_csv(f'{ng_spec_output}_transformed_data.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+            big_transformed_df.to_csv(f'{ng_spec_output}_transformed_data.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
             
             big_trans_df0 = big_transformed_df.loc[big_transformed_df[labelcol]==0,:] #.sample(n=100, random_state=args1.randseed)
             big_trans_df1 = big_transformed_df.loc[big_transformed_df[labelcol]==1,:] #.sample(n=100, random_state=args1.randseed)
@@ -1588,20 +1685,22 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     main_logger.info(F'Start training')
     train_results = Parallel(n_jobs=para_n_jobs)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir) for ml_pipename, ml_pipe in ml_pipes)
     main_logger.info(F'End training')
-    if not os.path.exists(f'{output}_train.csv.gz.done'):
-        main_logger.info(F'Start saving training-set predictions to {output}_train.csv.gz')
+    train_tsv_gz = '{output}_training_out_{untest_ops_training_examples}_data_all.csv.gz'
+    if not os.path.exists(f'{train_tsv_gz}.done'):
+        main_logger.info(F'Start saving training-set predictions to {train_tsv_gz}.')
         for result in train_results:
             ml_pipename, ml_pipe, ml_pipe_predicted = result
             train_df[ml_pipename] = ml_pipe_predicted
-        train_df.to_csv(f'{output}_train.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-        with open(f'{output}_train.csv.gz.done', 'w') as file: file.write('done')
-        main_logger.info(F'End saving training-set predictions to {output}_train.csv.gz')
+        train_df.to_csv(train_tsv_gz, sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+        with open(f'{train_tsv_gz}.done', 'w') as file: file.write('done')
+        main_logger.info(F'End saving training-set predictions to {train_tsv_gz}')
     else:
-        main_logger.info(F'Skip saving pre-saved training-set predictions at {output}_train.csv.gz')
+        main_logger.info(F'Skip saving pre-saved training-set predictions at {train_tsv_gz}')
     
     for untest_ops_test_examples in ['zero', 'drop']:
         test_dfs = []
         for fidx, test_fname in enumerate(test_fnames):
+            fidx += 1
             if test_fname in train_fnames: train_or_test = 'train'
             else: train_or_test = 'test'
             df = pd.read_csv(test_fname, sep=csvsep)
@@ -1625,30 +1724,32 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 assert len(ml_pipe_predicted) == len(df), F'{len(ml_pipe_predicted)} == {len(df)} failed!'
                 df[ml_pipename] = ml_pipe_predicted # avoid warnings about the generation of fragmented dataframe
             
-            test_output = F'{output}_{untest_ops_test_examples}_{fidx}_{train_or_test}'
+            test_output = F'{output}_test_out_{untest_ops_test_examples}_data_{train_or_test}_{fidx}'
             if not os.path.exists(f'{test_output}.csv.gz.done'):
                 main_logger.info(f'start saving {test_output}.csv.gz')
-                df.to_csv(F'{test_output}.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+                df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
                 with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('done')
                 main_logger.info(f'end saving {test_output}.csv.gz')
             df2 = df.fillna({col : np.mean(df[col]) for col in features})
             test_dfs.append(df2)
             if 'Patient' in df2.columns:
-                benchmark_performance([df2], F'{test_output}_topN_{{}}', 
+                benchmark_performance([df2], F'{output}_test_rankInPatient_{untest_ops_test_examples}_topN_{train_or_test}-{fidx}_{{}}', #F'{test_output}_topN_{{}}', 
                     features, ex_feats, labelcol, [{}],
                     metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
             if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{test_output}_hla_stats.pdf')
             if 'hla2' in tasks:
-                main_logger.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{test_output}_hla_bench.pdf`)')
+                main_logger.info(F'start analyze_performance_per_hla({df}, {hlacol}, {labelcol}, ``_{test_output}_hla_bench.pdf``)')
                 analyze_performance_per_hla(df, hlacol, labelcol, F'{test_output}_hla_bench.pdf')
-                main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, `_{test_output}_hla_bench.pdf`)')
+                main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, ``_{test_output}_hla_bench.pdf``)')
         if test_dfs:
-            benchmark_performance(test_dfs, F'{output}_{untest_ops_test_examples}_0_{train_or_test}_roc_auc_{{}}',
-                features, ex_feats, labelcol, [{}], 
-                metric_name='roc_auc', metric_thresholds=[0], titles=get_filenames(test_fnames, 'AUC-ROC with\nfeature_set='))
-            benchmark_performance(test_dfs, f'{output}_{untest_ops_test_examples}_0_{train_or_test}_log_loss_{{}}', 
-                features, ex_feats, labelcol, [{}],
-                metric_name='log_loss', metric_thresholds=[0], titles=get_filenames(test_fnames, '(1/LogLoss) with\nfeature_set='))
+            for metric_name, metric_titlename in [
+                    ('patient_n_positives_mse'  , '(1/MSE) with\nfeature_set='),
+                    ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
+                    ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
+                    ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
+                benchmark_performance(test_dfs, F'{output}_test_rankInCohort_{untest_ops_test_examples}_{metric_name}_traintest_{{}}',
+                        features, ex_feats, labelcol, [{}],
+                        metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(test_fnames, metric_titlename))
 
     cv_pred_dfs = []
     pipename2score_list = []
@@ -1692,11 +1793,24 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
         for result in results:
             ml_pipename, ml_pipe, ml_pipe_predicted = result
-            df[ml_pipename] = ml_pipe_predicted
-        df.to_csv(F'{output}_{fidx}_cv_predict.csv.gz', sep=',', index=None, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+            assert not np.isnan(ml_pipe_predicted).any()
+            assert len(ml_pipe_predicted) == len(df), F'{len(ml_pipe_predicted)} == {len(df)} failed!'
+            df[ml_pipename] = ml_pipe_predicted # avoid warnings about the generation of fragmented dataframe
+        
+        test_output = F'{output}_cvPredict_out_{untest_ops_cv_examples}_data_{fidx}'
+        if not os.path.exists(f'{test_output}.csv.gz.done'):
+            main_logger.info(f'start saving {test_output}.csv.gz')
+            df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+            with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('done')
+            main_logger.info(f'end saving {test_output}.csv.gz')
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         cv_pred_dfs.append(df2)
-        prefilename = F'{output}_{fidx}_cv_score.pickle'
+        if 'Patient' in df2.columns:
+            benchmark_performance([df2], F'{output}_cvPredict_rankInPatient_{untest_ops_cv_examples}_topN_{fidx}_{{}}', #F'{test_output}_topN_{{}}',
+                features, ex_feats, labelcol, [{}],
+                metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
+        
+        #prefilename = F'{output}_{untest_ops_test_examples}_cvScore_{fidx}.pickle'
         #if os.path.exists(prefilename):
         #    with open(prefilename, 'rb') as file:
         #        results = pickle.load(file)
@@ -1705,15 +1819,15 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         #with open(prefilename, 'wb') as file:
         #    pickle.dump(results, file)
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
-
         pipename2score = {ml_pipename : results[i][2] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
+
     if cv_fnames:
-        benchmark_performance(cv_pred_dfs, F'{output}_0_cv_score_roc_auc_{{}}',
-            features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
-        benchmark_performance(cv_pred_dfs, F'{output}_0_cv_predict_roc_auc_{{}}', 
+        benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_cv_examples}_roc_auc{{}}', 
             features, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
-        
+        benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}',
+            features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+
 def main():
     from warnings import simplefilter
     simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
