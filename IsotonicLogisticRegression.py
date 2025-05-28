@@ -7,7 +7,7 @@ import scipy
 from scipy.interpolate import interp1d
 from scipy.stats import spearmanr
 
-from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, TransformerMixin
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LinearRegression, LogisticRegression
 #from sklearn.neighbors import KernelDensity, KNeighborsRegressor
@@ -424,7 +424,7 @@ class ConvexRegression(BaseEstimator, ClassifierMixin, RegressorMixin):
 # However, I did not find any relevant work about the use of non-parametric curve as activation function for neural network. 
 # Maybe the biggest problem is to design the back-propagation algorithm for such neural networks?
 
-class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin):
+class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixin, RegressorMixin):
 
     def __init__(self,
             categorical_cols='auto',
@@ -627,12 +627,20 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         self.nan_policy = nan_policy
         self.kwargs = kwargs
 
+        if self.task not in ['classification', 'regression']:
+            raise ValueError(F'The task {self.task} is invalid (only "classification" and "regression" are valid)!')
+
     def __sklearn_is_fitted__(self):
         """
         Check fitted status and return a Boolean value.
         """
         return hasattr(self, "_is_fitted") and self._is_fitted
     
+    def score(self, X, y):
+        if self.task == 'classification': return self.score_classifier(X, y)
+        elif self.task == 'regression': return self.score_regressor(X, y)
+        else: raise RuntimeError(F'The self.task {self.task} is invalid (only "classification" and "regression" are valid)!')
+
     def set_random_state(self, random_state):
         self.random_state = random_state
     def custom_get_params(self):
@@ -1365,14 +1373,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
             else self.mat_x2y_regs_0_[colidx].predict(xT)
             )) for colidx,xT in enumerate(XT)]).transpose()
         '''
-    def transform(self, X1, add_measure_error=None, is_inverse=False, column_idx=None):
+    def transform(self, X, add_measure_error=None, is_inverse=False, column_idx=None):
         """ scikit-learn transform 
             add_measure_error: set to True to add measurement error to prevent overfitting
             is_inverse: set to True to perform inverse transform. Please use the inverse_transform method instead if possible.
         """
         check_is_fitted(self)
         add_measure_error = self.get_default(add_measure_error, self.transform_add_measure_error, False)
-        X = np.array(X1)
+        X_orig = X
+        X = np.array(X_orig)
         X = self._prep_input(X)
         if column_idx != None: return self._transform(X, add_measure_error=add_measure_error, is_inverse=is_inverse, column_idx=column_idx)
         return self._transform(X, add_measure_error=add_measure_error, is_inverse=is_inverse)
@@ -1383,15 +1392,15 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #X2[:,exIdxs] = exX
         #return X2
     
-    def inverse_transform(self, X1, column_idx=None):
+    def inverse_transform(self, X, column_idx=None):
         """
         scikit-learn inverse_transform
         caveat: inverse_transform(transform(X)) != X and transform(inverse_transform(X)) != X for a column x of X 
                 if at least one scalar value of x is not within the range in which the transform function of x is monotonically increasing
         """
-        return self.transform(X1, column_idx=column_idx, is_inverse=True)
+        return self.transform(X, column_idx=column_idx, is_inverse=True)
     
-    def fit_transform(self, X1, y1, *args, fit_add_measure_error=None, transform_add_measure_error=None, **kwargs):
+    def fit_transform(self, X, y, *args, fit_add_measure_error=None, transform_add_measure_error=None, **kwargs):
         """ scikit-learn fit_transform 
             fit_add_measure_error: set to True to add measurement error to prevent overfitting (it may work for plain decision trees)
             transform_add_measure_error: set to True to add measurement error to prevent overfitting
@@ -1400,8 +1409,8 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #   such as DecisionTreeClassifier (DT) presumably because DT without regularization tends to overfit.
         fit_add_measure_error = self.get_default(fit_add_measure_error, self.ft_fit_add_measure_error, False)
         transform_add_measure_error = self.get_default(transform_add_measure_error, self.ft_transform_add_measure_error, True)
-        self.fit(X1, y1, *args, add_measure_error=fit_add_measure_error, **kwargs)
-        return self.transform(X1, add_measure_error=transform_add_measure_error)
+        self.fit(X, y, *args, add_measure_error=fit_add_measure_error, **kwargs)
+        return self.transform(X, add_measure_error=transform_add_measure_error)
     
     def _extract_features(self, X):
         #inX, exX, inIdxs, exIdxs = self._split(X, True)
@@ -1409,18 +1418,20 @@ class IsotonicLogisticRegression(BaseEstimator, ClassifierMixin, RegressorMixin)
         #return np.hstack([test_orX, exX])
         return self._transform(X, add_measure_error=False, is_inverse=False)
  
-    def predict(self, X1):
+    def predict(self, X):
         """ scikit-learn predict using logistic regression built on top of isotonic scaler """
         check_is_fitted(self)
-        X = np.array(X1)
+        X_orig = X
+        X = np.array(X)
         X = self._prep_input(X)
         allfeatures = self._extract_features(X)
         return self._internal_predictor.predict(allfeatures)
 
-    def predict_proba(self, X1):
+    def predict_proba(self, X):
         """ scikit-learn predict_proba using logistic regression built on top of isotonic scaler """
         check_is_fitted(self)
-        X = np.array(X1)
+        X_orig = X
+        X = np.array(X)
         X = self._prep_input(X)
         allfeatures = self._extract_features(X)
         if self.task == 'regression':
