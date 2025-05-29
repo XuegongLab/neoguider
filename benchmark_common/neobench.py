@@ -58,7 +58,7 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 
-from sklearn.metrics import roc_auc_score, log_loss, mean_squared_error
+from sklearn.metrics import roc_auc_score, log_loss, mean_squared_error, r2_score
 from sklearn.model_selection import cross_val_predict, cross_val_score, GroupKFold
 
 from sklearn.naive_bayes import GaussianNB
@@ -1040,6 +1040,18 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
         elif metric_name == 'roc_auc':
             roc_auc = roc_auc_score(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
+        elif metric_name == 'patient_n_positives_R2':
+            if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
+                patient2true = collections.Counter() # collections.Counter(list(df_in['Patient']))
+                patient2pred = collections.Counter()
+                for patient, true_val, pred_val in zip(df_in['Patient'], df_in[labelcol], df_in[colname]):
+                    patient2true[patient] += true_val
+                    patient2pred[patient] += pred_val
+                y_true = [patient2true[p] for p in patient2true]
+                y_pred = [patient2pred[p] for p in patient2pred]
+                roc_auc = r2_score(y_true, y_pred)
+            else:
+                roc_auc = np.nan
         elif metric_name == 'patient_n_positives_mse':
             if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
                 patient2true = collections.Counter() # collections.Counter(list(df_in['Patient']))
@@ -1758,6 +1770,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, ``_{test_output}_hla_bench.pdf``)')
         if test_dfs:
             for metric_name, metric_titlename in [
+                    ('patient_n_positives_R2'  ,  '$R^2$ with\nfeature_set='),
                     ('patient_n_positives_mse'  , '(1/MSE) with\nfeature_set='),
                     ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                     ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
@@ -1838,8 +1851,15 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         pipename2score_list.append(pipename2score)
 
     if cv_fnames:
-        benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}', 
-            features, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+        for metric_name, metric_titlename in [
+                ('patient_n_positives_R2'  ,  '$R^2$ with\nfeature_set='),
+                ('patient_n_positives_mse'  , '(1/MSE) with\nfeature_set='),
+                ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
+                ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
+                ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
+            benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_test_examples}_{metric_name}_{{}}',
+                    features, ex_feats, labelcol, [{}],
+                    metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(cv_fnames, metric_titlename))
         benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}',
             features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
 
