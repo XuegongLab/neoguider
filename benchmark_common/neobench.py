@@ -58,7 +58,7 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 
-from sklearn.metrics import roc_auc_score, log_loss, mean_squared_error, r2_score
+from sklearn.metrics import roc_auc_score, log_loss, mean_squared_error #, r2_score
 from sklearn.model_selection import cross_val_predict, cross_val_score, GroupKFold
 
 from sklearn.naive_bayes import GaussianNB
@@ -1053,7 +1053,7 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
                 if metric_name == 'patient_n_positives_mse':
                     roc_auc = 1.0 / (mean_squared_error(y_true, y_pred) + sys.float_info.min) 
                 else:
-                    roc_auc = r2_score(y_true, y_pred)
+                    roc_auc, roc_auc_pvalue = stats.pearsonr(y_true, y_pred)
             else:
                 roc_auc = np.nan
         elif metric_name == 'patient_averaged_log_loss':
@@ -1743,7 +1743,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 assert len(ml_pipe_predicted) == len(df), F'{len(ml_pipe_predicted)} == {len(df)} failed!'
                 df[ml_pipename] = ml_pipe_predicted # avoid warnings about the generation of fragmented dataframe
             
-            test_output = F'{output}_test_out_{untest_ops_test_examples}_data_{train_or_test}_{fidx}'
+            test_output = F'{output}_test_out_{untest_ops_training_examples}-{untest_ops_test_examples}_data_{train_or_test}_{fidx}'
             if not os.path.exists(f'{test_output}.csv.gz.done'):
                 main_logger.info(f'start saving {test_output}.csv.gz')
                 df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
@@ -1752,7 +1752,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             df2 = df.fillna({col : np.mean(df[col]) for col in features})
             test_dfs.append(df2)
             if 'Patient' in df2.columns:
-                benchmark_performance([df2], F'{output}_test_rankInPatient_{untest_ops_test_examples}_topN_{train_or_test}-{fidx}_{{}}', #F'{test_output}_topN_{{}}', 
+                benchmark_performance([df2], F'{output}_test_rankInPatient_{untest_ops_training_examples}-{untest_ops_test_examples}_topN_{train_or_test}-{fidx}_{{}}',
                     features, ex_feats, labelcol, [{}],
                     metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
             if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{test_output}_hla_stats.pdf')
@@ -1762,12 +1762,12 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, ``_{test_output}_hla_bench.pdf``)')
         if test_dfs:
             for metric_name, metric_titlename in [
-                    ('patient_n_positives_R2'  ,  '$R^2$ with\nfeature_set='),
+                    ('patient_n_positives_R2'  ,  'Pearson-R with\nfeature_set='),
                     ('patient_n_positives_mse'  , '(1/MSE) with\nfeature_set='),
                     ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                     ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
                     ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
-                benchmark_performance(test_dfs, F'{output}_test_rankInCohort_{untest_ops_test_examples}_{metric_name}_traintest_{{}}',
+                benchmark_performance(test_dfs, F'{output}_test_rankInCohort_{untest_ops_training_examples}-{untest_ops_test_examples}_{metric_name}_traintest_{{}}',
                         features, ex_feats, labelcol, [{}],
                         metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(test_fnames, metric_titlename))
 
