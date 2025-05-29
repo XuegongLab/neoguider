@@ -444,6 +444,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
             adaKDE_min_width=2,
             adaKDE_width_adjust_factor=1.0, # 0.9 for Silverman's rule (but 0.5 in practice)
             adaKDE_exponent_inverse=3,
+            adaKDE_max_n_contigs_exponent=(1.0-1.0/5), # Silverman's rule
             adaKDE_freeform_min_width=36, #1e99,
             
             postCIR_mov_avg_window_size=0,
@@ -501,8 +502,10 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
             defaults to LogisticRegression and LinearRegression with default params for classification and regression, respectively. 
         
         random_state: integer or RandomState instance
-            The state for generating random numbers (just like the random_state from sklearn), -1 means disable_random=True
-        
+            The state for generating random numbers (just like the random_state from sklearn) for breaking ties in feature values.
+            The integer -1 means disable_random=True.
+            You should use -1 unless you would like to study tie-breaking effects in detail.
+
         adaKDE_min_width: float
             Inclusive minimum number of examples in each adaptive KDE of a response value (i.e., log odds. Only used when disable_random=True).
             If this value is negative, then auto infer the minimum number. 
@@ -526,8 +529,16 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
               3 for any once-differentiable (e.g., piecewise-linear) density derived from the minimax theory (e.g., https://doi.org/10.1007/978-0-387-79052-7_1, page 15)
               5 for Silverman's and Scott's rules for normal-kernel smoothing normal PDF.
         
-        adaKDE_freeform_min_width:
-            The minimum bandwith to disable isotonic and convex regression (because the bandwidth covered enough samples to estimate density without any constraint).
+        adaKDE_max_n_contigs_exponent: float
+            The multiplicative inverse of the exponent of the number of contigs for setting maximum bandwidth expressed as the number of contigs.
+            A contig refers to a set SA of examples from the same class A (i.e., having the same binary label) that remain consecutive after
+              sorting SA by a feature and filtering out the set SB of examples from the other class B.
+            Warnings: If this number is higher than 1, then the bandwidth can surpass the number of contigs, resulting in a RuntimeException error. 
+              This runtime error implies a mismatch between selected bandwidth and data distribution. 
+              If you would like to catch this error, then please set this number to higher than 1. 
+
+        adaKDE_freeform_min_width: integer or float
+            The minimum bandwidth to disable isotonic and convex regression (because the bandwidth covered enough samples to estimate density without any constraint).
             This has the same effect as setting the relevant freeform_cols. 
 
         postCIR_mov_avg_window_size: integer
@@ -603,6 +614,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
         self.adaKDE_min_width = adaKDE_min_width
         self.adaKDE_width_adjust_factor = adaKDE_width_adjust_factor
         self.adaKDE_exponent_inverse = adaKDE_exponent_inverse
+        self.adaKDE_max_n_contigs_exponent = adaKDE_max_n_contigs_exponent
         self.adaKDE_freeform_min_width = adaKDE_freeform_min_width
 
         self.postCIR_mov_avg_window_size = postCIR_mov_avg_window_size
@@ -1048,6 +1060,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
                 if self.random_state < 0:
                     # disable_random=True
                     contig_list = _transform_and_partition(x, y)
+                    adaKDE_max_n_contigs = (float(len(contig_list)))**(self.adaKDE_max_n_contigs_exponent)
                     featval_x0cnt_x1cnt_list = [_center_group(contig) for contig in contig_list]
                     
                     if self.adaKDE_exponent_inverse == -1:
@@ -1061,7 +1074,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
                             prev1_x0cnt, next1_x0cnt, prev1_x1cnt, next1_x1cnt = (0, 0, 0, 0)
                             delta = 1
                             while ((x0cnt - 0.5 * (prev1_x0cnt + next1_x0cnt) <= self.adaKDE_min_width-0.001)
-                                or (x1cnt - 0.5 * (prev1_x1cnt + next1_x1cnt) <= self.adaKDE_min_width-0.001)):
+                                or (x1cnt - 0.5 * (prev1_x1cnt + next1_x1cnt) <= self.adaKDE_min_width-0.001)) and delta < adaKDE_max_n_contigs:
                                 prev1_featval, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[abs(i-delta)]
                                 next1_featval, (next1_x0cnt, next1_x1cnt) = featval_x0cnt_x1cnt_list[min((i+delta,2*len(featval_x0cnt_x1cnt_list)-i-2-delta))]
                                 x0cnt += prev1_x0cnt + next1_x0cnt
@@ -1149,7 +1162,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
                             logging.log(LOGLEVEL_DEBUG1, F'Feature={colname}\tfeature_index={colidx}\tfeature_value={featval:g}\tadaKDE_width={adaKDE_width:g}')
                         '''
                         while ((x0cnt - 0.5 * (prev1_x0cnt + next1_x0cnt) <= adaKDE_width-0.001) 
-                            or (x1cnt - 0.5 * (prev1_x1cnt + next1_x1cnt) <= adaKDE_width-0.001)):
+                            or (x1cnt - 0.5 * (prev1_x1cnt + next1_x1cnt) <= adaKDE_width-0.001)) and (delta < adaKDE_max_n_contigs):
                             #if i-delta <  0:
                             #    (prev1_x0cnt, prev1_x1cnt) = (0, 0)
                             #else: _, (prev1_x0cnt, prev1_x1cnt) = featval_x0cnt_x1cnt_list[i-delta]
