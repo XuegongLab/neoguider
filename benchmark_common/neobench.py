@@ -611,6 +611,7 @@ BURDEN_NEOPEPTIDES = 'neopep'
 BURDEN_N_TESTED = 'ntested'
 BURDEN_RANK_EL = 'rankEL'
 BURDEN_SCORE_EL = 'scoreEL'
+TOP_RANK_EL = 'topRankEL'
 
 # Section on argparse
 
@@ -645,7 +646,7 @@ parser.add_argument('--features', nargs='*', default=[], help='Column names deno
 parser.add_argument('--burden', default=BURDEN_RANK_EL, help='The correlate of tumor neoantigen burden (such as tumor mutation burden, TMB) for normalizing probabilities within the same cohort', 
         #choices=[BURDEN_MUTATIONS, BURDEN_NEOPEPTIDES, BURDEN_N_TESTED, BURDEN_RANK_EL]
         )
-parser.add_argument('--burden-thres', default=2, type=float, help=F'The threshold of the {BURDEN_RANK_EL} or {BURDEN_SCORE_EL} for increasing the tumor burden of a patient')
+parser.add_argument('--burden-thres', default=2, type=float, help=F'The threshold of the {BURDEN_RANK_EL}, {TOP_RANK_EL}, or {BURDEN_SCORE_EL} for increasing the tumor burden of a patient')
 parser.add_argument('--burden-operator', default=-1, type=int, help='Integer, -2, -1, 0, 1, and 2 mean strictly-less-than, less-than-or-equal-to, equal-to, greater-than-or-equal-to, and strictly-greater-than the --burden-thres, respectively. ')
 
 parser.add_argument('--label', default='', help='Column name denoting the output label (response variable, i.e., immunogenicity), auto infer if not provided')
@@ -973,7 +974,11 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx)
         with open(prefilename, 'rb') as file:
             prob_pred = pickle.load(file)
     else:
-        prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=GroupKFold(), method='predict_proba')
+        try:
+            prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=GroupKFold(), method='predict_proba')
+        except Exception as err:
+            sub_logger.critical(F'The following method call failed: cross_val_predict({ml_pipe}, {X}, {y}, groups={partitions}, cv={GroupKFold()}, method=``predict_proba``)')
+            raise err
         with open(prefilename, 'wb') as file:
             pickle.dump(prob_pred, file)
 
@@ -1403,11 +1408,20 @@ def prepare_df(df, labelcol, na_op, max_peplen):
             assert thres_col, F'None of the names {ALLOWED_COL_LIST} is found in the columns {df.columns}'
             for patient, value in zip(ret[patientcol], ret[thres_col]):
                 patient2ntested[patient] += (1 if value >= args.burden_thres else 0)
+        elif args.burden == TOP_RANK_EL:
+            ALLOWED_COL_LIST = ['%Rank_EL', 'RankEL', 'Rank_EL']
+            thres_col = match_col(ret, ALLOWED_COL_LIST)
+            assert thres_col, F'None of the names {ALLOWED_COL_LIST} is found in the columns {df.columns}'
+            for patient, pat_df in ret.groupby(patientcol):
+                thres_val_list = list(pat_df[thres_col])
+                thres_val_pos = min((len(thres_val_list), 20))
+                thres_val = sorted(thres_val_list)[thres_val_pos-1]
+                patient2ntested[patient] += 100 / (thres_val + 1e-9) * thres_val_pos
         else:
             assert args.burden in df.columns, F'The tumor-neoantigen burden (TNB) correlate ``{args.burden}`` is found in the columns {df.columns}!'
             for patient, value in zip(ret[patientcol], ret[args.burden]):
                 patient2ntested[patient] += (1 if cmp_op(args.burden_operator, value, args.burden_thres) else 0)
-
+        
         newcol = [np.log(max((1, patient2ntested[p]))) for p in ret[patientcol]]
         if 'ln_NumTested' not in ret.columns:
             ret['ln_NumTested'] = newcol
@@ -1824,7 +1838,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         pipename2score_list.append(pipename2score)
 
     if cv_fnames:
-        benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_cv_examples}_roc_auc{{}}', 
+        benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}', 
             features, ex_feats, labelcol, [{}],                titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
         benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}',
             features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
