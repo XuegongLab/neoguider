@@ -656,7 +656,7 @@ parser.add_argument('--partition', default='', help='Column name used for the st
 parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBUG_SKLEARN_PIPE}: test sklearn pipeline. ')
 
 # Maintain consistency with Muller et al., 2023, Immunity
-parser.add_argument('-uf', '--untest_flag', default=0x1, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
+parser.add_argument('-uf', '--untest_flag', default=0x1+0x4, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
 # Positive peptides with lengths greater than 11: only one in NCI-train and four in HiTIDE, and the best practice is to remove them AFAIK. 
 parser.add_argument('-pf', '--peplen_flag', default=0x7, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
@@ -906,7 +906,8 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
     y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
     prefilename = F'{modeldir}/{ml_pipename_in_fname}_model.pickle'
-    if os.path.exists(prefilename):
+    predone = prefilename + '.done'
+    if os.path.exists(predone):
         with open(prefilename, 'rb') as file:
             ml_pipe = pickle.load(file)
         sub_logger.info(F'Used already-trained {ml_pipename}')
@@ -924,8 +925,8 @@ def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
             if len(sub_X) < 20000:
                 sub_X['Label'] = y
                 sub_X.to_csv(F'{modeldir}/{ml_pipename_in_fname}_training_data.tsv.gz', sep='\t', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-        with open(prefilename, 'wb') as file:
-            pickle.dump(ml_pipe, file)
+        with open(prefilename, 'wb') as file: pickle.dump(ml_pipe, file)
+        with open(predone, 'w') as file: file.write(f'{ml_pipe}')
         sub_logger.info(F'Performed training of {ml_pipename}')
     prob_pred = ml_pipe.predict_proba(X)
 
@@ -959,7 +960,7 @@ def predict_with_ml_pipe(ml_pipename, ml_pipe, X, modeldir):
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
+def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, untest_ops_cv_examples):
     sub_logger = myGetLogger('CROSS_VAL_PREDICT')
     taskname = F'predicting out-of-fold labels by cross validation using {ml_pipename}'
     sub_logger.info(F'Start {taskname} with input_shape={X.shape}')
@@ -969,8 +970,9 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx)
     X = drop_feat_from_X(ml_pipename, X)
     y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
-    prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_cross_val_predict_results.pickle'
-    if os.path.exists(prefilename):
+    prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_{untest_ops_cv_examples}_cross_val_predict_results.pickle'
+    predone = prefilename + '.done'
+    if os.path.exists(predone):
         with open(prefilename, 'rb') as file:
             prob_pred = pickle.load(file)
     else:
@@ -979,14 +981,13 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx)
         except Exception as err:
             sub_logger.critical(F'The following method call failed: cross_val_predict({ml_pipe}, {X}, {y}, groups={partitions}, cv={GroupKFold()}, method=``predict_proba``)')
             raise err
-        with open(prefilename, 'wb') as file:
-            pickle.dump(prob_pred, file)
-
+        with open(prefilename, 'wb') as file: pickle.dump(prob_pred, file)
+        with open(predone, 'w') as file: file.write('DONE')
     assert_prob_arr(prob_pred, taskname)
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
+def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, untest_ops_cv_examples):
     sub_logger = myGetLogger('CROSS_VAL_SCORE')
     taskname = F'scoring by cross validation using {ml_pipename}'
     sub_logger.info(F'Started {taskname} with input_shape={X.shape}')
@@ -997,14 +998,14 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx):
     y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
     prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_cross_val_score_results.pickle'
-    if os.path.exists(prefilename):
+    predone = prefilename + '.done'
+    if os.path.exists(predone):
         with open(prefilename, 'rb') as file:
             scores = pickle.load(file)
     else:
         scores = cross_val_score(ml_pipe, X, y, groups=partitions, cv=GroupKFold(), scoring='roc_auc', n_jobs=-1)
-        with open(prefilename, 'wb') as file:
-            pickle.dump(scores, file)
-    
+        with open(prefilename, 'wb') as file: pickle.dump(scores, file)
+        with open(predone, 'w') as file: file.write(f'{scores}')
     # assert_prob_arr(scores, taskname)
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, scores)
@@ -1040,7 +1041,7 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
         elif metric_name == 'roc_auc':
             roc_auc = roc_auc_score(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
-        elif metric_name == 'patient_n_positives_R2':
+        elif metric_name in ['patient_n_positives_R2', 'patient_n_positives_mse']:
             if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
                 patient2true = collections.Counter() # collections.Counter(list(df_in['Patient']))
                 patient2pred = collections.Counter()
@@ -1049,19 +1050,10 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
                     patient2pred[patient] += pred_val
                 y_true = [patient2true[p] for p in patient2true]
                 y_pred = [patient2pred[p] for p in patient2pred]
-                roc_auc = r2_score(y_true, y_pred)
-            else:
-                roc_auc = np.nan
-        elif metric_name == 'patient_n_positives_mse':
-            if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
-                patient2true = collections.Counter() # collections.Counter(list(df_in['Patient']))
-                patient2pred = collections.Counter()
-                for patient, true_val, pred_val in zip(df_in['Patient'], df_in[labelcol], df_in[colname]):
-                    patient2true[patient] += true_val
-                    patient2pred[patient] += pred_val
-                y_true = [patient2true[p] for p in patient2true]
-                y_pred = [patient2pred[p] for p in patient2pred]
-                roc_auc = 1.0 / (mean_squared_error(y_true, y_pred) + sys.float_info.min)
+                if metric_name == 'patient_n_positives_mse':
+                    roc_auc = 1.0 / (mean_squared_error(y_true, y_pred) + sys.float_info.min) 
+                else:
+                    roc_auc = r2_score(y_true, y_pred)
             else:
                 roc_auc = np.nan
         elif metric_name == 'patient_averaged_log_loss':
@@ -1719,7 +1711,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             ml_pipename, ml_pipe, ml_pipe_predicted = result
             train_df[ml_pipename] = ml_pipe_predicted
         train_df.to_csv(train_tsv_gz, sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-        with open(f'{train_tsv_gz}.done', 'w') as file: file.write('done')
+        with open(f'{train_tsv_gz}.done', 'w') as file: file.write('DONE')
         main_logger.info(F'End saving training-set predictions to {train_tsv_gz}')
     else:
         main_logger.info(F'Skip saving pre-saved training-set predictions at {train_tsv_gz}')
@@ -1755,7 +1747,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             if not os.path.exists(f'{test_output}.csv.gz.done'):
                 main_logger.info(f'start saving {test_output}.csv.gz')
                 df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-                with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('done')
+                with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('DONE')
                 main_logger.info(f'end saving {test_output}.csv.gz')
             df2 = df.fillna({col : np.mean(df[col]) for col in features})
             test_dfs.append(df2)
@@ -1816,7 +1808,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 df['DUMMY_PARTITION'] = list(range(len(df)))
                 partition_name = 'DUMMY_PARTITION'
 
-        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_predict_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx) for ml_pipename, ml_pipe in ml_pipes)
+        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_predict_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx, untest_ops_cv_examples) for ml_pipename, ml_pipe in ml_pipes)
         
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
         for result in results:
@@ -1829,7 +1821,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         if not os.path.exists(f'{test_output}.csv.gz.done'):
             main_logger.info(f'start saving {test_output}.csv.gz')
             df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-            with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('done')
+            with open(f'{test_output}.csv.gz.done', 'w') as file: file.write('DONE')
             main_logger.info(f'end saving {test_output}.csv.gz')
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         cv_pred_dfs.append(df2)
@@ -1843,7 +1835,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         #    with open(prefilename, 'rb') as file:
         #        results = pickle.load(file)
         #else:
-        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_score_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx) for ml_pipename, ml_pipe in ml_pipes)
+        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_score_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx, untest_ops_cv_examples) 
+                for ml_pipename, ml_pipe in ml_pipes)
         #with open(prefilename, 'wb') as file:
         #    pickle.dump(results, file)
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
@@ -1857,7 +1850,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                 ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
                 ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
-            benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_test_examples}_{metric_name}_{{}}',
+            benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_cv_examples}_{metric_name}_{{}}',
                     features, ex_feats, labelcol, [{}],
                     metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(cv_fnames, metric_titlename))
         benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}',
