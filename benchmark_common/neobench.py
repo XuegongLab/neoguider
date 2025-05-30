@@ -598,6 +598,8 @@ MULLER_NEOPEP_FTS = 'CCF Clonality rnaseq_TPM rnaseq_alt_support CSCAPE_score mu
 MULLER_NEOMUT_FTS = 'CCF Clonality Zygosity Sample_Tissue_expression_GTEx TCGA_Cancer_expression rnaseq_TPM rnaseq_alt_support MIN_MUT_RANK_CI_MIXMHC COUNT_MUT_RANK_CI_MIXMHC WT_BEST_RANK_CI_MIXMHC MIN_MUT_RANK_CI_PRIME COUNT_MUT_RANK_CI_PRIME WT_BEST_RANK_CI_PRIME COUNT_MUT_RANK_CI_netMHCpan CSCAPE_score gene_driver_Intogen nb_mutations_in_gene_Intogen nb_same_mutation_Intogen mutation_driver_statement_Intogen GTEx_all_tissues_expression_mean bestWTMatchScore_I bestWTMatchOverlap_I bestMutationScore_I bestWTPeptideCount_I mut_Rank_EL_0 wt_Rank_EL_0 mut_Rank_EL_1 wt_Rank_EL_1 mut_Rank_EL_2 wt_Rank_EL_2 mut_Rank_Stab_0 mut_Rank_Stab_1 mut_Rank_Stab_2 mut_netchop_score mut_TAP_score_0 next_best_BA_mut_ranks DAI_0 DAI_1 DAI_2'.strip().split()
 
 LISTOF_FEATURES = [FEATS, PMHC_TCR_PRED_60_MODELS, PMHC_TCR_PRED_TOOLS, IMPROVE_FTS, MULLER_NEOPEP_FTS, MULLER_NEOMUT_FTS]
+ALL_FEATURES = [ft for fts in LISTOF_FEATURES for ft in fts]
+HLA_COLS= ['HLA_type', 'HLA_type_y', 'HLA_allele', 'mutant_best_alleles_netMHCpan'] # HLA_type_x can contain comma
 
 LISTOF_LABELS = [['Label', 'response', 'VALIDATED', 'response_type']]
 
@@ -613,6 +615,10 @@ BURDEN_RANK_EL = 'rankEL'
 BURDEN_SCORE_EL = 'scoreEL'
 TOP_RANK_EL = 'topRankEL'
 
+NA_OPS_KWARGS = {
+    'nargs': '*', 
+    'choices': ['zero', 'drop']
+    }
 # Section on argparse
 
 parser = argparse.ArgumentParser(description='This script analyzes features (the features are typically the output of relevant software packages, such as kallisto, netMHCpan, mhcflurry, PRIME, ERGO, and netTCR). ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -656,8 +662,15 @@ parser.add_argument('--partition', default='', help='Column name used for the st
 parser.add_argument('--debug', nargs='*', default=[], help=F'Debug tokens. {DEBUG_SKLEARN_PIPE}: test sklearn pipeline. ')
 
 # Maintain consistency with Muller et al., 2023, Immunity
-parser.add_argument('-uf', '--untest_flag', default=0x1+0x4, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
+NA_OPS_HELP = r'Benchmarked combinations of ways to treat rows with N/A labels in {}: drop or zero-out (treat them as negatives)'
+parser.add_argument('-tr', '--train_na_ops',    default=['drop'],         help=NA_OPS_HELP.format('training data') , **NA_OPS_KWARGS)
+parser.add_argument('-te', '--test_na_ops',     default=['zero', 'drop'], help=NA_OPS_HELP.format('test data')     , **NA_OPS_KWARGS)
+parser.add_argument('-cv', '--cv_na_ops',       default=['drop'],         help=NA_OPS_HELP.format('training')      , **NA_OPS_KWARGS)
+parser.add_argument('-tx', '--tr_extra_na_ops', default=[],               help='Extra (not benchmarked) ways of handling training data', **NA_OPS_KWARGS)
+
+#parser.add_argument('-uf', '--untest_flag', default=0x1+0x4, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
 # Positive peptides with lengths greater than 11: only one in NCI-train and four in HiTIDE, and the best practice is to remove them AFAIK. 
+
 parser.add_argument('-pf', '--peplen_flag', default=0x7, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove peptides with lengths greater than 11 (with at least 12 amino acid residues) for training, test, and cross-validation. ')
 parser.add_argument('--add', nargs='*', default=['default'], help='pMHC-binding features, like default, netmhc, mhcflurry, and/or prime, to be added to the list of features. The default uses netMHCpan ScoreEL, netMHC binding affinity, and netMHCstabpan binding stability. ')
 parser.add_argument('--max_n_negatives', type=int, default=10*1000*1000, help='Maximum number of negatives') # 100 times higher than the one from Muller et al., 2023, Immunity
@@ -960,7 +973,7 @@ def predict_with_ml_pipe(ml_pipename, ml_pipe, X, modeldir):
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, untest_ops_cv_examples):
+def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, cv_na_label_treatment):
     sub_logger = myGetLogger('CROSS_VAL_PREDICT')
     taskname = F'predicting out-of-fold labels by cross validation using {ml_pipename}'
     sub_logger.info(F'Start {taskname} with input_shape={X.shape}')
@@ -970,7 +983,7 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx,
     X = drop_feat_from_X(ml_pipename, X)
     y = y.copy()
     ml_pipename_in_fname = ml_pipename.replace('/', '_')
-    prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_{untest_ops_cv_examples}_cross_val_predict_results.pickle'
+    prefilename = F'{modeldir}/{ml_pipename_in_fname}_{fidx}_{cv_na_label_treatment}_cross_val_predict_results.pickle'
     predone = prefilename + '.done'
     if os.path.exists(predone):
         with open(prefilename, 'rb') as file:
@@ -987,7 +1000,7 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx,
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, prob_pred[:,1])
 
-def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, untest_ops_cv_examples):
+def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, cv_na_label_treatment):
     sub_logger = myGetLogger('CROSS_VAL_SCORE')
     taskname = F'scoring by cross validation using {ml_pipename}'
     sub_logger.info(F'Started {taskname} with input_shape={X.shape}')
@@ -1200,8 +1213,6 @@ def benchmark_perf_2(
                 # print(F'{outf}: auc_df.loc[{ft_preproc_name},{classifier_name}] = {roc_auc} -> {auc_df.loc[ft_preproc_name, classifier_name]} = {roc_auc} # CHECK_01')
                 auc_std_df.loc[ft_preproc_name, classifier_name] = roc_auc_std
         long_df = pd.DataFrame(rows, columns=['Method', title_in_colname, title_in_colname+'_moe']) # AUROC -> title_in_colname
-        #auc_series2.to_csv(out_fname_fmt.format('with_add_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
-        #auc_series. to_csv(out_fname_fmt.format('with_raw_features'           + title_in_fname) + '.pdf.tsv', sep='\t', index=True)
         auc_df.     to_csv(out_fname_fmt.format('with_featproc_clf_combs'     + title_in_fname) + '.pdf.tsv', sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
         auc_std_df. to_csv(out_fname_fmt.format('with_featproc_clf_combs_std' + title_in_fname) + '.pdf.tsv', sep='\t', index=True, index_label='FeatPreprocessors\\Classifiers')
 
@@ -1211,13 +1222,10 @@ def benchmark_perf_2(
             fig_heat.tight_layout()
             fig_heat.savefig(out_fname_fmt.format('with_featproc_clf_combs')+'.pdf')
             fig_heat.savefig(out_fname_fmt.format('with_featproc_clf_combs')+'.png', dpi=600)
-        #plt.close()
-        #fig, ax = plt.subplots(figsize=(8, 8*2.5))
         ax = axes[ax_idx]
         ax.set_xticklabels([])
         ax.set_yticklabels([])
         ypos = list(range(len(long_df)))
-        #auroc_method_class_list = zip(long_df[title_in_colname], long_df['Method'], long_df['Method'].apply(lambda x: (-1 if 'neoguider' in x.lower() else (1 if x in features else 0))))
         featPrepType2desc = {
             0: ('NeoGuider/hyperparameter-tuned classifier'),
             1: ('NeoGuider/default-hyperparameter classifier'),
@@ -1301,15 +1309,11 @@ def benchmark_perf_2(
         xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname] + long_df[title_in_colname+'_moe'].fillna(0))
         ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
         ax.set_xlabel(titles[ax_idx], fontsize=14)
-        #ax.legend(fontsize=14)
         def get_ncols(n_labels, n_cols):
             n_cols = int(round(min((1.35*n_cols, n_labels))))
             while n_labels % n_cols != 0: n_cols -= 1
             return n_cols
         if ax_idx == 0:
-            #legend_ax.legend(hbars_list, [featPrepType2desc[i] for i in sorted(featPrepType_list)], title='Feature-preprocessing-technique/classifier combinations',
-            #    ncol=get_ncols(len(long_df['MethFeatPrepType'].unique()), n_subfigs),
-            #    loc='center', fontsize=12, title_fontsize=18)
             color_legend_elements = [Patch(facecolor=color, label=featPrepType2desc[featPrepType]) for featPrepType, color in enumerate(featPrepType2color)]
             color_legend = legend_ax1.legend(handles=color_legend_elements, title='Feature-preprocessing-technique/classifier combinations', loc='center', fontsize=12, title_fontsize=18,
                     ncol=get_ncols(len(featPrepType2color), n_subfigs))
@@ -1388,9 +1392,8 @@ def prepare_df(df, labelcol, na_op, max_peplen):
     if pepcol:
         ret = ret.loc[ret[pepcol].str.len() <= max_peplen]
     added_feats = []
-    #if x_allin_y(IMPROVE_FTS[0:10] + ['Patient', 'Partition'], ret.columns):
     patientcol = match_col(ret, ['Patient', 'PatientID', 'patient'])
-    if patientcol: # and 'ln_NumTested' not in ret.columns:
+    if patientcol:
         patient2ntested = collections.defaultdict(int)
         if args.burden == BURDEN_MUTATIONS:
             raise NotImplementedError('The burden type {BURDEN_MUTATIONS} is not implemented yet!')
@@ -1448,8 +1451,6 @@ def prepare_df(df, labelcol, na_op, max_peplen):
 DHP_FEATS = ['DeepHLApan_binding_score', 'DeepHLApan_immunogenic_score']
 def add_more(df, fpath):
     fpath = os.path.abspath(fpath)
-    #fdir = os.path.dirname(fpath)
-    #fbase = os.path.basename(fpath)
     fbase, fext = os.path.splitext(fpath)
     # Add DeepHLpan results
     dhp_fname = fbase + '_predicted_result.csv'
@@ -1468,83 +1469,16 @@ def add_more(df, fpath):
 def get_filenames(filepaths, prefix=''):
     return [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
 
-OTHER_FEATS = ['%Rank_EL', 'Score_BA', '%Rank_BA', 'PRIME_rank', 'PRIME_score', 'PRIME_BArank', 'mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile']
-def train_test_cv(train_fnames, test_fnames, cv_fnames):
-    output = args.output # csvsep from global
+def feat_importance_analysis(train_df, output, features, labelcol):
     tasks = args.tasks
-    #feature_names = args.features
-    #label_name = args.label
-    
-    untest_flag = args.untest_flag 
-    peplen_flag = args.peplen_flag
-
-    ex_feats = DHP_FEATS + OTHER_FEATS
-
-    untest_ops_training_examples = ('drop' if (untest_flag & 0x1) else 'zero')
-    untest_ops_test_examples = ('drop' if (untest_flag & 0x2) else 'zero')
-    untest_ops_cv_examples = ('drop' if (untest_flag & 0x4) else 'zero')
-    
-    peplen_max_training_examples = (11 if (peplen_flag & 0x1) else 9999)
-    peplen_max_test_examples = (11 if (peplen_flag & 0x2) else 9999)
-    peplen_max_cv_examples = (11 if (peplen_flag & 0x4) else 9999)
-    
-    HLA_COLS= ['HLA_type', 'HLA_type_y', 'HLA_allele', 'mutant_best_alleles_netMHCpan'] # HLA_type_x can contain comma
-    # setup
-    hparam_deflt_ft_preproc_name2tech = {x: HPARAM_DEFLT_FT_PREPROC_NAME2TECH[x] for x in args.hparam_deflt_ft_preproc_names if x in HPARAM_DEFLT_FT_PREPROC_NAME2TECH}
-    hparam_deflt_classifier_name2tech = {x: HPARAM_DEFLT_CLASSIFIER_NAME2TECH[x] for x in args.hparam_deflt_classifier_names if x in HPARAM_DEFLT_CLASSIFIER_NAME2TECH}
-    hparam_tuned_ft_preproc_name2tech = {x: HPARAM_TUNED_FT_PREPROC_NAME2TECH[x] for x in args.hparam_tuned_ft_preproc_names if x in HPARAM_TUNED_FT_PREPROC_NAME2TECH}
-    hparam_tuned_classifier_name2tech = {x: HPARAM_TUNED_CLASSIFIER_NAME2TECH[x] for x in args.hparam_tuned_classifier_names if x in HPARAM_TUNED_CLASSIFIER_NAME2TECH}
-    
-    ALL_FEATURES = []
-    for fts in LISTOF_FEATURES:
-        ALL_FEATURES.extend(fts)
-    #features_superset1 = (ALL_FEATURES if len(feature_names) == 0 else feature_names) # (.split(','))
-    #labels_superset1 = (LISTOF_LABELS[0] if label_name == '' else [label_name])
-    features = args.features
-    labelcol = args.label # None
-    hlacol = args.hla
-    in_dfs = []
-    for i, train_fname in enumerate(train_fnames):
-        in_df = pd.read_csv(train_fname, sep=csvsep)
-        in_df = add_more(in_df, train_fname)
-        if i == 0:            
-            if not args.features:
-                features = [colname for colname in in_df.columns if colname in ALL_FEATURES]
-                ft_weights = [len(set(fts) & set(features)) for fts in LISTOF_FEATURES]
-                features_2 = LISTOF_FEATURES[np.argmax(ft_weights)]
-                features = [colname for colname in in_df.columns if colname in features_2]
-                assert len(features) >= len(features_2) / 2, (F'The features {features} and {features_2} share less than 50% names in common! '
-                        'Please use the --features cmd-line option to specify the exact feature (column) names to used. ')
-            if not args.label:
-                labels = [colname for colname in in_df.columns if colname in LISTOF_LABELS[0]]
-                assert len(labels) == 1, F'Multiple label names ({labels}) are found, please use the --label cmd-line option to specify the exact label (column) name to use. '
-                labelcol = labels[0]
-            if not args.hla:
-                hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
-                assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
-                if hlacols: hlacol = hlacols[0]
-            in_df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
-            if added_feats: features.extend(added_feats)            
-            #labels_superset1 = [labelcol]
-        else:
-            in_df, _ = prepare_df(in_df, labelcol, na_op=untest_ops_training_examples, max_peplen=peplen_max_training_examples)
-        if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
-            main_logger.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
-        in_dfs.append(in_df)
-    features_superset1 = copy.deepcopy(features)
-    train_df = pd.concat(in_dfs, axis=0, join="inner")
-    if 'hla1' in tasks: analyze_hla(train_df, hlacol, labelcol, f'{output}_train_hla_stats.pdf')
-
-    features = [f for f in features if f in train_df.columns]
-    main_logger.info(F'Selected, from {train_fnames}, the features {features} (n={len(features)})')
-
-    # feature analysis phase 1: feature importance
     train_X = train_df.loc[:, features].copy()
     big_y   = train_df.loc[:, labelcol].copy()
     train_X = train_X.apply(pd.to_numeric)
     big_y   = big_y.apply(pd.to_numeric)
 
     for out_short_name, ng_variant in [('without', 'NG_withoutNumTested'), ('with', 'NG_withNumTested')]:
+        # feature analysis phase 1: feature importance
+
         ng_spec_output = output + '_' + ng_variant
         ft_preproc_tech = copy.deepcopy(HPARAM_DEFLT_FT_PREPROC_NAME2TECH[ng_variant])
         #train_X = QuantileTransformer(random_state=args1.randseed).fit_transform(train_X)
@@ -1594,10 +1528,10 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
 
         feat_importance_df.to_csv(f'{ng_spec_output}_feat_imp.tsv', index='feature_names', sep='\t')
 
+        # feature analysis phases 2 and 3: prep
         ilr = ft_preproc_tech
 
         s0x = ilr.get_adaDKE_X()
-        #s0y = ilr.transform(s0x)
         s0x2= ilr.get_adaDKE_width()
 
         s1x = ilr.get_density_estimated_X()
@@ -1693,18 +1627,80 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 plot_ret = pairplot_showing_pretrans_feat_vals(big_trans2_df0.sample(n=dfsize, random_state=args1.randseed), big_trans2_df1.sample(n=dfsize, random_state=args1.randseed), ilr)
                 plt.savefig(f'{ng_spec_output}_pairwiseLogOdds_MT_BindAff_500nM.pdf')
                 plt.close()
+    return 0
 
-    ml_pipes = construct_ml_pipes(hparam_deflt_ft_preproc_name2tech, hparam_deflt_classifier_name2tech, hparam_tuned_ft_preproc_name2tech, hparam_tuned_classifier_name2tech, big_y)
-   
+def retrieve_features_label_hla(in_df):
+    features, labelcol, hlacol = args.features, args.label, args.hla
+    if not args.features:
+        features = [colname for colname in in_df.columns if colname in ALL_FEATURES]
+        ft_weights = [len(set(fts) & set(features)) for fts in LISTOF_FEATURES]
+        features_2 = LISTOF_FEATURES[np.argmax(ft_weights)]
+        features = [colname for colname in in_df.columns if colname in features_2]
+        assert len(features) >= len(features_2) / 2, (F'The features {features} and {features_2} share less than 50% names in common! '
+                'Please use the --features cmd-line option to specify the exact feature (column) names to used. ')
+    if not args.label:
+        labels = [colname for colname in in_df.columns if colname in LISTOF_LABELS[0]]
+        assert len(labels) == 1, F'Multiple label names ({labels}) are found, please use the --label cmd-line option to specify the exact label (column) name to use. '
+        labelcol = labels[0]
+    if not args.hla:
+        hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
+        assert len(hlacols) <= 1, F'Found multiple HLA column names: {hlas}'
+        if hlacols: hlacol = hlacols[0]
+    return features, labelcol, hlacol
+
+OTHER_FEATS = ['%Rank_EL', 'Score_BA', '%Rank_BA', 'PRIME_rank', 'PRIME_score', 'PRIME_BArank', 'mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile']
+
+def main_train_test(train_na_label_treatment, train_fnames, test_fnames):
+    ex_feats = DHP_FEATS + OTHER_FEATS
+    peplen_max_training_examples = (11 if (args.peplen_flag & 0x1) else 9999)
+    peplen_max_test_examples = (11 if (args.peplen_flag & 0x2) else 9999)
+    output = args.output + '_' + train_na_label_treatment
+    
+    hparam_deflt_ft_preproc_name2tech = {x: HPARAM_DEFLT_FT_PREPROC_NAME2TECH[x] for x in args.hparam_deflt_ft_preproc_names if x in HPARAM_DEFLT_FT_PREPROC_NAME2TECH}
+    hparam_deflt_classifier_name2tech = {x: HPARAM_DEFLT_CLASSIFIER_NAME2TECH[x] for x in args.hparam_deflt_classifier_names if x in HPARAM_DEFLT_CLASSIFIER_NAME2TECH}
+    hparam_tuned_ft_preproc_name2tech = {x: HPARAM_TUNED_FT_PREPROC_NAME2TECH[x] for x in args.hparam_tuned_ft_preproc_names if x in HPARAM_TUNED_FT_PREPROC_NAME2TECH}
+    hparam_tuned_classifier_name2tech = {x: HPARAM_TUNED_CLASSIFIER_NAME2TECH[x] for x in args.hparam_tuned_classifier_names if x in HPARAM_TUNED_CLASSIFIER_NAME2TECH}
+    
+    features = args.features
+    labelcol = args.label
+    hlacol = args.hla
+    tasks = args.tasks
+
+    in_dfs = []
+    for i, train_fname in enumerate(train_fnames):
+        in_df = pd.read_csv(train_fname, sep=csvsep)
+        in_df = add_more(in_df, train_fname)
+        if i == 0:            
+            features, labelcol, hlacol = retrieve_features_label_hla(in_df)
+            in_df, added_feats = prepare_df(in_df, labelcol, na_op=train_na_label_treatment, max_peplen=peplen_max_training_examples)
+            if added_feats: features.extend(added_feats)            
+        else:
+            in_df, _ = prepare_df(in_df, labelcol, na_op=train_na_label_treatment, max_peplen=peplen_max_training_examples)
+        if in_dfs and not (in_dfs[0].columns == in_df.columns).all():
+            main_logger.warning(F'{in_dfs[0].columns} == {in_df.columns} failed for the column names of the inputs {train_fnames[0]} and {train_fname}')
+        in_dfs.append(in_df)
+    features_superset1 = copy.deepcopy(features)
+    train_df = pd.concat(in_dfs, axis=0, join="inner")
+    if 'hla1' in tasks: analyze_hla(train_df, hlacol, labelcol, f'{output}_train_out_{train_na_label_treatment}_hla_stats.pdf')
+
+    features = [f for f in features if f in train_df.columns]
+    main_logger.info(F'Selected, from {train_fnames}, the features {features} (n={len(features)})')
+
+    feat_importance_analysis(train_df, f'{output}_train_out', features, labelcol)
+    
     # train phase
     train_X = train_df.loc[:, features].copy()
     train_y = train_df.loc[:, labelcol].copy()
-    train_X = train_X.fillna({col : np.mean(train_X[col]) for col in features})
-    
+    #train_X = train_X.fillna({col : np.mean(train_X[col]) for col in features})
+
+    ml_pipes = construct_ml_pipes(hparam_deflt_ft_preproc_name2tech, hparam_deflt_classifier_name2tech, hparam_tuned_ft_preproc_name2tech, hparam_tuned_classifier_name2tech, train_y)
+
     main_logger.info(F'Start training')
-    train_results = Parallel(n_jobs=para_n_jobs)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir) for ml_pipename, ml_pipe in ml_pipes)
+    os.makedirs(modeldir + '.' + train_na_label_treatment, exist_ok=True)
+    train_results = Parallel(n_jobs=para_n_jobs)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir + '.' + train_na_label_treatment) 
+            for ml_pipename, ml_pipe in ml_pipes)
     main_logger.info(F'End training')
-    train_tsv_gz = '{output}_training_out_{untest_ops_training_examples}_data_all.csv.gz'
+    train_tsv_gz = '{output}_training_out_data_all.csv.gz'
     if not os.path.exists(f'{train_tsv_gz}.done'):
         main_logger.info(F'Start saving training-set predictions to {train_tsv_gz}.')
         for result in train_results:
@@ -1716,7 +1712,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
     else:
         main_logger.info(F'Skip saving pre-saved training-set predictions at {train_tsv_gz}')
     
-    for untest_ops_test_examples in ['zero', 'drop']:
+    for test_na_label_treatment in args.test_na_ops:
         test_dfs = []
         for fidx, test_fname in enumerate(test_fnames):
             fidx += 1
@@ -1726,7 +1722,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             df = add_more(df, test_fname)
             assert not np.isnan(df[labelcol]).any()
 
-            df, added_feats = prepare_df(df, labelcol, na_op=untest_ops_test_examples, max_peplen=peplen_max_test_examples)
+            df, added_feats = prepare_df(df, labelcol, na_op=test_na_label_treatment, max_peplen=peplen_max_test_examples)
             assert not np.isnan(df[labelcol]).any()
 
             for f in added_feats: assert f in features, F'{f} in {features} failed!'
@@ -1735,7 +1731,8 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             # test phase
             X = dfXy.loc[:, features].copy()
             X = X.fillna({col : np.mean(X[col]) for col in features})
-            test_results = Parallel(n_jobs=para_n_jobs)(delayed(predict_with_ml_pipe)(ml_pipename, ml_pipe, X, modeldir) for ml_pipename, ml_pipe, _, in train_results)
+            test_results = Parallel(n_jobs=para_n_jobs)(delayed(predict_with_ml_pipe)(ml_pipename, ml_pipe, X, modeldir + '.' + train_na_label_treatment)
+                    for ml_pipename, ml_pipe, _, in train_results)
             
             for result in test_results:
                 ml_pipename, ml_pipe, ml_pipe_predicted = result
@@ -1743,7 +1740,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 assert len(ml_pipe_predicted) == len(df), F'{len(ml_pipe_predicted)} == {len(df)} failed!'
                 df[ml_pipename] = ml_pipe_predicted # avoid warnings about the generation of fragmented dataframe
             
-            test_output = F'{output}_test_out_{untest_ops_training_examples}-{untest_ops_test_examples}_data_{train_or_test}_{fidx}'
+            test_output = F'{output}-{test_na_label_treatment}_test_out_data_{train_or_test}_{fidx}'
             if not os.path.exists(f'{test_output}.csv.gz.done'):
                 main_logger.info(f'start saving {test_output}.csv.gz')
                 df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
@@ -1752,7 +1749,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             df2 = df.fillna({col : np.mean(df[col]) for col in features})
             test_dfs.append(df2)
             if 'Patient' in df2.columns:
-                benchmark_performance([df2], F'{output}_test_rankInPatient_{untest_ops_training_examples}-{untest_ops_test_examples}_topN_{train_or_test}-{fidx}_{{}}',
+                benchmark_performance([df2], F'{output}-{test_na_label_treatment}_test_rankInPatient_topN_{train_or_test}-group{fidx}_{{}}',
                     features, ex_feats, labelcol, [{}],
                     metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
             if 'hla1' in tasks: analyze_hla(df2, hlacol, labelcol, F'{test_output}_hla_stats.pdf')
@@ -1767,17 +1764,31 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                     ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                     ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
                     ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
-                benchmark_performance(test_dfs, F'{output}_test_rankInCohort_{untest_ops_training_examples}-{untest_ops_test_examples}_{metric_name}_traintest_{{}}',
+                benchmark_performance(test_dfs, F'{output}-{test_na_label_treatment}_test_rankInCohort_{metric_name}_traintest_{{}}',
                         features, ex_feats, labelcol, [{}],
                         metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(test_fnames, metric_titlename))
 
+def main_cross_val(cv_na_label_treatment, cv_fnames):
+    ex_feats = DHP_FEATS + OTHER_FEATS
+    peplen_max_cv_examples = (11 if (args.peplen_flag & 0x4) else 9999)
+    output = F'{args.output}_{cv_na_label_treatment}'
+    
+    hparam_deflt_ft_preproc_name2tech = {x: HPARAM_DEFLT_FT_PREPROC_NAME2TECH[x] for x in args.hparam_deflt_ft_preproc_names if x in HPARAM_DEFLT_FT_PREPROC_NAME2TECH}
+    hparam_deflt_classifier_name2tech = {x: HPARAM_DEFLT_CLASSIFIER_NAME2TECH[x] for x in args.hparam_deflt_classifier_names if x in HPARAM_DEFLT_CLASSIFIER_NAME2TECH}
+    hparam_tuned_ft_preproc_name2tech = {x: HPARAM_TUNED_FT_PREPROC_NAME2TECH[x] for x in args.hparam_tuned_ft_preproc_names if x in HPARAM_TUNED_FT_PREPROC_NAME2TECH}
+    hparam_tuned_classifier_name2tech = {x: HPARAM_TUNED_CLASSIFIER_NAME2TECH[x] for x in args.hparam_tuned_classifier_names if x in HPARAM_TUNED_CLASSIFIER_NAME2TECH}
+
     cv_pred_dfs = []
     pipename2score_list = []
+
     for fidx, fname in enumerate(cv_fnames):
         fidx += 1
         in_df = pd.read_csv(fname, sep=csvsep)
+        features, labelcol, hlacol = retrieve_features_label_hla(in_df)
         in_df = add_more(in_df, fname)
-        features = [colname for colname in in_df.columns if colname in features_superset1]
+        
+        #features_superset1 = copy.deepcopy(features)
+        #features = [colname for colname in in_df.columns if colname in features_superset1]
         #labels = [colname for colname in in_df.columns if colname in labels_superset1]
         #hlacols = [colname for colname in in_df.columns if colname in HLA_COLS]
         #assert len(labels) == 1
@@ -1785,7 +1796,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         #labelcol = labels[0]
         #if hlacols: hlacol = hlacols[0]
         
-        df, added_feats = prepare_df(in_df, labelcol, na_op=untest_ops_cv_examples, max_peplen=peplen_max_cv_examples)
+        df, added_feats = prepare_df(in_df, labelcol, na_op=cv_na_label_treatment, max_peplen=peplen_max_cv_examples)
         features.extend(added_feats)
         dfXy = df.loc[:,features + [labelcol]]
         X = dfXy.loc[:, features].copy()
@@ -1808,7 +1819,9 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 df['DUMMY_PARTITION'] = list(range(len(df)))
                 partition_name = 'DUMMY_PARTITION'
 
-        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_predict_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx, untest_ops_cv_examples) for ml_pipename, ml_pipe in ml_pipes)
+        ml_pipes = construct_ml_pipes(hparam_deflt_ft_preproc_name2tech, hparam_deflt_classifier_name2tech, hparam_tuned_ft_preproc_name2tech, hparam_tuned_classifier_name2tech, y)
+        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_predict_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx, cv_na_label_treatment)
+                for ml_pipename, ml_pipe in ml_pipes)
         
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
         for result in results:
@@ -1817,7 +1830,7 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
             assert len(ml_pipe_predicted) == len(df), F'{len(ml_pipe_predicted)} == {len(df)} failed!'
             df[ml_pipename] = ml_pipe_predicted # avoid warnings about the generation of fragmented dataframe
         
-        test_output = F'{output}_cvPredict_out_{untest_ops_cv_examples}_data_{fidx}'
+        test_output = F'{output}_cvPredict_out_data_{fidx}'
         if not os.path.exists(f'{test_output}.csv.gz.done'):
             main_logger.info(f'start saving {test_output}.csv.gz')
             df.to_csv(F'{test_output}.csv.gz', sep=',', index=False, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
@@ -1826,19 +1839,12 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
         df2 = df.fillna({col : np.mean(df[col]) for col in features})
         cv_pred_dfs.append(df2)
         if 'Patient' in df2.columns:
-            benchmark_performance([df2], F'{output}_cvPredict_rankInPatient_{untest_ops_cv_examples}_topN_{fidx}_{{}}', #F'{test_output}_topN_{{}}',
+            benchmark_performance([df2], F'{output}_cvPredict_rankInPatient_topN_group{fidx}_{{}}', #F'{test_output}_topN_{{}}',
                 features, ex_feats, labelcol, [{}],
                 metric_name='top', metric_thresholds=[20,50,100], titles=['Top-20 #True', 'Top-50 #True', 'Top-100 #True'])
         
-        #prefilename = F'{output}_{untest_ops_test_examples}_cvScore_{fidx}.pickle'
-        #if os.path.exists(prefilename):
-        #    with open(prefilename, 'rb') as file:
-        #        results = pickle.load(file)
-        #else:
-        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_score_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx, untest_ops_cv_examples) 
+        results = Parallel(n_jobs=para_n_jobs)(delayed(cross_val_score_with_ml_pipe)(ml_pipename, ml_pipe, X, y, df[partition_name], fidx, cv_na_label_treatment) 
                 for ml_pipename, ml_pipe in ml_pipes)
-        #with open(prefilename, 'wb') as file:
-        #    pickle.dump(results, file)
         assert len(results) == len(ml_pipes), F'{len(results)} == {len(ml_pipes)} failed!'
         pipename2score = {ml_pipename : results[i][2] for i, (ml_pipename, ml_pipe) in enumerate(ml_pipes)}
         pipename2score_list.append(pipename2score)
@@ -1850,10 +1856,10 @@ def train_test_cv(train_fnames, test_fnames, cv_fnames):
                 ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                 ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
                 ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
-            benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{untest_ops_cv_examples}_{metric_name}_{{}}',
+            benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{metric_name}_{{}}',
                     features, ex_feats, labelcol, [{}],
                     metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(cv_fnames, metric_titlename))
-        benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_{untest_ops_cv_examples}_roc_auc_{{}}',
+        benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_roc_auc_{{}}',
             features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
 
 def main():
@@ -1879,7 +1885,10 @@ def main():
         infofile.write(F'Train: {tr_filenames}')
         infofile.write(F'Benchmark (test): {tr_filenames}')
         infofile.write(F'CrossValidate: {cv_filenames}')
-    train_test_cv(tr_filenames, te_filenames, cv_filenames)
+    for train_na_label_treatment in args.train_na_ops:
+        main_train_test(train_na_label_treatment, tr_filenames, te_filenames)
+    for cv_na_label_treatment in args.cv_na_ops:
+        main_cross_val(cv_na_label_treatment, cv_filenames)
 
 if __name__ == '__main__': main()
 
