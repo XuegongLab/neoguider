@@ -1133,6 +1133,17 @@ def get_bar_pattern_color(featPrepType):
     if featPrepType % 2 == 0: return 'black'
     return 'gray'
 
+def get_bar_label_colors(meth_names):
+    name2color = {
+        'NG_withNumTested/hParamDefault_LR'             : 'tab:blue',
+        'NG_withNumTested_Exc/hParamDefault_LR'         : 'tab:orange',
+        'NG_withoutNumTested/hParamDefault_LR'          : 'tab:green',
+        'NG_withoutNumTested/hParamTest_UniformProb_LR' : 'tab:red',
+        'NG_withNumTested/hParamTest_UniformProb_LR'    : 'tab:red',
+        'NG_withNumTested_only/hParamDefault_LR'        : 'tab:purple',
+    }
+    return [name2color.get(name, 'black') for name in meth_names]
+
 def benchmark_perf_2(
         df_ins,
         out_fname_fmt,
@@ -1148,7 +1159,9 @@ def benchmark_perf_2(
         barh_fmt='%.4g',
         sort_type=2,
         figheight=6*3,
-        task_specific_NG_default='N/A'):
+        task_specific_NG_default='N/A', 
+        use_more_colors=False):
+
     n_subfigs = max((len(df_ins), len(colname2rocauc_list), len(metric_thresholds), len(titles)))
     assert len(df_ins) in [1, n_subfigs], F'Found {len(df_ins)} df_ins but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
     assert len(colname2rocauc_list) in [1, n_subfigs], F'Found {len(colname2rocauc_list)} colname2rocauc_list but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
@@ -1289,12 +1302,23 @@ def benchmark_perf_2(
         featPrepType_list = []
         smallest_fontsize = min((9, 50*figheight / (10.0 + len(long_df))))
         for idx_1, (featPrepType, featPrepType_df) in enumerate(sorted(featPrepType_df_iterable)):
-            for idx_2, (clfType, df) in enumerate(sorted(featPrepType_df.groupby('MethClfType'))):
-                xerr = (df[title_in_colname+'_moe']).fillna(0)
-                hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=featPrepType2desc[featPrepType]+'/'+clfType2desc[clfType],
-                        color=featPrepType2color[featPrepType], hatch=clfType2hatch[clfType], xerr=xerr, linewidth=0.5, edgecolor=get_bar_pattern_color(featPrepType))
-                ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
-                hbars_list.append(hbars)
+            for idx_2, (clfType, df_12) in enumerate(sorted(featPrepType_df.groupby('MethClfType'))):
+                if use_more_colors:
+                    bar_label_colors = get_bar_label_colors(df_12['Method'])
+                    for idx_3, color in enumerate(bar_label_colors):
+                        df = df_12.iloc[[idx_3],:]
+                        xerr = (df[title_in_colname+'_moe']).fillna(0)
+                        hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=featPrepType2desc[featPrepType]+'/'+clfType2desc[clfType],
+                                color=featPrepType2color[featPrepType], hatch=clfType2hatch[clfType], xerr=xerr, linewidth=0.5, edgecolor=get_bar_pattern_color(featPrepType))
+                        ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize, color=color)
+                        hbars_list.append(hbars)
+                else:
+                    df = df_12
+                    xerr = (df[title_in_colname+'_moe']).fillna(0)
+                    hbars = ax.barh(df['ypos'], df[title_in_colname], align='center', label=featPrepType2desc[featPrepType]+'/'+clfType2desc[clfType],
+                            color=featPrepType2color[featPrepType], hatch=clfType2hatch[clfType], xerr=xerr, linewidth=0.5, edgecolor=get_bar_pattern_color(featPrepType))
+                    ax.bar_label(hbars, fmt=barh_fmt, padding=2, fontsize=smallest_fontsize)
+                    hbars_list.append(hbars)
             featPrepType_list.append(featPrepType)
 
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME.get(x, x) for x in long_df['Method']]
@@ -1352,7 +1376,8 @@ def benchmark_performance(
         features,
         ex_feats,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*7+2)
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*7+2, 
+        use_more_colors=True)
     ft_preproc_names = [x for x in FINAL_FT_PREPROC_NAMES if ((not x.startswith('NG_')) or x == task_specific_NG_default)]
     benchmark_perf_2(
         df_ins,
