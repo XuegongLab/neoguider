@@ -242,39 +242,45 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     
     # NeoGuider
     # F'{NG_default}'         : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
-    'NG_withNumTested'      : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
-    'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]),
+    'NG_withNumTested'      : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']), # for inter-study comparison of neoepitope candidates
+    'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]), # for intra-study comparison of neoepitope candidates
 
-    # For testing purpose: these NeoGuider variants should perform at similar level compared with NG_default
+    # Testing: the effect of not using and using only the feature NumTested (which are very suboptimal in theory)
     'NG_withNumTested_Exc'  : IsotonicLogisticRegression(nontransformed_cols=[              ]),
     'NG_withNumTested_only' : ColumnTransformer([("keeper", "passthrough",   ['ln_NumTested'])], remainder="drop"),
 
+    # Testing: the effect of using the same bandwidth for all features (which are suboptimal in theory)
     'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
     'NG_withNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
 
+    # Testing: the effect of introducting some randomness (which are suboptimal in theory)
     'NG_withNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
     'NG_withNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
     'NG_withNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
 
+    # Testing: the effect of not using isotonic regression (which are suboptimal in theory)
     'NG_withNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1),
     'NG_withNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=12),
     'NG_withNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=36),
-    
+
+    # Testing: the effect of using other kernel bandwidth selection strategies (which are suboptimal in theory)
     'NG_withNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=2),
     'NG_withNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5),
     'NG_withNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
     'NG_withNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
-    
+
+    # Testing: the effect of performing moving average to further smooth out (which can bring some benefit in theory)
     'NG_withNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=2),
     'NG_withNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=3),
-    
+
+    # Testing: the effect of keeping non-informative features (which are suboptimal in theory)
     'NG_withNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed),       feat_pvalue_drop=False),
     'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
     'NG_withNumTested_AllFts'    : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'],                                      feat_pvalue_drop=False),
-    
-     # withoutNumTested
+
+    # Testing: all the above withoutNumTested (without using NumTested)
     'NG_withoutNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
     'NG_withoutNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
     'NG_withoutNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
@@ -299,12 +305,6 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'NG_withoutNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed),       feat_pvalue_drop=False),
     'NG_withoutNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
     'NG_withoutNumTested_AllFts'    : IsotonicLogisticRegression(nontransformed_cols=[],                                      feat_pvalue_drop=False),
-
-    # For debugging random-number generations
-    #'TestNg_rand0_rep1'    : IsotonicLogisticRegression(random_state=0, nontransformed_cols=['ln_NumTested']),
-    #'TestNg_rand0_rep2'    : IsotonicLogisticRegression(random_state=0, nontransformed_cols=['ln_NumTested']),
-    #'TestNg_rand1_rep1'    : IsotonicLogisticRegression(random_state=1, nontransformed_cols=['ln_NumTested']),
-    #'TestNg_rand1_rep2'    : IsotonicLogisticRegression(random_state=1, nontransformed_cols=['ln_NumTested']),
 }
 
 # Let StandardScaler represent IdentityTransformer, MaxAbsScaler, MinMaxScaler, and RobustScaler since they are all linear maps

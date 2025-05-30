@@ -429,6 +429,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
     def __init__(self,
             categorical_cols='auto',
             nontransformed_cols=[],
+            nontransformed_effect_size_thres = 2.0,
             increasing_cols=[],
             decreasing_cols=[],
             nonstrict_mono_cols=[],
@@ -478,7 +479,11 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
             columns to denote categorical features. The special str value ``auto`` means auto infer from the data (features with less than five distinct values are assumed to be categorical).
 
         nontransformed_cols: list of str
-            columns to remain untransformed
+            columns to remain untransformed if the log-odds range (maximum - minimum) is less than nontransformed_effect_size_thres.
+            Smaller log-odds difference implies less power to detect change in log odds. 
+       
+        nontransformed_effect_size_thres: float
+            used with nontransformed_cols. This should approach zero as the number of examples (sample size) approaches infinity. 
 
         increasing_cols: list of str
             columns that are monotonically increasing with respect to the label
@@ -594,6 +599,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
         super().__init__()
 
         self.nontransformed_cols = nontransformed_cols
+        self.nontransformed_effect_size_thres = nontransformed_effect_size_thres
         self.categorical_cols = categorical_cols
         self.increasing_cols = increasing_cols
         self.decreasing_cols = decreasing_cols
@@ -1232,7 +1238,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
             y1a = self.mat_x2y_regs_1_[colidx].fit_transform(x1, y1)
             self.mat_y_values_1_[colidx] = 1*center_log_odds + y1a
             
-            if _is_any_in([colidx, colname], setof_nontransformed_cols):
+            if _is_any_in([colidx, colname], setof_nontransformed_cols) and (max(y1a) - min(y1a) < self.nontransformed_effect_size_thres):
                 scaling_factor = (1 if (test_statistic >= 0) else -1)
                 self.mat_x_values_0_[colidx] = x1
                 self.mat_x2y_regs_0_[colidx] = ScalingRegressor1D(scaling_factor=scaling_factor).fit(x1) # ColumnTransformer([], remainder='passthrough')
