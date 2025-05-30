@@ -297,13 +297,13 @@ def main():
         required = False, default = 'prediction')
     parser.add_argument('--peplens',help='Peptide length for keeping peptides. ', required=False, default='8,9,10,11')
     parser.add_argument('--ncores', help='Number of CPU cores to use for --train and --test. The special numbers -2 and 0 mean using one and all CPUs, respectively. ', required=False, type=int, default=16)
-    parser.add_argument('--baseline', help='Comma-separated keywords. Keyword feature: test other feature sets. Keyword method: test other methods. ', required = False, default = 'feature')
+    parser.add_argument('--baseline', help='Comma-separated keywords. Keyword feature: test other feature sets. Keyword method: test other methods. ', required=False, default='feature')
     parser.add_argument('--feature-sets', help= 
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
         required=False, nargs='+', default=[
-        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
-        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity'])
+        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity',
+        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested']) # ln_NumTested is only useful for inter-cohort comparison
     parser.add_argument('--label', help='Name of the column denoting the label. ', required=False, default='')
     parser.add_argument('--sep', help='Column-separator character (e.g., tab). ', required=False, default='\t')
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')

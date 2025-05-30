@@ -246,8 +246,9 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]), # for intra-study comparison of neoepitope candidates
 
     # Testing: the effect of not using and using only the feature NumTested (which are very suboptimal in theory)
-    'NG_withNumTested_Exc'  : IsotonicLogisticRegression(nontransformed_cols=[              ]),
-    'NG_withNumTested_only' : ColumnTransformer([("keeper", "passthrough",   ['ln_NumTested'])], remainder="drop"),
+    'NG_withNumTested_Transf' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], nontransformed_effect_size_thres=-1),  # always transform   ln_NumTested
+    'NG_withNumTested_Passth' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], nontransformed_effect_size_thres=1e9), # always passthrough ln_NumTested
+    'NG_withNumTested_only'   : ColumnTransformer([("keeper", "passthrough",   ['ln_NumTested'])], remainder="drop"),
 
     # Testing: the effect of using the same bandwidth for all features (which are suboptimal in theory)
     'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
