@@ -650,7 +650,7 @@ parser.add_argument('--sep', default=None, help='csv column separator')
 parser.add_argument('--sub-randseed', default=-1, type=int, help='Seed for random number generation in subprocesses. If set to -1, then use the value of --randseed as the seed. ')
 parser.add_argument('--tasks', nargs='*', default=['fa1', 'fa2', 'fa3', 'hla1', 'hla2'], help='Feature-analysis and HLA-analysis tasks')
 parser.add_argument('--features', nargs='*', default=[], help='Column names denoting the input features (explanatory variable, i.e., pMHC binding affinity, stabilility, and agretopicity), auto infer if not provided')
-parser.add_argument('--burden', default=BURDEN_RANK_EL, help='The correlate of tumor neoantigen burden (such as tumor mutation burden, TMB) for normalizing probabilities within the same cohort', 
+parser.add_argument('--burden', default=BURDEN_N_TESTED, help='The correlate of tumor neoantigen burden (such as tumor mutation burden, TMB) for normalizing probabilities within the same cohort', 
         #choices=[BURDEN_MUTATIONS, BURDEN_NEOPEPTIDES, BURDEN_N_TESTED, BURDEN_RANK_EL]
         )
 parser.add_argument('--burden-thres', default=2, type=float, help=F'The threshold of the {BURDEN_RANK_EL}, {TOP_RANK_EL}, or {BURDEN_SCORE_EL} for increasing the tumor burden of a patient')
@@ -1055,7 +1055,7 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
             #roc_auc, _ = compute_topN(y_true, df_in[colname], df_in['Patient'], metric_val)
         elif metric_name == 'roc_auc':
             roc_auc = roc_auc_score(df_in[labelcol].copy(), ranking_mult*df_in[colname].copy())
-        elif metric_name in ['patient_n_positives_R2', 'patient_n_positives_mse']:
+        elif metric_name in ['patient_n_positives_PCC_R', 'patient_n_positives_MSE']:
             if sum([(1 if (0<=c and c<=1) else 0) for c in df_in[colname]]) == len(df_in) and colname not in feature_set:
                 patient2true = collections.Counter() # collections.Counter(list(df_in['Patient']))
                 patient2pred = collections.Counter()
@@ -1064,7 +1064,7 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
                     patient2pred[patient] += pred_val
                 y_true = [patient2true[p] for p in patient2true]
                 y_pred = [patient2pred[p] for p in patient2pred]
-                if metric_name == 'patient_n_positives_mse':
+                if metric_name == 'patient_n_positives_MSE':
                     roc_auc = 1.0 / (mean_squared_error(y_true, y_pred) + sys.float_info.min) 
                 else:
                     roc_auc, roc_auc_pvalue = stats.pearsonr(y_true, y_pred)
@@ -1785,8 +1785,8 @@ def main_train_test(train_na_label_treatment, train_fnames, test_fnames):
                 main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, ``_{test_output}_hla_bench.pdf``)')
         if test_dfs:
             for metric_name, metric_titlename in [
-                    ('patient_n_positives_R2'  ,  'Pearson-R with\nfeature_set='),
-                    ('patient_n_positives_mse'  , '(1/MSE) with\nfeature_set='),
+                    ('patient_n_positives_PCC_R', 'Pearson-R with\nfeature_set='),
+                    ('patient_n_positives_MSE'  , '(1/MSE) with\nfeature_set='),
                     ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                     ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
                     ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
@@ -1877,8 +1877,8 @@ def main_cross_val(cv_na_label_treatment, cv_fnames):
 
     if cv_fnames:
         for metric_name, metric_titlename in [
-                ('patient_n_positives_R2'  ,  '$R^2$ with\nfeature_set='),
-                ('patient_n_positives_mse'  , '(1/MSE) with\nfeature_set='),
+                ('patient_n_positives_PCC_R', 'Pearson-R with\nfeature_set='),
+                ('patient_n_positives_MSE'  , '(1/MSE) with\nfeature_set='),
                 ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
                 ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
                 ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
