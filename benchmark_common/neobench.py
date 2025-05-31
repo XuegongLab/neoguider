@@ -91,9 +91,9 @@ from xgboost import XGBClassifier
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
 
-logging.basicConfig(level=logging.INFO, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s - %(message)s')
-
-def myGetLogger(function_name=''): return logging.getLogger(function_name)
+def myGetLogger(function_name='', level=logging.INFO):
+    logging.basicConfig(level=level, format=F'%(asctime)s %(pathname)s:%(lineno)d %(levelname)s - %(message)s')
+    return logging.getLogger(function_name)
 main_logger = myGetLogger('MAIN')
 
 isopath = args1.isolib.split('#')[0]
@@ -377,6 +377,7 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     
     # liblinear was the default in previous sklearn versions (lbfgs generates different results from different machines)
     'hParamDefault_LR' : LogisticRegression(random_state=args1.randseed, solver='liblinear'), # Not listed in plot_classifier_comparison.html
+    'ZeroIntercept_LR' : LogisticRegression(random_state=args1.randseed, solver='liblinear', fit_intercept=False), # Not listed in plot_classifier_comparison.html
 
     'hParamTest_LB0_LR'  : LogisticRegression(random_state=args1.randseed, solver='lbfgs',           **other_LR_params),
     'hParamTest_LL0_LR'  : LogisticRegression(random_state=args1.randseed, solver='liblinear',       **other_LR_params),
@@ -909,7 +910,7 @@ def drop_feat_from_X(ml_pipename, X):
     else:
         return X.drop(columns=['ln_NumTested'])
 
-def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):    
+def train_ml_pipe(ml_pipename, ml_pipe, X, y, modeldir):
     sub_logger = myGetLogger('FIT')
     taskname = F'training {ml_pipename}'
     sub_logger.info(F'Started {taskname} with input_shape={X.shape}')
@@ -1089,10 +1090,8 @@ def compute_metric(colname, colname2rocauc, metric_name, metric_val, df_in, labe
         moe = np.nan
     return (colname, roc_auc, moe, roc_auc_std, pat2score)
 
-def compute_signed_wilcoxon_pval(meth1, meth2, score_dict):
+def compute_signed_wilcoxon_pval(meth1, meth2, scores1, scores2):
     """Compute pairwise comparison with shared score data"""
-    scores1 = score_dict[meth1]
-    scores2 = score_dict[meth2]
     
     if meth1 == meth2:
         return (meth1, meth2, np.nan)  # Skip self-comparisons if desired
@@ -1118,7 +1117,7 @@ def compute_pairwise_pvalues(df_meth_x_pat_score, para_n_jobs=-1):
     
     # Parallel computation
     results = Parallel(n_jobs=para_n_jobs)(
-        delayed(compute_signed_wilcoxon_pval)(meth1, meth2, score_dict)
+        delayed(compute_signed_wilcoxon_pval)(meth1, meth2, score_dict[meth1], score_dict[meth2])
         for meth1, meth2 in pairs
     )
     
@@ -1160,8 +1159,11 @@ def benchmark_perf_2(
         barh_fmt='%.4g',
         sort_type=2,
         figheight=6*3,
-        task_specific_NG_default='N/A', 
+        task_specific_NG_default='N/A',
+        stage=0,
         use_more_colors=False):
+
+    main_logger.info(F'''Started benchmarking the scenario {out_fname_fmt.format('with_both')}''')
 
     n_subfigs = max((len(df_ins), len(colname2rocauc_list), len(metric_thresholds), len(titles)))
     assert len(df_ins) in [1, n_subfigs], F'Found {len(df_ins)} df_ins but only 1 and {n_subfigs} are allowed for generating {out_fname_fmt}!'
@@ -1203,15 +1205,15 @@ def benchmark_perf_2(
         metric_results = Parallel(n_jobs=para_n_jobs)(delayed(compute_metric)(colname, colname2rocauc, metric_name, metric_val, 
             df_in[['Patient', labelcol, colname]], labelcol, title_in_colname, set(features + ex_feats)) for colname in colnames)
         
-        main_logger.info(F'Prepared tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
+        main_logger.info(F'\tPrepared tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
         meth2pat2score = {fpt_clf_comb: pat2score for (fpt_clf_comb, roc_auc, moe, roc_auc_std, pat2score) in metric_results}
         df_meth_x_pat_score = pd.DataFrame.from_dict(meth2pat2score, orient='index')
-        main_logger.info(F'Started tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
+        main_logger.info(F'\tStarted tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
         if ax_idx == 0 and df_meth_x_pat_score.shape[1] >= 2:
             df_meth_x_pat_score.to_csv(out_fname_fmt.format('rank_score' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
             meths2pval = compute_pairwise_pvalues(df_meth_x_pat_score, para_n_jobs=para_n_jobs)
             pd.DataFrame.from_dict(meths2pval, orient='index').to_csv(out_fname_fmt.format('rank_score_signed_pval' + title_in_fname) + '.tsv', sep='\t', index=True, index_label='FeatPreprocessor_Classifier_Comb')
-        main_logger.info(F'Ended tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
+        main_logger.info(F'\tEnded tabulating and performing statistical analyses on rank_score ({out_fname_fmt} with title={title})')
 
         rows = []
         for colname, roc_auc, moe, roc_auc_std, pat2score in metric_results:
@@ -1350,10 +1352,14 @@ def benchmark_perf_2(
     new_max_figheight = 12*(10+len_df)/50.0
     if fig_1.get_figheight() > new_max_figheight: fig_1.set_figheight(new_max_figheight)
 
+    main_logger.info(F'''Started layout of {out_fname_fmt.format('with_both')}''')
     plt.tight_layout()
-    main_logger.info(F'''Saving pdf and png figures to {out_fname_fmt.format('with_both')}''')
+    main_logger.info(F'''Started saving PDF figure to {out_fname_fmt.format('with_both')}''')
     plt.savefig(out_fname_fmt.format('with_both')+'.pdf')
-    plt.savefig(out_fname_fmt.format('with_both')+'.png', dpi=600)
+    if stage >= 2:
+        main_logger.info(F'''Started saving PNG figure to {out_fname_fmt.format('with_both')}''')
+        plt.savefig(out_fname_fmt.format('with_both')+'.png', dpi=600)
+    main_logger.info(F'''Finished saving figure(s) to {out_fname_fmt.format('with_both')}''')
     plt.close()
 
 def benchmark_performance(
@@ -1378,7 +1384,7 @@ def benchmark_performance(
         ex_feats,
         labelcol,
         colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*7+2, 
-        use_more_colors=True)
+        stage=1, use_more_colors=True)
     ft_preproc_names = [x for x in FINAL_FT_PREPROC_NAMES if ((not x.startswith('NG_')) or x == task_specific_NG_default)]
     benchmark_perf_2(
         df_ins,
@@ -1389,7 +1395,7 @@ def benchmark_performance(
         ex_feats,
         labelcol,
         colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3+2,
-        task_specific_NG_default=task_specific_NG_default)
+        stage=2, task_specific_NG_default=task_specific_NG_default)
 
 def x_allin_y(X, Y):
     for x in X:
