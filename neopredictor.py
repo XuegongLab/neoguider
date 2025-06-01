@@ -151,9 +151,7 @@ def filter_testdf(df, additonal_vars):
     df = df.loc[~is_discarded, :]
     return df
 
-def compute_are_in_cum(df, skip_if_exist=False):
-    if 'ln_NumTested' in df.columns and skip_if_exist:
-        return df, -1
+def compute_are_in_cum(df, skip_if_exist=True):
     if 'VALIDATED' in df.columns: 
         are_in_cum = np.where(df['VALIDATED'] >= 0, 1, 0)
     elif 'MT_BindAff' in df.columns:
@@ -161,7 +159,10 @@ def compute_are_in_cum(df, skip_if_exist=False):
         are_in_cum = np.where(df['MT_BindAff'] < 500.0, 1, 0)
     else:
         are_in_cum = np.array([1]*len(df))
-    df['ln_NumTested'] = (np.log(sum(are_in_cum)) if sum(are_in_cum) else 0)
+    if 'ln_NumTested' in df.columns:
+        if not skip_if_exist: raise ValueError(f'The dataframe containing {df.columns} already has the column ``ln_NumTested``! ')
+    else:
+        df['ln_NumTested'] = (np.log(sum(are_in_cum)) if sum(are_in_cum) else 0)
     return df, are_in_cum
 
 def applyF(arr, f=sum):
@@ -335,7 +336,7 @@ def main():
         for infile in sorted(args.train):
             df = pd.read_csv(infile, sep=args.sep)
             if args.label: df['VALIDATED'] = df[args.label]
-            df, _are_in_cum = compute_are_in_cum(df, True)
+            df, _are_in_cum = compute_are_in_cum(df)
             if len(df) > 0: dfs.append(df)
             logger.info(F'Finished reading {infile}')
         big_train_df = pd.concat(dfs)
