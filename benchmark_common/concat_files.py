@@ -44,5 +44,5 @@ for file in args.inputs:
     df = df_not_nan.drop(columns=drop_cols)
     dfs.append(df)
 df = pd.concat(dfs)
-df.to_csv(args.output, sep=csvsep, index=False)
+df.sort_values(by=list(df.columns)).to_csv(args.output, sep=csvsep, index=False)
 

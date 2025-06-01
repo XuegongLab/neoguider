@@ -652,7 +652,7 @@ def main():
     keptdata.to_csv(args.output_file + '.expansion', sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     dropcols(keptdata, ['PepTrace']).to_csv(args.output_file + '.expansion.untraced', sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
 
-    keptdata2.to_csv(args.output_file,               sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+    keptdata2.sort_values(by=list(keptdata2.columns)).to_csv(args.output_file, sep='\t', header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
     
     if dnaseq_small_variants_file: dnaseq_small_variants_file.close()
     if rnaseq_small_variants_file: rnaseq_small_variants_file.close()
