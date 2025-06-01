@@ -124,12 +124,16 @@ def assess_top20_top50_top100_ttif_fr_auprc(df):
     return PerformanceResult(top20, top50, top100, ttif, fr, auprc, np.mean([ttif, fr, auprc]), auroc)
 
 def filtdf(df, peplens):
-    if not ('PepTrace' in df.columns): return df
-    df = df.loc[~pd.isna(df['PepTrace']),:].copy()
-    df['Agretopicity'] = df['Agretopicity'].fillna(1e-9)
     MT_pep_col = ('MT_pep' if 'MT_pep' in df.columns else 'MT_pep_x')
+    if not (MT_pep_col in df.columns): return df
     is_kept = df[MT_pep_col].str.len().isin(peplens)
     df = df.loc[is_kept,:]
+    
+    if ('Agretopicity' in df.columns): df['Agretopicity'] = df['Agretopicity'].fillna(0.1)
+
+    if not ('PepTrace' in df.columns): return df
+    df = df.loc[~pd.isna(df['PepTrace']),:].copy()
+    
     return df
 
 def filter_testdf(df, additonal_vars):
