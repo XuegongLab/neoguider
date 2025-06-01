@@ -288,6 +288,7 @@ def find_col(columns, candidates):
         if candidate in columns: return str(candidate)
     return ''
 
+CSV_FEATS = 'Score_EL,MT_BindAff,Agretopicity,BindStab,Quantification'
 def main():
     
     # PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
@@ -304,9 +305,9 @@ def main():
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
         required=False, nargs='+', default=[
-        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity',
-        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
-        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested']) # ln_NumTested is only useful for inter-cohort comparison
+        f'{CSV_FEATS}',
+        f'{CSV_FEATS},ln_NumTested',
+        f'{CSV_FEATS},ln_NumTested']) # ln_NumTested is only useful for inter-cohort comparison
     parser.add_argument('--feature_set_indices_with_zero_intercept', help=
         'Zero-based indices of the --feature_sets with fit_intercept=False in logistic regression. ', 
         required=False, nargs='+', default=[2])
@@ -349,9 +350,12 @@ def main():
         
         pipeline_names = []
         pipelines = []
-        all_features = (list(set([ft for fts in listof_features for ft in fts])))
         big_train_X = big_train_df.loc[:, listof_features[0]].copy()
         if args.mintrain:
+            all_features = []
+            for fts in listof_features:
+                for ft in fts:
+                    if ft not in all_features: all_features.append(ft)
             pat_col = find_col(big_train_df.columns, ['PatientID', 'PatientID_x', 'PatientID_y'])
             pep_col = find_col(big_train_df.columns, ['MT_pep', 'MT_pep_x', 'MT_pep_y'])
             hla_col = find_col(big_train_df.columns, ['HLA_type', 'HLA_type_x', 'HLA_type_y'])
