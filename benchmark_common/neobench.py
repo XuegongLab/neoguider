@@ -599,7 +599,7 @@ IMPROVE_FTS = 'Aro mw pI Inst CysRed RankEL RankBA NetMHCExp Expression SelfSim 
 # response prediction_rf
 
 # The following were already quantile-normalized and therefore not used: PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
-FEATS = 'Quantification,Agretopicity,ln_NumTested'.split(',') # By default, the 'default' of the --add cmd-line option will be added
+FEATS = 'Score_EL,MT_BindAff,Agretopicity,BindStab,Quantification'.split(',') # By default, the 'default' of the --add cmd-line option will be added
 
 MULLER_NEOPEP_FTS = 'CCF Clonality rnaseq_TPM rnaseq_alt_support CSCAPE_score mutant_other_significant_alleles mutant_rank mutant_rank_PRIME mutant_rank_netMHCpan Sample_Tissue_expression_GTEx GTEx_all_tissues_expression_mean TCGA_Cancer_expression gene_driver_Intogen nb_same_mutation_Intogen mutation_driver_statement_Intogen bestWTMatchScore_I bestWTMatchOverlap_I bestMutationScore_I bestWTMatchType_I  bestWTPeptideCount_I mut_Rank_Stab mut_netchop_score_ct TAP_score mut_is_binding_pos mut_binding_score mut_aa_coeff seq_len DAI_NetMHC DAI_MixMHC DAI_NetStab DAI_MixMHC_mbp'.strip().split()
 
@@ -698,8 +698,8 @@ modeldir = f'{model_dir_prefix}.dir'
 
 if 'mhcflurry' in args.add: LISTOF_FEATURES[0].extend(['mhcflurry_aff_percentile', 'mhcflurry_presentation_percentile'])
 if 'prime' in args.add: LISTOF_FEATURES[0].extend(['PRIME_BArank', 'PRIME_rank', 'PRIME_score'])
-if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', '%Rank_EL', 'Score_BA', '%Rank_BA', 'MT_BindAff', 'BindStab'])
-elif 'default' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', 'MT_BindAff', 'BindStab'])
+if 'netmhc' in args.add: LISTOF_FEATURES[0].extend(['%Rank_EL', 'Score_BA', '%Rank_BA'])
+#elif 'default' in args.add: LISTOF_FEATURES[0].extend(['Score_EL', 'MT_BindAff', 'BindStab'])
 LISTOF_FEATURES[0] = sorted(set(LISTOF_FEATURES[0]))
 
 if args.sub_randseed < 0: args.sub_randseed = args1.randseed
