@@ -293,7 +293,7 @@ def find_col(columns, candidates):
         if candidate in columns: return str(candidate)
     return ''
 
-CSV_FEATS = 'Score_EL,MT_BindAff,Agretopicity,BindStab,Quantification'
+CSV_FEATS = 'Score_EL,MT_BindAff,BindStab,Agretopicity,Quantification'
 def main():
     
     # PRIME_rank,PRIME_BArank,mhcflurry_aff_percentile,mhcflurry_presentation_percentile
