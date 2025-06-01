@@ -1004,7 +1004,9 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx,
             prob_pred = pickle.load(file)
     else:
         try:
-            prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=GroupKFold(), method='predict_proba')
+            n_splits = min([5, len(set(partitions))])
+            if n_splits < 5: sub_logger.warning(f'Only {n_splits} folds are used for cv_predict!')
+            prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=GroupKFold(n_splits=n_splits), method='predict_proba')
         except Exception as err:
             sub_logger.critical(F'The following method call failed: cross_val_predict({ml_pipe}, {X}, {y}, groups={partitions}, cv={GroupKFold()}, method=``predict_proba``)')
             raise err
@@ -1030,7 +1032,9 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, c
         with open(prefilename, 'rb') as file:
             scores = pickle.load(file)
     else:
-        scores = cross_val_score(ml_pipe, X, y, groups=partitions, cv=GroupKFold(), scoring='roc_auc', n_jobs=-1)
+        n_splits = min([5, len(set(partitions))])
+        if n_splits < 5: sub_logger.warning(f'Only {n_splits} folds are used for cv_score!')
+        scores = cross_val_score(ml_pipe, X, y, groups=partitions, cv=GroupKFold(n_splits=n_splits), scoring='roc_auc', n_jobs=-1)
         with open(prefilename, 'wb') as file: pickle.dump(scores, file)
         with open(predone, 'w') as file: file.write(f'{scores}')
     # assert_prob_arr(scores, taskname)

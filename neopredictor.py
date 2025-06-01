@@ -298,12 +298,16 @@ def main():
     parser.add_argument('--peplens',help='Peptide length for keeping peptides. ', required=False, default='8,9,10,11')
     parser.add_argument('--ncores', help='Number of CPU cores to use for --train and --test. The special numbers -2 and 0 mean using one and all CPUs, respectively. ', required=False, type=int, default=16)
     parser.add_argument('--baseline', help='Comma-separated keywords. Keyword feature: test other feature sets. Keyword method: test other methods. ', required=False, default='feature')
-    parser.add_argument('--feature-sets', help= 
+    parser.add_argument('--feature_sets', help= 
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
         required=False, nargs='+', default=[
         'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity',
+        'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested',
         'Score_EL,MT_BindAff,Quantification,BindStab,Agretopicity,ln_NumTested']) # ln_NumTested is only useful for inter-cohort comparison
+    parser.add_argument('--feature_set_indices_with_zero_intercept', help=
+        'Zero-based indices of the --feature_sets with fit_intercept=False in logistic regression. ', 
+        required=False, nargs='+', default=[2])
     parser.add_argument('--label', help='Name of the column denoting the label. ', required=False, default='')
     parser.add_argument('--sep', help='Column-separator character (e.g., tab). ', required=False, default='\t')
     parser.add_argument('--mintrain', help='Minimized train file to be outputted (empty string means not outputted). ', required=False, default='')
@@ -367,7 +371,9 @@ def main():
         ilrs = []
         for ft_idx, features in enumerate(listof_features):
             big_train_X = big_train_df.loc[:, features].copy()
-            ng_transformer = IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']) # nontransformed_cols is used for better extrapolation
+            fit_intercept = not (ft_idx in args.feature_set_indices_with_zero_intercept)
+            # nontransformed_cols is used for better extrapolation
+            ng_transformer = IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], final_pred_init_params={'fit_intercept': fit_intercept})
             ng_transformer.fit(big_train_X, big_train_y)
             
             ft_preproc_tech_feature_names = ng_transformer.get_feature_names()

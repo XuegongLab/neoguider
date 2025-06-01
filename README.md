@@ -227,9 +227,13 @@ The columns are classified into two groups:
 
 - ET_pep : heteroclitic peptide of the mutant peptide (a peptide that is further mutated for therapeutic purpose). This is experimental, so please ignore this for now. 
 
-- PredictedProbability: the predicted probability of immunogenicity for intra-cohort (i.e., within-study) comparison of probabilities. 
+- PredictedProbability: the predicted immunogenicity probabilities that are comparable within a patient. 
 
-- PredictedProbWithOtherFeatureSet_1: the predicted probability of immunogenicity for inter-cohort (i.e., between-study) comparison of probabilities. This should be used less often than PredictedProbability. 
+- PredictedProbWithOtherFeatureSet_1: the predicted immunogenicity probabilities that are comparable within a multi-cohort study (e.g., bladder-cancer and melenoma cohorts). 
+  This should be used less often than PredictedProbability. 
+
+- PredictedProbWithOtherFeatureSet_2: the predicted immunogenicity probabilities that are comparable between different studies (e.g., the HiTIDE and TESLA studies).
+  This should be used less often than PredictedProbability. 
 
 - Rank: the rank of the pMHC combination that represents the neoepitope candidate, where a lower rank indicates a higher priority. 
 
