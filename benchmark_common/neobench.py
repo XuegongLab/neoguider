@@ -108,7 +108,7 @@ IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 # NG_default = 'NG_withNumTested_default'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
-from custom_models import FixedOneLogisticRegression, FixedZeroLogisticRegression # GroupEffectLogisticRegression
+from custom_models import FixedOneLogisticRegression, FixedZeroLogisticRegression, HardThresholdClassifier # GroupEffectLogisticRegression
 
 HYPERPARAM_EPS = 1e-5
 
@@ -386,14 +386,20 @@ HPARAM_DEFLT_CLASSIFIER_NAME2TECH = {
     'hParamTest_SAGA0_LR': LogisticRegression(random_state=args1.randseed, solver='saga',            **other_LR_params),
     'hParamTest_SGD0_LR' : SGDClassifier     (random_state=args1.randseed, loss='log_loss'),
     
-    'hParamTest_UniformProb_LR': FixedZeroLogisticRegression(),
+    #'hParamTest_UniformProb_LR': FixedZeroLogisticRegression(),
     #'hParamTest_TNBonlyProb_LR': GroupEffectLogisticRegression(),
 
     'hParamDefault_XGB': XGBClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and benchmarked by github.com/XuegongLab/NeoRanking
-    
     'UnitCoefficient_LR': FixedOneLogisticRegression(),
     # 'ET': ExtraTreesClassifier(random_state=args1.randseed)      , # Not listed in plot_classifier_comparison.html and performs worse than RF
     # 'GB': GradientBoostingClassifier(random_state=args1.randseed), # Not listed in plot_classifier_comparison.html and performs similar to XGB but runs much slower
+
+    # Single feature
+    'Prob=TrainingDataMean': FixedZeroLogisticRegression(),
+    
+    # Training-free methods
+    #'Prob=One_if_RankEL_is_atMost_0.5': HardThresholdClassifier(['%Rank_EL', 'Rank_EL', 'RankEL'], op=-1, thres=0.5), # -1 means less-than-or-equal-to
+    #'Prob=One_if_RankEL_is_atMost_2.0': HardThresholdClassifier(['%Rank_EL', 'Rank_EL', 'RankEL'], op=-1, thres=2.0),
 }
 
 # Other authors also performed split in patient-unspecific manner (the same patient's peptides are used for both training and assessing hyperparam-goodness)
@@ -861,6 +867,7 @@ def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
 
 def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_preproc_tech_dict, hparam_tuned_classifier_dict, y):
     ret = []
+    visited = set([])
     n_positives, n_negatives = len([v for v in y if v == 1]), len([v for v in y if v == 0])
     assert n_positives + n_negatives == len(y), F'The vector y containing elements {set(y)} is not binary!'
     
@@ -873,9 +880,14 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
                 if (ft_preproc_name, classifier_name) in [('IdentityTransformer', 'hParamTuned_MLP')]: continue
                 # Skip testing abnormal LR behavior (i.e., saga not converging) on other feature preprocessors
                 if (ft_preproc_name not in ['NG_withoutNumTested', 'NG_withNumTested']) and classifier_name.startswith('hParamTest_'): continue
-
+                
                 if not (ft_preproc_name in ft_preproc_names
                     and classifier_name in classifier_names): 
+                    continue
+                if classifier_name.startswith('Prob='): # This is a threshold-based classifier
+                    if classifier_name not in visited:
+                        ret.append((classifier_name, copy.deepcopy(classifier_tech)))
+                        visited.add(classifier_name)
                     continue
                 ml_pipename = comb(ft_preproc_name, classifier_name)
                 was_balancing_performed, imbalearn_selector = make_imbalearn_selector(classifier_name, n_positives, n_negatives)
@@ -1138,10 +1150,11 @@ def get_bar_label_colors(meth_names):
         'NG_withNumTested/hParamDefault_LR'             : 'tab:blue',
         'NG_withNumTested_Exc/hParamDefault_LR'         : 'tab:orange',
         'NG_withoutNumTested/hParamDefault_LR'          : 'tab:green',
-        'NG_withoutNumTested/hParamTest_UniformProb_LR' : 'tab:red',
-        'NG_withNumTested/hParamTest_UniformProb_LR'    : 'tab:red',
-        'NG_withNumTested_only/hParamDefault_LR'        : 'tab:purple',
-    }
+        'NG_withNumTested_only/hParamDefault_LR'        : 'tab:red',
+        #'NG_withoutNumTested/hParamTest_UniformProb_LR' : 'tab:red',
+        #'NG_withNumTested/hParamTest_UniformProb_LR'    : 'tab:red',
+        'Prob=TrainingDataMean'                         : 'tab:purple',
+        }
     return [name2color.get(name, 'black') for name in meth_names]
 
 def benchmark_perf_2(
@@ -1732,7 +1745,7 @@ def main_train_test(train_na_label_treatment, train_fnames, test_fnames):
     train_results = Parallel(n_jobs=para_n_jobs)(delayed(train_ml_pipe)(ml_pipename, ml_pipe, train_X, train_y, modeldir + '.' + train_na_label_treatment) 
             for ml_pipename, ml_pipe in ml_pipes)
     main_logger.info(F'End training')
-    train_tsv_gz = '{output}_training_out_data_all.csv.gz'
+    train_tsv_gz = f'{output}_training_out_data_all.csv.gz'
     if not os.path.exists(f'{train_tsv_gz}.done'):
         main_logger.info(F'Start saving training-set predictions to {train_tsv_gz}.')
         for result in train_results:
