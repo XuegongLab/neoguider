@@ -865,6 +865,8 @@ def make_imbalearn_selector(classifier_name, n_positives, n_negatives):
         main_logger.info(F'Classifier {classifier_name} was not through random sampling with n_positives={n_positives} and n_negatives={n_negatives}!')
         return 0, 'passthrough' # VarianceThreshold()
 
+def is_NG_variant(ft_preproc_name): return len(ft_preproc_name.split('_')) >= 3
+
 def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_preproc_tech_dict, hparam_tuned_classifier_dict, y):
     ret = []
     visited = set([])
@@ -880,7 +882,8 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
                 if (ft_preproc_name, classifier_name) in [('IdentityTransformer', 'hParamTuned_MLP')]: continue
                 # Skip testing abnormal LR behavior (i.e., saga not converging) on other feature preprocessors
                 if (ft_preproc_name not in ['NG_withoutNumTested', 'NG_withNumTested']) and classifier_name.startswith('hParamTest_'): continue
-                
+                if is_NG_variant(ft_preproc_name) and (len(classifier_name.split('_')) < 2 or classifier_name.split('_')[1] not in ['LR', 'MLP', 'QDA', 'GNB', 'LDA']): continue
+ 
                 if not (ft_preproc_name in ft_preproc_names
                     and classifier_name in classifier_names): 
                     continue
