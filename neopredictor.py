@@ -151,7 +151,9 @@ def filter_testdf(df, additonal_vars):
     df = df.loc[~is_discarded, :]
     return df
 
-def compute_are_in_cum(df):
+def compute_are_in_cum(df, skip_if_exist=False):
+    if 'ln_NumTested' in df.columns and skip_if_exist:
+        return df, -1
     if 'VALIDATED' in df.columns: 
         are_in_cum = np.where(df['VALIDATED'] >= 0, 1, 0)
     elif 'MT_BindAff' in df.columns:
@@ -332,7 +334,7 @@ def main():
         for infile in sorted(args.train):
             df = pd.read_csv(infile, sep=args.sep)
             if args.label: df['VALIDATED'] = df[args.label]
-            df, are_in_cum = compute_are_in_cum(df)
+            df, _are_in_cum = compute_are_in_cum(df, True)
             if len(df) > 0: dfs.append(df)
             logger.info(F'Finished reading {infile}')
         big_train_df = pd.concat(dfs)
@@ -347,6 +349,7 @@ def main():
         
         pipeline_names = []
         pipelines = []
+        all_features = (list(set([ft for fts in listof_features for ft in fts])))
         big_train_X = big_train_df.loc[:, listof_features[0]].copy()
         if args.mintrain:
             pat_col = find_col(big_train_df.columns, ['PatientID', 'PatientID_x', 'PatientID_y'])
@@ -354,7 +357,8 @@ def main():
             hla_col = find_col(big_train_df.columns, ['HLA_type', 'HLA_type_x', 'HLA_type_y'])
             extra_cols = [c for c in [pat_col, hla_col, pep_col] if c]
             big_train_extra = big_train_df.loc[:, extra_cols]
-            pd.concat([big_train_extra, big_train_X, big_train_y], axis=1).to_csv(args.mintrain, sep=args.sep, header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
+            mintrain_df = pd.concat([big_train_extra, big_train_df.loc[:, all_features], big_train_y], axis=1)
+            mintrain_df.to_csv(args.mintrain, sep=args.sep, header=True, index=False, na_rep='NA', float_format=THE_FLOAT_FORMAT)
         big_train_X = pd.DataFrame(big_train_X)
         big_train_y = pd.Series(big_train_y)
         if ('method' in args.baseline.split(',')):
