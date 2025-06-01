@@ -429,7 +429,7 @@ class IsotonicLogisticRegression(BaseEstimator, TransformerMixin, ClassifierMixi
     def __init__(self,
             categorical_cols='auto',
             nontransformed_cols=[],
-            nontransformed_effect_size_thres = 2.0,
+            nontransformed_effect_size_thres = 1e9,
             increasing_cols=[],
             decreasing_cols=[],
             nonstrict_mono_cols=[],
