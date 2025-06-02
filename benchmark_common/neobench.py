@@ -9,10 +9,12 @@ scriptdir = (os.path.dirname(os.path.realpath(__file__)))
 parser1 = argparse.ArgumentParser()
 parser1.add_argument('-n', '--n_hyper_iter', type=int, default=50)
 parser1.add_argument('--randseed', type=int, default=0)
+parser1.add_argument('--drop', type=int, default=1, help=F'Boolean indicator for dropping based on p-values')
 parser1.add_argument('-I', '--isolib', default=scriptdir+'/../IsotonicLogisticRegression#IsotonicLogisticRegression',
         help='The NeoGuider feature transformation library file')
 
 args1, remaining_argv = parser1.parse_known_args()
+INIT_FT_PVALUE_DROP = args1.drop
 
 import numpy as np
 random.seed(args1.randseed)
@@ -242,66 +244,66 @@ HPARAM_DEFLT_FT_PREPROC_NAME2TECH = {
     
     # NeoGuider
     # F'{NG_default}'         : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']),
-    'NG_withNumTested'      : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested']), # for inter-study comparison of neoepitope candidates
-    'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ]), # for intra-study comparison of neoepitope candidates
+    'NG_withNumTested'      : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], feat_pvalue_drop=INIT_FT_PVALUE_DROP), # for inter-study comparison of neoepitope candidates
+    'NG_withoutNumTested'   : IsotonicLogisticRegression(nontransformed_cols=[              ], feat_pvalue_drop=INIT_FT_PVALUE_DROP), # for intra-study comparison of neoepitope candidates
 
     # Testing: the effect of not using and using only the feature NumTested (which are very suboptimal in theory)
-    'NG_withNumTested_Transf' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], nontransformed_effect_size_thres=-1),  # always transform   ln_NumTested
-    'NG_withNumTested_Passth' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], nontransformed_effect_size_thres=1e9), # always passthrough ln_NumTested
-    'NG_withNumTested_only'   : ColumnTransformer([("keeper", "passthrough",   ['ln_NumTested'])], remainder="drop"),
+    'NG_withNumTested_Transf' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], nontransformed_effect_size_thres=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),  # always transform   ln_NumTested
+    'NG_withNumTested_Passth' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], nontransformed_effect_size_thres=1e9, feat_pvalue_drop=INIT_FT_PVALUE_DROP), # always passthrough ln_NumTested
+    'NG_withNumTested_only'   : ColumnTransformer([("keeper", "passthrough",   ['ln_NumTested'])], remainder='drop'),
 
     # Testing: the effect of using the same bandwidth for all features (which are suboptimal in theory)
-    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
-    'NG_withNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
     # Testing: the effect of introducting some randomness (which are suboptimal in theory)
-    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+0),
-    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+1),
-    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+2),
+    'NG_withNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+0, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed)+2, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
     # Testing: the effect of not using isotonic regression (which are suboptimal in theory)
-    'NG_withNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1),
-    'NG_withNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=12),
-    'NG_withNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=36),
+    'NG_withNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=12, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_freeform_min_width=36, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
     # Testing: the effect of using other kernel bandwidth selection strategies (which are suboptimal in theory)
-    'NG_withNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=2),
-    'NG_withNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5),
-    'NG_withNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
-    'NG_withNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
+    'NG_withNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=2, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
     # Testing: the effect of performing moving average to further smooth out (which can bring some benefit in theory)
-    'NG_withNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=2),
-    'NG_withNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=3),
+    'NG_withNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=2, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], postCIR_mov_avg_window_size=3, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
     # Testing: the effect of keeping non-informative features (which are suboptimal in theory)
     'NG_withNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=(args1.randseed),       feat_pvalue_drop=False),
-    'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
+    'NG_withNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1, ),
     'NG_withNumTested_AllFts'    : IsotonicLogisticRegression(nontransformed_cols=['ln_NumTested'],                                      feat_pvalue_drop=False),
 
     # Testing: all the above withoutNumTested (without using NumTested)
-    'NG_withoutNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1),
-    'NG_withoutNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1),
-    'NG_withoutNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1),
-    'NG_withoutNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1),
+    'NG_withoutNumTested_BW1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=1,  adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_BW4'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4,  adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_BW12' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=12, adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_BW24' : IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=24, adaKDE_exponent_inverse=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
-    'NG_withoutNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+0),
-    'NG_withoutNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+1),
-    'NG_withoutNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+2),
+    'NG_withoutNumTested_RS0'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+0, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_RS1'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_RS2'  : IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed)+2, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
 
-    'NG_withoutNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=-1),
-    'NG_withoutNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=12),
-    'NG_withoutNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=36),
+    'NG_withoutNumTested_noIso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=-1, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_12Iso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=12, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_36Iso': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_freeform_min_width=36, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
     
-    'NG_withoutNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=2),
-    'NG_withoutNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5),
-    'NG_withoutNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9),
-    'NG_withoutNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5),
+    'NG_withoutNumTested_pow2' : IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=2, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_pow5' : IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_5dot9': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.9, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_5dot5': IsotonicLogisticRegression(nontransformed_cols=[], adaKDE_exponent_inverse=5, adaKDE_width_adjust_factor=0.5, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
     
-    'NG_withoutNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=[], postCIR_mov_avg_window_size=2),
-    'NG_withoutNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=[], postCIR_mov_avg_window_size=3),
+    'NG_withoutNumTested_mAvg2': IsotonicLogisticRegression(nontransformed_cols=[], postCIR_mov_avg_window_size=2, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
+    'NG_withoutNumTested_mAvg3': IsotonicLogisticRegression(nontransformed_cols=[], postCIR_mov_avg_window_size=3, feat_pvalue_drop=INIT_FT_PVALUE_DROP),
     
     'NG_withoutNumTested_RS0_AllFts': IsotonicLogisticRegression(nontransformed_cols=[], random_state=(args1.randseed),       feat_pvalue_drop=False),
     'NG_withoutNumTested_BW4_AllFts': IsotonicLogisticRegression(nontransformed_cols=[], random_state=-1, adaKDE_min_width=4, feat_pvalue_drop=False, adaKDE_exponent_inverse=-1),
