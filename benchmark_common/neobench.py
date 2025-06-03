@@ -108,6 +108,7 @@ main_logger.debug(F'isopath={isopath} isolibname={isolibname} ISO_DIR={ISO_DIR} 
 IsotonicLogisticRegression = __import__(ISO_MODULE, globals(), locals(), [isolibname], 0)
 IsotonicLogisticRegression = IsotonicLogisticRegression.__dict__[isolibname]
 # NG_default = 'NG_withNumTested_default'
+THE_NG_DEFAULT = 'NG_withoutNumTested'
 
 sys.path.append(ISO_DIR + '/benchmark_common/')
 from custom_models import FixedOneLogisticRegression, FixedZeroLogisticRegression, HardThresholdClassifier # GroupEffectLogisticRegression
@@ -677,6 +678,7 @@ parser.add_argument('-tr', '--train_na_ops',    default=['drop'],         help=N
 parser.add_argument('-te', '--test_na_ops',     default=['zero', 'drop'], help=NA_OPS_HELP.format('test data')     , **NA_OPS_KWARGS)
 parser.add_argument('-cv', '--cv_na_ops',       default=['drop'],         help=NA_OPS_HELP.format('training')      , **NA_OPS_KWARGS)
 parser.add_argument('-tx', '--tr_extra_na_ops', default=[],               help='Extra (not benchmarked) ways of handling training data', **NA_OPS_KWARGS)
+parser.add_argument('-ns', '--max_n_splits',    default=5, type=int,      help='Maximum number of splits for cross validation (CV)')
 
 #parser.add_argument('-uf', '--untest_flag', default=0x1+0x4, type=int, help='If the 0x1, 0x2, and 0x4 bits are set, then remove the rows with NA label (not tested for immunogenicity by any immuno-assay validation) for training, test, and cross-validation instead of treating these rows as negative examples. ')
 # Positive peptides with lengths greater than 11: only one in NCI-train and four in HiTIDE, and the best practice is to remove them AFAIK. 
@@ -790,7 +792,7 @@ def analyze_hla(df, hlacol, labelcol, figout, patientcol='Patient'):
     plt.close()
     return matrix
 
-def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR', ranking_mult=1):
+def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'{THE_NG_DEFAULT}/hParamDefault_LR', ranking_mult=1):
     df = df.sample(frac=1, random_state=0).sort_values(predcol, ascending=(ranking_mult==-1))
     ranks = []
     patient2rank = collections.defaultdict(int)
@@ -800,7 +802,7 @@ def compute_ranked_df(df, labelcol, patientcol='Patient', predcol=F'NG_withoutNu
     df['rank'] = ranks
     return df
 
-def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR'):
+def analyze_performance_per_hla(df, hlacol, labelcol, figout, patientcol='Patient', predcol=F'{THE_NG_DEFAULT}/hParamDefault_LR'):
     if hlacol not in df.columns:
         main_logger.warning(F'The column {hlacol} is not found in the dataframe, so {figout} will be not generated for showing patterns of assocation between HLA allotype and performance!')
         return -1
@@ -871,7 +873,6 @@ def is_NG_variant(ft_preproc_name): return len(ft_preproc_name.split('_')) >= 3
 
 def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_preproc_tech_dict, hparam_tuned_classifier_dict, y):
     ret = []
-    visited = set([])
     n_positives, n_negatives = len([v for v in y if v == 1]), len([v for v in y if v == 0])
     assert n_positives + n_negatives == len(y), F'The vector y containing elements {set(y)} is not binary!'
     
@@ -889,12 +890,11 @@ def construct_ml_pipes(ft_preproc_tech_dict, classifier_dict, hparam_tuned_ft_pr
                 if not (ft_preproc_name in ft_preproc_names
                     and classifier_name in classifier_names): 
                     continue
-                if classifier_name.startswith('Prob='): # This is a threshold-based classifier
-                    if classifier_name not in visited:
-                        ret.append((classifier_name, copy.deepcopy(classifier_tech)))
-                        visited.add(classifier_name)
-                    continue
                 ml_pipename = comb(ft_preproc_name, classifier_name)
+                if classifier_name.startswith('Prob='): # This is a threshold-based classifier
+                    if ft_preproc_name == THE_NG_DEFAULT:
+                        ret.append((ml_pipename, copy.deepcopy(classifier_tech)))
+                    continue
                 was_balancing_performed, imbalearn_selector = make_imbalearn_selector(classifier_name, n_positives, n_negatives)
                 if was_balancing_performed:
                     ml_pipe = imblearn.pipeline.make_pipeline(imbalearn_selector, copy.deepcopy(ft_preproc_tech), VarianceThreshold(), copy.deepcopy(classifier_tech))
@@ -1009,8 +1009,8 @@ def cross_val_predict_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx,
             prob_pred = pickle.load(file)
     else:
         try:
-            n_splits = min([5, len(set(partitions))])
-            if n_splits < 5: sub_logger.warning(f'Only {n_splits} folds are used for cv_predict!')
+            n_splits = min([args.max_n_splits, len(set(partitions))])
+            if n_splits < args.max_n_splits: sub_logger.warning(f'Only {n_splits} folds are used for cv_predict!')
             prob_pred = cross_val_predict(ml_pipe, X, y, groups=partitions, cv=GroupKFold(n_splits=n_splits), method='predict_proba')
         except Exception as err:
             sub_logger.critical(F'The following method call failed: cross_val_predict({ml_pipe}, {X}, {y}, groups={partitions}, cv={GroupKFold()}, method=``predict_proba``)')
@@ -1037,8 +1037,8 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, c
         with open(prefilename, 'rb') as file:
             scores = pickle.load(file)
     else:
-        n_splits = min([5, len(set(partitions))])
-        if n_splits < 5: sub_logger.warning(f'Only {n_splits} folds are used for cv_score!')
+        n_splits = min([args.max_n_splits, len(set(partitions))])
+        if n_splits < args.max_n_splits: sub_logger.warning(f'Only {n_splits} folds are used for cv_score!')
         scores = cross_val_score(ml_pipe, X, y, groups=partitions, cv=GroupKFold(n_splits=n_splits), scoring='roc_auc', n_jobs=-1)
         with open(prefilename, 'wb') as file: pickle.dump(scores, file)
         with open(predone, 'w') as file: file.write(f'{scores}')
@@ -1046,7 +1046,7 @@ def cross_val_score_with_ml_pipe(ml_pipename, ml_pipe, X, y, partitions, fidx, c
     sub_logger.info(F'Ended {taskname}')
     return (ml_pipename, ml_pipe, scores)
 
-def compute_topN(df, labelcol, patientcol='Patient', predcol=F'NG_withoutNumTested/hParamDefault_LR', topN=20, ranking_mult=1):
+def compute_topN(df, labelcol, patientcol='Patient', predcol=F'{THE_NG_DEFAULT}/hParamDefault_LR', topN=20, ranking_mult=1):
     df = compute_ranked_df(df, labelcol, patientcol, predcol, ranking_mult=ranking_mult)
     df2 = df.loc[df[labelcol]==1, [patientcol, 'rank']]
     pat2score = {}
