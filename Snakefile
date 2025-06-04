@@ -1,6 +1,8 @@
-import csv, datetime, json, logging, multiprocessing, os, shutil, subprocess
+import atexit, csv, datetime, json, logging, multiprocessing, os, shutil, subprocess
 
 script_start_datetime = datetime.datetime.now()
+script_start_str = script_start_datetime.strftime('%Y-%m-%d-%H-%M-%S')
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 script_basedir = F'{workflow.basedir}' # os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -212,6 +214,18 @@ else:
 tumor_spec_peptide_fasta = F'{RES}/{PREFIX}_neo_peps.fasta'
 if not isna(config.get('tumor_spec_peptide_fasta', NA_REP)):
     make_dummy_files([tumor_spec_peptide_fasta], origfile=config['tumor_spec_peptide_fasta'], extension='.copied', is_refresh_allowed=True)
+
+
+# Section: Log all relevant info
+os.makedirs(f'{pipeline_out_final}.logdir', exist_ok=True)
+def save_version_msg(start_or_end):
+    os.system(f'(set -vx && cd {script_basedir} && git rev-parse HEAD && git diff HEAD) > {pipeline_out_final}.logdir/{script_start_str}_{start_or_end}.log 2>&1')
+def exec_cmds_before_exit():
+    save_version_msg('end')
+os.system(f'echo {sys.argv} > {pipeline_out_final}.logdir/{script_start_str}_cmds.log 2>&1')
+save_version_msg('begin')
+atexit.register(exec_cmds_before_exit)
+
 
 rule all:
     input: pipeline_out_final
