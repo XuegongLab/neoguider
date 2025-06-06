@@ -39,7 +39,7 @@ For more information about the licensing options for these tools, please contact
 Notably, if you used NeoGuider to perform a task that does not use a given third-party tool,
 then the license of this third-party tool (which you did not use) is irrelevant to you.
 The tasks performed by the third-party tools that require paid licenses for any for-profit use are as follows:
-UVC: detection of neoepitope candidates;
+UVC: detection of neoepitope candidates (you can set variantcaller=mutect from the snakemake --config cmd-line option to run Mutect2, which is slightly less sensitive (BTW, I am the author of UVC, so this claim may be biased));
 netMHCpan, netMHCstabpan, and PRIME: feature extraction from pre-detected candidates;
 MixCR: TCR clonotype detection.
 
@@ -227,13 +227,13 @@ The columns are classified into two groups:
 
 - ET_pep : heteroclitic peptide of the mutant peptide (a peptide that is further mutated for therapeutic purpose). This is experimental, so please ignore this for now. 
 
-- PredictedProbability: the predicted immunogenicity probabilities that are comparable within a patient. 
+- PredictedProbability: the predicted immunogenicity probabilities that are comparable within a cohort of similar patients (including single-patient cohort). 
 
-- PredictedProbWithOtherFeatureSet_1: the predicted immunogenicity probabilities that are comparable within a multi-cohort study (e.g., bladder-cancer and melenoma cohorts). 
-  This should be used less often than PredictedProbability. 
+- PredictedProbWithOtherFeatureSet_1: the predicted immunogenicity probabilities that can be generalized from one cohort to another cohort (e.g., bladder-cancer cohort to melenoma cohort). 
+  This should only be used in the applicable benchmarking settings (please use PredictedProbability in case you are not sure about how to use this). 
 
-- PredictedProbWithOtherFeatureSet_2: the predicted immunogenicity probabilities that are comparable between different studies (e.g., the HiTIDE and TESLA studies).
-  This should be used less often than PredictedProbability. 
+- PredictedProbWithOtherFeatureSet_2: the predicted immunogenicity probabilities that can be generalized from one study to another study (e.g., NCI to IMPROVE).
+  This should only be used in some special analysis (please use PredictedProbability in case you are not sure about how to use this). 
 
 - Rank: the rank of the pMHC combination that represents the neoepitope candidate, where a lower rank indicates a higher priority. 
 
