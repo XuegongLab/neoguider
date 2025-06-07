@@ -1396,7 +1396,14 @@ def benchmark_performance(
         titles=[''],
         barh_fmt='%.4g'):
     
-    task_specific_NG_default = ('NG_withoutNumTested' if metric_name == 'top' else 'NG_withNumTested')
+    if metric_name == 'top':
+        task_specific_NG_default = 'NG_withoutNumTested'
+        features2 = [x for x in features if x != 'ln_NumTested']
+        ex_feats2 = [x for x in ex_feats if x != 'ln_NumTested']
+    else:
+        task_specific_NG_default = 'NG_withNumTested'
+        features2 = features
+        ex_feats2 = ex_feats
     benchmark_perf_2(
         df_ins,
         out_fname_fmt + '_stage1', 
@@ -1413,8 +1420,8 @@ def benchmark_performance(
         out_fname_fmt + '_stage2', 
         ft_preproc_names,
         FINAL_CLASSIFIER_NAMES,
-        features,
-        ex_feats,
+        features2,
+        ex_feats2,
         labelcol,
         colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3+2,
         stage=2, task_specific_NG_default=task_specific_NG_default)
@@ -1523,14 +1530,18 @@ def add_more(df, fpath):
 def get_filenames(filepaths, prefix=''):
     return [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
 
-def feat_importance_analysis(train_df, output, features, labelcol):
+def feat_importance_analysis(train_df, output, features_1, labelcol):
     tasks = args.tasks
-    train_X = train_df.loc[:, features].copy()
-    big_y   = train_df.loc[:, labelcol].copy()
-    train_X = train_X.apply(pd.to_numeric)
-    big_y   = big_y.apply(pd.to_numeric)
-
+    
     for out_short_name, ng_variant in [('without', 'NG_withoutNumTested'), ('with', 'NG_withNumTested')]:
+        if ng_variant == 'NG_withoutNumTested': features = [x for x in features_1 if x != 'ln_NumTested']
+        else: features = features_1
+
+        train_X = train_df.loc[:, features].copy()
+        big_y   = train_df.loc[:, labelcol].copy()
+        train_X = train_X.apply(pd.to_numeric)
+        big_y   = big_y.apply(pd.to_numeric)
+
         # feature analysis phase 1: feature importance
 
         ng_spec_output = output + '_' + ng_variant
@@ -1599,7 +1610,7 @@ def feat_importance_analysis(train_df, output, features, labelcol):
         print(F's4x={s4x}')
         print(F's4x={s4y}')
         kernel_coverages = ilr.get_kernel_width_covered_n_positives()
-        final_x = ilr.get_final_pre_transformed() 
+        final_x = ilr.get_final_pre_transformed()
         final_y = ilr.get_final_post_transformed()
 
         # feature analysis phase 2: feature importance plot
