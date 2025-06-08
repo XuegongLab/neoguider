@@ -122,7 +122,7 @@ snakemake --configfile config.yaml --config \
 ```
 After a successful run, you should be able check neoantigen prioritization results at: ${NeoOutDir}/${patientID}_prioritization_from_reads.tsv
 
-Example test input and its expected output, as well as the commands to generate the output from the input, are at https://figshare.com/articles/dataset/SRR7890830-SRR7890845-SRR9134697_neo_peps_fasta/28738355
+Example test input and its expected output, as well as the commands to generate the output from the input, are at https://doi.org/10.6084/m9.figshare.28738355
 
 ### How to use a peptide FASTA file as input
 
@@ -159,7 +159,7 @@ If comma_sep_hla_list (a string of comma-separated HLA alleles) is not specified
 then the HLA key=value pair must be specified in the ${tumorSpecificPeptideFasta} file.
 Otherwise, the HLA key=value pair can be omitted in the `${tumorSpecificPeptideFasta}` file.
 
-Example test input and its expected output, as well as the commands to generate the output from the input, are at https://figshare.com/articles/dataset/SRR7890830-SRR7890845-SRR9134697_neo_peps_fasta/28738355
+Example test input and its expected output, as well as the commands to generate the output from the input, are at https://doi.org/10.6084/m9.figshare.28738355
 
 ### How to use any feature (e.g., neoepitope feature) TSV file as input
 
