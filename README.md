@@ -221,21 +221,16 @@ The columns are classified into two groups:
 
 - mhcflurry_aff_percentile: the percentile of the affinity between the mutant peptide and the MHC molecules (ranging from 0 to 1, lower corresponds to higher affinity and lower IC50). This column is not added by default since MHC generates different outputs from the same input on different platforms (https://github.com/openvax/mhcflurry/issues/253).
 
-- mhcflurry_presentation_percentile: the percentile of the probability that the peptide is presented by the MHC molecules (ranging from 0 to 1, lower means more immunogenic). This column is not added by default since MHC generates different outputs from the same input on different platforms (https://github.com/openvax/mhcflurry/issues/253).
+- mhcflurry_presentation_percentile: the percentile of the probability that the peptide is presented by the MHC molecules (ranging from 0 to 1, lower means more immunogenic). This column is not added by default since MHCflurry generates different outputs from the same input on different platforms (https://github.com/openvax/mhcflurry/issues/253).
 
-- ln_NumTested: the number of all mutant peptides originated from the same patient (from which this peptide originated) that were or willb be tested for immunogenicity. 
+- ln_NumTested: the number of all mutant peptides originated from the same patient (from which this peptide originated) that were or will be tested for immunogenicity.
 
-- ET_pep : heteroclitic peptide of the mutant peptide (a peptide that is further mutated for therapeutic purpose). This is experimental, so please ignore this for now. 
+- ET_pep : heteroclitic peptide (i.e., enhanced mimotope, e-mimotope) of the mutant peptide (a peptide that is further mutated for therapeutic purpose). This is experimental, so please ignore this for now. 
 
 - PredictedProbability: the predicted immunogenicity probabilities that are comparable within a cohort of similar patients (including single-patient cohort). 
 
-- PredictedProbWithOtherFeatureSet_1: the predicted immunogenicity probabilities that can be generalized from one cohort to another cohort (e.g., bladder-cancer cohort to melenoma cohort). 
-  This should only be used in the applicable benchmarking settings (please use PredictedProbability in case you are not sure about how to use this). 
-
-- PredictedProbWithOtherFeatureSet_2: the predicted immunogenicity probabilities that can be generalized from one study to another study (e.g., NCI to IMPROVE).
-  This should only be used in some special analysis (please use PredictedProbability in case you are not sure about how to use this). 
-
 - Rank: the rank of the pMHC combination that represents the neoepitope candidate, where a lower rank indicates a higher priority. 
+The candidates are ranked by PredictedProbability. 
 
 #### The columns that are less important are as follows.
 

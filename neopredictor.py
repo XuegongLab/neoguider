@@ -309,10 +309,7 @@ def main():
     parser.add_argument('--feature_sets', help= 
         'List of strings with each string (i.e., feature set) consisting of comma-separated features. '
         'The first feature set is used by default, and all other feature sets are used as baselines. ', 
-        required=False, nargs='+', default=[
-        f'{CSV_FEATS}',
-        f'{CSV_FEATS},ln_NumTested',
-        f'{CSV_FEATS},ln_NumTested']) # ln_NumTested is only useful for inter-cohort comparison
+        required=False, nargs='+', default=[f'{CSV_FEATS}'])
     parser.add_argument('--feature_set_indices_with_zero_intercept', help=
         'Zero-based indices of the --feature_sets with fit_intercept=False in logistic regression. ', 
         required=False, nargs='+', default=[2])
