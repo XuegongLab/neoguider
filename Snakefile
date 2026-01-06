@@ -33,6 +33,7 @@ normal_vaf = config['normal_vaf']
 tumor_normal_var_qual = config['tumor_normal_var_qual']
 
 prep_peplens = config['prep_peplens']
+max_seqlen = config['max_seqlen']
 
 binding_affinity_filt_thres = config['binding_affinity_filt_thres']
 binding_stability_filt_thres = config['binding_stability_filt_thres']
@@ -622,7 +623,7 @@ def peptide_to_pmhc_immunogenicity(infaa, outtsv, hla_string_orig):
     hla_string = ','.join([norm_hla(h) for h in hla_string_orig.split(',')])
     call_with_infolog(F'rm -r {outtsv}.tmpdir/ || true && mkdir -p {outtsv}.tmpdir/')
     # The numbers 8 and 14 are the Lmin and Lmax from PRIME/lib/run_PRIME.pl
-    call_with_infolog(F'''cat {infaa} | grep -v "^>" | awk -v N1=8 -v N2=14 '{{ for (N=N1; N<=N2; N++) for (i = 1; i <= length($0) - N + 1; i++) print substr($0, i, N) }}' > {outtsv}.seqs.txt''')
+    call_with_infolog(F'''cat {infaa} | grep -v "^>" | awk -v N1=8 -v N2=14 '{{ for (N=N1; N<=N2; N++) for (i = 1; i <= length($0) - N + 1; i++) print substr($0, i, N) }}' | sort | uniq > {outtsv}.seqs.txt''')
     cmd = F'{prime_cmd} -i {outtsv}.seqs.txt -mix {mixmhcpred_path} -a {hla_string} -o {outtsv} 1> {outtsv}.stdout 2> {outtsv}.stderr'
     call_with_infolog(cmd)
     return {norm_hla(h) : h for h in hla_string_orig.split(',')}
@@ -644,13 +645,13 @@ rule Peptide_preprocessing:
     threads: 1
     run:
         comma_sep_hla_str = ','.join(retrieve_hla_alleles())
-        shell('cat {dna_snvindel_neopeptide_fasta} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
+        shell('cat {dna_snvindel_neopeptide_fasta} | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} --len {max_seqlen} | python {script_basedir}/fasta_sumvals.py --key TPM --seq2hdrs {dna_snvindel_neopeptide_fasta}.dup_info.json '
             ' | python {script_basedir}/neoexpansion.py --nbits {hetero_nbits} --editdist {hetero_editdist} > {dna_snvindel_neopeptide_fasta}.expansion')
         shell('cat'
             ' {dna_snvindel_neopeptide_fasta}.expansion ' # '{dna_snvindel_wt_peptide_fasta} '
             ' {rna_snvindel_neopeptide_fasta}           ' # '{rna_snvindel_wt_peptide_fasta} '
             ' {fusion_neopeptide_fasta} {splicing_neopeptide_fasta} '
-            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} '
+            ' | python {script_basedir}/fasta_filter.py --tpm {tumor_abundance_filt_thres} --rmdups {tumor_spec_peptide_fasta}.dup_info.json '
             ' | python {script_basedir}/fasta_addkey.py --key HLA --val "{comma_sep_hla_str}" '
             ' > {tumor_spec_peptide_fasta}')
 
