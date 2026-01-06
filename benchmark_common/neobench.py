@@ -547,8 +547,9 @@ def pairplot_showing_pretrans_feat_vals(df1, df2, feature_transformer):
     transformed_tick_2d = np.array([transformed_ticks for _ in dfall.columns]).transpose()
     if feature_transformer: tick_2d = feature_transformer.inverse_transform(transformed_tick_2d)
 
-    figsize = n_vars * 4.25
-    fig = plt.figure(figsize=(figsize, figsize))
+    fig_width = n_vars * 4.25
+    fig_height = n_vars * 4.25
+    fig = plt.figure(figsize=(fig_width, fig_height))
     gs = gridspec.GridSpec(n_vars, n_vars)
     for i in range(n_vars):
         for j in range(n_vars):
@@ -1178,9 +1179,9 @@ def benchmark_perf_2(
         metric_name='roc_auc',
         metric_thresholds=[0],
         titles=[''],
-        barh_fmt='%.4g',
+        barh_fmt='%.3g',
         sort_type=2,
-        figheight=6*3,
+        figheight=225/10.0, # https://link.springer.com/journal/13073/submission-guidelines
         task_specific_NG_default='N/A',
         stage=0,
         use_more_colors=False):
@@ -1197,14 +1198,20 @@ def benchmark_perf_2(
     if len(metric_thresholds) < n_subfigs: metric_thresholds = [metric_thresholds[0]] * n_subfigs
    
     len_df = 0
-    fig_1, ax_1 = plt.subplots(figsize=(6*max((1.5,n_subfigs)), figheight))
+    #fig_1, ax_1 = plt.subplots(figsize=(170/10.0/3*max((1.5,n_subfigs)), figheight)) # https://link.springer.com/journal/13073/submission-guidelines
+    fig_1, ax_1 = plt.subplots(figsize=(170/10.0, figheight)) # https://link.springer.com/journal/13073/submission-guidelines
     ax_1.set_axis_off()
-    gs = gridspec.GridSpec(3, n_subfigs, height_ratios=[1, 1, 25])
+    gs = gridspec.GridSpec(3, n_subfigs, height_ratios=[1, 1, 30])
     legend_ax1 = fig_1.add_subplot(gs[0,:])
     legend_ax1.set_axis_off()
     legend_ax2 = fig_1.add_subplot(gs[1,:])
     legend_ax2.set_axis_off()
     axes = [fig_1.add_subplot(gs[2,j]) for j in range(n_subfigs)]
+
+    fig_1.tight_layout(pad=0.5)
+    #legend_ax1.tight_layout(pad=0.5)
+    #legend_ax2.tight_layout(pad=0.5)
+
     for ax_idx, (df_in, colname2rocauc, metric_val, title) in enumerate(zip(df_ins, colname2rocauc_list, metric_thresholds, titles)):        
         def replace_non_alphanumeric(text): return ''.join([c if c.isalnum() else '_' for c in text])
         title_in_fname = '_' + replace_non_alphanumeric(title)
@@ -1256,7 +1263,7 @@ def benchmark_perf_2(
 
         if False:
             fig_heat, ax_heat = plt.subplots(figsize=(9, 4))
-            heatmap_ret = sns.heatmap(auc_df, annot=True, fmt='.4g', ax=ax_heat)
+            heatmap_ret = sns.heatmap(auc_df, annot=True, fmt='.3g', ax=ax_heat)
             fig_heat.tight_layout()
             fig_heat.savefig(out_fname_fmt.format('with_featproc_clf_combs')+'.pdf')
             fig_heat.savefig(out_fname_fmt.format('with_featproc_clf_combs')+'.png', dpi=600)
@@ -1265,12 +1272,12 @@ def benchmark_perf_2(
         ax.set_yticklabels([])
         ypos = list(range(len(long_df)))
         featPrepType2desc = {
-            0: ('NeoGuider/hyperparameter-tuned classifier'),
-            1: ('NeoGuider/default-hyperparameter classifier'),
-            2:     ('Other/hyperparameter-tuned classifier'),
-            3:     ('Other/default-hyperparameter classifier'),
+            0: ('NeoGuider/hyperparam-tuned classifier'),
+            1: ('NeoGuider/default-hyperparam classifier'),
+            2:     ('Other/hyperparam-tuned classifier'),
+            3:     ('Other/default-hyperparam classifier'),
             4: ('Single feature (included in model)'),
-            5: ('Single feature (not included in model)')
+            5: ('Single feature (not included)')
         }
         def meth2featPrepType(x):
             if x.startswith('NG_withNumTested') or x.startswith('NG_withoutNumTested'): return (0 if '/hParamTuned_' in x else 1)
@@ -1284,10 +1291,10 @@ def benchmark_perf_2(
             'AB', 'Others'])}
         short2clfType = {v:k for k,v in clfType2short.items()}
         clfType2desc = {idx:name for idx,name in enumerate([
-            'Logistic regression', 'Multilayer perceptron',
-            'Gaussian naïve Bayes', 'Quadratic discriminant analysis',
-            'Decision tree', 'Random forest', 
-            'AdaBoost', 'Others'])}
+            'Logistic regression (LR)', 'Multilayer perceptron (MLP)',
+            'Gaussian naïve Bayes (GNB)', 'Quadratic discriminant analysis (QDA)',
+            'Decision tree (DT)', 'Random forest (RF)', 
+            'AdaBoost (AB)', 'Others'])}
 
         def meth2clfType(x):
             # 'hParamDefault_AB', 'hParamDefault_DT', 'hParamDefault_GNB', 'hParamDefault_MLP', 'hParamDefault_QDA', 'hParamDefault_RF', 'hParamDefault_LR', 'UnitCoefficient_LR',
@@ -1325,7 +1332,8 @@ def benchmark_perf_2(
         featPrepType_df_iterable = long_df.groupby('MethFeatPrepType')
         hbars_list = []
         featPrepType_list = []
-        smallest_fontsize = min((9, 50*figheight / (10.0 + len(long_df))))
+        smallest_fontsize = min((12, 75*figheight / (12.0 + len(long_df))))
+        print(f'smallest_fontsize={smallest_fontsize} <<<<<<<<<<')
         for idx_1, (featPrepType, featPrepType_df) in enumerate(sorted(featPrepType_df_iterable)):
             for idx_2, (clfType, df_12) in enumerate(sorted(featPrepType_df.groupby('MethClfType'))):
                 if use_more_colors:
@@ -1352,11 +1360,11 @@ def benchmark_perf_2(
                 methodnames = long_df['Method']
                 break
         methodnames = [SOFT_NAME_TO_MANUSCRIPT_NAME_ALWAYS.get(x, x) for x in methodnames]
-        methodnames = [meth.replace(task_specific_NG_default+'/', 'NG/') for meth in methodnames]
+        methodnames = [meth.replace(task_specific_NG_default+'/', 'NG/').replace('_', '-') for meth in methodnames]
         ax.set_yticks(long_df['ypos'], labels=methodnames, fontsize=smallest_fontsize)
         ax.set_ylim(-1, len(long_df))
         xmin, xmax = np.min(long_df[title_in_colname]), np.max(long_df[title_in_colname] + long_df[title_in_colname+'_moe'].fillna(0))
-        ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.2)
+        ax.set_xlim(xmin - (xmax - xmin) * 0.0, xmax + (xmax - xmin) * 0.375)
         ax.set_xlabel(titles[ax_idx], fontsize=14)
         def get_ncols(n_labels, n_cols):
             n_cols = int(round(min((1.35*n_cols, n_labels))))
@@ -1364,18 +1372,18 @@ def benchmark_perf_2(
             return n_cols
         if ax_idx == 0:
             color_legend_elements = [Patch(facecolor=color, label=featPrepType2desc[featPrepType]) for featPrepType, color in enumerate(featPrepType2color)]
-            color_legend = legend_ax1.legend(handles=color_legend_elements, title='Feature-preprocessing-technique/classifier combinations', loc='center', fontsize=12, title_fontsize=18,
+            color_legend = legend_ax1.legend(handles=color_legend_elements, title='Feature-preprocessing-technique/classifier combinations', loc='center', fontsize=14-0.1, title_fontsize=17,
                     ncol=get_ncols(len(featPrepType2color), n_subfigs))
         if ax_idx == 1:
             hatch_legend_elements = [Patch(facecolor='white', edgecolor=get_bar_pattern_color(-1), hatch=hatch, label=clfType2desc[clfType]) for clfType, hatch in enumerate(clfType2hatch)]
-            hatch_legend = legend_ax2.legend(handles=hatch_legend_elements, title='Classifiers', loc='center', fontsize=12, title_fontsize=18,
+            hatch_legend = legend_ax2.legend(handles=hatch_legend_elements, title='Classifiers', loc='center', fontsize=14-0.1, title_fontsize=17,
                     ncol=get_ncols(len(clfType2hatch), n_subfigs))
 
     new_max_figheight = 12*(10+len_df)/50.0
     if fig_1.get_figheight() > new_max_figheight: fig_1.set_figheight(new_max_figheight)
 
     main_logger.info(F'''Started layout of {out_fname_fmt.format('with_both')}''')
-    plt.tight_layout()
+    plt.tight_layout(pad=0.5)
     main_logger.info(F'''Started saving PDF figure to {out_fname_fmt.format('with_both')}''')
     plt.savefig(out_fname_fmt.format('with_both')+'.pdf')
     if stage >= 2:
@@ -1394,7 +1402,7 @@ def benchmark_performance(
         metric_name='roc_auc',
         metric_thresholds=[0],
         titles=[''],
-        barh_fmt='%.4g'):
+        barh_fmt='%.3g'):
     
     if metric_name == 'top':
         task_specific_NG_default = 'NG_withoutNumTested'
@@ -1423,7 +1431,7 @@ def benchmark_performance(
         features2,
         ex_feats2,
         labelcol,
-        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, figheight=6*3+2,
+        colname2rocauc_list, metric_name, metric_thresholds, titles, barh_fmt, sort_type=2, #figheight=6*3+2,
         stage=2, task_specific_NG_default=task_specific_NG_default)
 
 def x_allin_y(X, Y):
@@ -1528,7 +1536,8 @@ def add_more(df, fpath):
     return ret
 
 def get_filenames(filepaths, prefix=''):
-    return [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
+    ret = [(prefix + x.split('/')[-1].split('.')[0]) for x in filepaths]
+    return [x.replace('pred_df_', '') for x in ret]
 
 def feat_importance_analysis(train_df, output, features_1, labelcol):
     tasks = args.tasks
@@ -1824,11 +1833,11 @@ def main_train_test(train_na_label_treatment, train_fnames, test_fnames):
                 main_logger.info(F'end analyze_performance_per_hla({df}, {hlacol}, {labelcol}, ``_{test_output}_hla_bench.pdf``)')
         if test_dfs:
             for metric_name, metric_titlename in [
-                    ('patient_n_positives_PCC_R', 'Pearson-R with\nfeature_set='),
-                    ('patient_n_positives_MSE'  , '(1/MSE) with\nfeature_set='),
-                    ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
-                    ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
-                    ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
+                    ('patient_n_positives_PCC_R', 'Pearson-R with\nfeature_set\n'),
+                    ('patient_n_positives_MSE'  , '(1/MSE) with\nfeature_set\n'),
+                    ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set\n'),
+                    ('log_loss',                  '(1/LogLoss) with\nfeature_set\n'),
+                    ('roc_auc',                   'AUC-ROC with\nfeature_set\n')]:
                 benchmark_performance(test_dfs, F'{output}-{test_na_label_treatment}_test_rankInCohort_{metric_name}_traintest_{{}}',
                         features, ex_feats, labelcol, [{}],
                         metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(test_fnames, metric_titlename))
@@ -1916,16 +1925,16 @@ def main_cross_val(cv_na_label_treatment, cv_fnames):
 
     if cv_fnames:
         for metric_name, metric_titlename in [
-                ('patient_n_positives_PCC_R', 'Pearson-R with\nfeature_set='),
-                ('patient_n_positives_MSE'  , '(1/MSE) with\nfeature_set='),
-                ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set='),
-                ('log_loss',                  '(1/LogLoss) with\nfeature_set='),
-                ('roc_auc',                   'AUC-ROC with\nfeature_set=')]:
+                ('patient_n_positives_PCC_R', 'Pearson-R with\nfeature_set\n'),
+                ('patient_n_positives_MSE'  , '(1/MSE) with\nfeature_set\n'),
+                ('patient_averaged_log_loss', '(1/PatientNormLogLoss) with\nfeature_set\n'),
+                ('log_loss',                  '(1/LogLoss) with\nfeature_set\n'),
+                ('roc_auc',                   'AUC-ROC with\nfeature_set\n')]:
             benchmark_performance(cv_pred_dfs, F'{output}_cvPredict_rankInCohort_{metric_name}_{{}}',
                     features, ex_feats, labelcol, [{}],
                     metric_name=metric_name, metric_thresholds=[0], titles=get_filenames(cv_fnames, metric_titlename))
         benchmark_performance(cv_pred_dfs, F'{output}_cvScore_rankInCohort_roc_auc_{{}}',
-            features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set='))
+            features, ex_feats, labelcol, pipename2score_list, titles=get_filenames(cv_fnames, 'AUC-ROC with\nfeature_set\n'))
 
 def main():
     from warnings import simplefilter
