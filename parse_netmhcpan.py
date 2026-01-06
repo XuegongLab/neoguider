@@ -95,6 +95,22 @@ def bio_endpos(s, subpos, sublen, skipchars=['-', '*']):
     else: return -1
 def bio_strfilter(s, skipchars=['-', '*']): return ''.join([c for c in s if (not (c in skipchars))])
 
+def construct_et_fpep(aligner, pep1, pep2):
+    alns = aligner.align(pep1, pep2)
+    best_aln = alns[0]
+    best_faa = format(best_aln)
+    toks = best_faa.split('\n')
+    aln1_str = toks[0] # ret1
+    aln2_str = toks[2] # ret2
+    assert len(aln1_str) == len(aln2_str), F'{len(aln1_str)} == {len(aln2_str)} failed for {aln1_str} and {aln2_str}!'
+    ret = []
+    for aa1, aa2 in zip(aln1_str, aln2_str):
+        if aa1 != '-': ret.append(aa1)
+        else:
+           assert aa2 != '-', F'The alignment pair {aln1_str} and {aln2_str} is invalid!'
+           ret.append(aa2)
+    return ''.join(ret)
+
 def aln_2(aligner, pep1, pep2):
     alns = aligner.align(pep1, pep2)
     best_aln = alns[0]
@@ -152,6 +168,16 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, 
     mtpep_to_fpep_list = collections.defaultdict(list)
     etpep_to_fpep_list = collections.defaultdict(list)
 
+    etpep_to_mtpep_visited = set()
+    mtpep_to_stpep_visited = set()
+    mtpep_to_wtpep_visited = set()
+    
+    wtpep_to_fpep_visited = set()
+    stpep_to_fpep_visited = set()
+    mtpep_to_fpep_visited = set()
+    etpep_to_fpep_visited = set()
+
+
     fpep_to_fid_list = collections.defaultdict(list)
     fid_to_seqs = {}
     
@@ -205,13 +231,21 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, 
                 st_fpep = pep_norm(st_fpep)
                 mt_fpep = pep_norm(mt_fpep)
                 et_fpep = pep_norm(et_fpep)
+                old_et_fpep = et_fpep
+                if mt_fpep != '':
+                    et_fpep = construct_et_fpep(aligner, et_fpep, mt_fpep)
+
                 assert fid not in fid_to_seqs, F'{fid} is duplicated in {fasta_filename}. '
                 fid_to_seqs[fid] = ((wt_fpep, st_fpep), mt_fpep, et_fpep, tpm) # {'WT': wt_fpep, 'MT': mt_fpep, 'ET': et_fpep, 'TPM': tpm}
                 fpep_to_fid_list[et_fpep].append(fid)
                 
                 if is_helper_peptide: continue # INFO_WT_IDX, INFO_MT_IDX, INFO_ET_IDX, INFO_TPM_IDX (NUM_INFO_INDEXES)
-                                
-                assert len(et_fpep) == len(mt_fpep), F'len({et_fpep}) == len({mt_fpep}) failed'
+                
+                # We transformed old_et_fpep because 
+                # this assertion may fail due to 
+                # et_fpep being shorter than mt_fpep to skip unecessary computation
+                assert len(et_fpep) == len(mt_fpep), F'len({et_fpep}) == len({mt_fpep}) failed with {et_fpep} constructed from {old_et_fpep}!'
+                
                 assert len(et_fpep) > 3
                 #aln = pairwise2.align.globalxx(wt_fpep, mt_fpep) # format_alignment
                 #aln.format_alignment()
@@ -261,11 +295,12 @@ def build_pep_ID_to_seq_info_TPM_dic(fasta_filename, aligner, etpep_mhc_to_aff, 
                             mt_wt_pep1_aln, mt_wt_pep2_aln, mt_wt_hamdist, mt_wt_bitdist = aln_2(aligner, mt_pep, wt_fpep)
                             wt_pep = mt_wt_pep2_aln.replace('-', '')
                         
-                        if et_pep != '' and mt_pep != '': 
+                        if et_pep != '' and mt_pep != '' and not (et_pep, mt_pep) in etpep_to_mtpep_visited:
                             etpep_to_mtpep_list_dic[et_pep].append((et_mt_hamdist, et_mt_bitdist, mt_pep, et_mt_pep1_aln, et_mt_pep2_aln))
-                        if mt_pep != '' and st_pep != '': 
+                            etpep_to_mtpep_visited.add((et_pep, mt_pep))
+                        if mt_pep != '' and st_pep != '' and not (mt_pep, st_pep) in mtpep_to_stpep_visited:
                             mtpep_to_stpep_list_dic[mt_pep].append((mt_st_hamdist, mt_st_bitdist, st_pep, mt_st_pep1_aln, mt_st_pep2_aln))
-                        if mt_pep != '' and wt_pep != '': 
+                        if mt_pep != '' and wt_pep != '' and not (mt_pep, wt_pep) in mtpep_to_wtpep_visited:
                             mtpep_to_wtpep_list_dic[mt_pep].append((mt_wt_hamdist, mt_wt_bitdist, wt_pep, mt_wt_pep1_aln, mt_wt_pep2_aln))
                         
                         if wt_pep != '': wtpep_to_fpep_list[wt_pep].append(wt_fpep)
@@ -347,14 +382,15 @@ OUT_HEADER = ['HLA_type',
 def netmhcpan_result_to_df(infilename):
     inheader = None
     rows = []
+    visited_pmhcs = set()
     with open(infilename) as file:
         for lineno, line in enumerate(file):
             if lineno & (lineno+1) == 0:
                 line2 = line.replace("\r", "CarriageReturn").replace("\n", "LineFeed")
-                logging.info(F'{infilename}:start_parsing_line:lineno={lineno},line=({line2})')
+                logging.info(F'{infilename}:start_parsing_line:lineno={lineno},len(visited)={len(visited_pmhcs)},line=({line2})')
             if not line.startswith(' '): continue
             toks = line.strip().split()
-            if toks[0] == 'Pos': 
+            if toks[0] == 'Pos':
                 assert inheader == None or inheader == toks
                 inheader = toks
                 assert len(inheader) == 17 or len(inheader) == 15, F'The header-line {line} is invalid.'
@@ -363,7 +399,9 @@ def netmhcpan_result_to_df(infilename):
                 if len(toks) == (len(inheader) - 1): row = toks + ['NB'] # no-binding
                 if len(toks) == (len(inheader) + 1): row = toks[0:(len(inheader) - 1)] + [toks[(len(inheader))]]
                 row[2] = pep_norm(row[2])
-                rows.append(row)
+                if not (row[2], row[1]) in visited_pmhcs:
+                    rows.append(row)
+                    visited_pmhcs.add((row[2], row[1]))
     logging.info(F'File={infilename} inheader={inheader}')
     df = pd.DataFrame(rows, columns=inheader)
     df = df.sort_values(by=list(df.columns))
@@ -403,7 +441,13 @@ def netmhcpan_df_in2out(df, etpep_mhc_to_aff, et2mt_mt2wt_2tup_pep2pep, et_mt_wt
     
     # def fid_to_dna_rna_equiv_fid(fid): return fid.replace('SNV_R','SNV_D').replace('INS_R', 'INS_D').replace('DEL_R', 'DEL_D').replace('FSV_R', 'FSV_D')
     df = df.loc[df['Peptide'].isin(set(etpep_to_mtpep_list_dic.keys())),:]
+    visited2aff = {}
     for rowno, (identity, etpep, mhc, aff) in enumerate(zip(df['Identity'], df['Peptide'], df['MHC'], df['Aff(nM)'])):
+        if (identity, etpep, mhc) in visited2aff:
+            old_aff = visited2aff[(identity, etpep, mhc)]
+            assert old_aff == aff, F'{(identity, etpep, mhc)} has multiple affinities values ({old_aff} and {aff})!'
+            continue
+        visited2aff[(identity, etpep, mhc)] = aff
         if rowno & (rowno+1) == 0:
             logging.info(F'start_parsing_table:rowno={rowno},nrows=({len(df)})')
         aff = float(aff)
