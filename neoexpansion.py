@@ -2,6 +2,7 @@
 
 import argparse, collections, json, logging, multiprocessing, os, sys
 
+from joblib import Parallel, delayed
 from Bio.Align import substitution_matrices
 #from Bio.SubsMat import MatrixInfo
 
@@ -49,6 +50,17 @@ def alnscore_penalty(sequence1, neighbour1, blosum62):
             ret += scoremax - score
     return ret
 
+def calc_editdist(A, B):
+    ret = 0
+    left = len(A) + 1
+    right = -1
+    for i, (a, b) in enumerate(zip(A, B)):
+        if (a!=b):
+            ret += 1
+            left = min((left, i))
+            right = max((right, i))
+    return ret, left, right
+
 def pep2simpeps(bioseq, nbits, editdist, blosum62, skipped_positions=[]):
     queue = [ bioseq ]
     seq2penalty = { bioseq : 0 }
@@ -57,13 +69,13 @@ def pep2simpeps(bioseq, nbits, editdist, blosum62, skipped_positions=[]):
         for neighbour in get_neighbour_seqs(nextseq, skipped_positions):
             # neighbour is the original sequence whose TCR can cross react with bioseq
             penalty = alnscore_penalty(neighbour, bioseq, blosum62)
-            ed = calc_editdist(neighbour, bioseq)
+            ed, left, right = calc_editdist(neighbour, bioseq)
             if not neighbour in seq2penalty and penalty * 0.5 <= nbits * (1.0 + sys.float_info.epsilon) and ed <= editdist * (1.0 + sys.float_info.epsilon):
                 queue.append(neighbour)
                 seq2penalty[neighbour] = penalty * 0.5
     return seq2penalty
 
-def calc_editdist(A, B): return sum((0 if (a==b) else 1) for (a, b) in zip(A, B))
+#def calc_editdist(A, B): return sum((0 if (a==b) else 1) for (a, b) in zip(A, B))
 
 def faa2newfaa(arg):
     blosum62 = substitution_matrices.load("BLOSUM62")
@@ -85,9 +97,15 @@ def faa2newfaa(arg):
         new_ID = hdr.split()[0] + (('_' + str(i)) if (i > 0) else '')
         pep_comment = ' '.join([tok for (j, tok) in enumerate(hdr.split()) if j > 0])        
         assert len(pep) == len(simpep), F'len({pep}) == len({simpep}) failed'
-        curr_editdist = calc_editdist(pep, simpep)
+        curr_editdist, left, right = calc_editdist(pep, simpep)
+        if curr_editdist > 0.5:
+            left = max((0, left - 12))
+            right = min((len(pep), right + 1 + 12))
+        else:
+            left = 0
+            right = len(pep)
         new_hdr = (F'{new_ID} {pep_comment} SOURCE={pep} MAX_BIT_DIST={seq2penalty[simpep]} EDIT_DIST={curr_editdist}')
-        new_seq = (simpep)
+        new_seq = (simpep[left:right])
         #if curr_editdist <= editdist: 
         ret.append((new_hdr, new_seq))
     return ret
@@ -194,7 +212,7 @@ def main():
     parser = argparse.ArgumentParser(description = 'Experimental work (please do not use output sequences with MAX_BIT_DIST>0 for now). ',
             formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-b', '--nbits', type = float, help = 'max hamming distance by the number of bits. If this param is set, then do not expand by --reference', default = 0.75)
-    parser.add_argument('-c', '--ncores', type = int, help = 'number of processes to use for computation. ', default = 8)
+    parser.add_argument('-c', '--ncores', type = int, help = 'number of processes to use for computation. ', default=16)
     parser.add_argument('-e', '--editdist', type = float, help = 'max edit distance. ', default = 1.5)
     parser.add_argument('-r', '--reference', type = str, help = 'reference proteome fasta to blast against to match neo-peptides with self-peptides. If this param is set, then do not expand by --nbits. ', default = '')
     parser.add_argument('-t', '--tmp', type = str, help = 'temporary file path. ', default = '')
@@ -216,10 +234,13 @@ def main():
         process_WT(hdr_pep_list)
         exit(0)
     if args.ncores >= 0:
-        with multiprocessing.Pool(args.ncores) as p:
-            new_hdr_seq_list_list = p.map(faa2newfaa, hdr_pep_list, chunksize = 10)
+        new_hdr_seq_list_list = Parallel(n_jobs=args.ncores)(
+            delayed(faa2newfaa)(item) for item in hdr_pep_list
+        )
+        #with multiprocessing.Pool(args.ncores) as p:
+        #    new_hdr_seq_list_list = p.map(faa2newfaa, hdr_pep_list, chunksize=None)
     else:
-            new_hdr_seq_list_list =   map(faa2newfaa, hdr_pep_list)
+        new_hdr_seq_list_list =   map(faa2newfaa, hdr_pep_list)
     for new_hdr_seq_list in new_hdr_seq_list_list:
         for new_hdr, new_seq in new_hdr_seq_list:
             print(new_hdr)
