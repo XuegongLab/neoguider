@@ -9,7 +9,8 @@ def calc_nbits(count, totcount):
     assert count <= totcount
     if count == 0: return 0
     p = count / totcount
-    return -p * np.log2(p)
+    return -np.log2(p)
+    # return -p * np.log2(p)
 
 def main():
     parser = argparse.ArgumentParser(description='This program takes as input a motif file and outputs a TSV file. ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)    
