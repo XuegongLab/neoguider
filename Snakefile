@@ -227,9 +227,67 @@ os.system(f'echo {sys.argv} > {pipeline_out_final}.logdir/{script_start_str}_cmd
 save_version_msg('begin')
 atexit.register(exec_cmds_before_exit)
 
-
 rule all:
     input: pipeline_out_final
+
+tumor_sc_fastq_files1 = config.get('tumor_sc_fastq_files1', [])
+tumor_sc_fastq_files2 = config.get('tumor_sc_fastq_files2', [])
+tumor_sc_bam_files = config.get('tumor_sc_bam_files', [])
+sccnv = os.path.sep.join([RES, 'scCNV'])
+tumor_sc_subclones_json = os.path.sep.join([sccnv, 'subclones.json'])
+if tumor_sc_fastq_files1 and not tumor_sc_fastq_files2:
+    tumor_sc_fastq_files2 = ['' for _ in tumor_sc_fastq_files1]
+if tumor_sc_fastq_files1 and not tumor_sc_bam_files:
+    tumor_sc_bam_files = [os.path.sep.join([sccnv, fq.split(os.path.sep)[-1].rsplit('.', 1)[0] + '.bam']) for fq in tumor_sc_fastq_files1]
+HG19_REF = os.path.sep.join([script_basedir, 'software', 'ginkgo', 'genomes', 'hg19', 'original', 'hg19.fa'])
+sccnv_parentdir = os.path.abspath(os.path.sep.join([RES, 'scCNV']))
+# sccnv_tmpdir = os.path.sep.join([RES, 'scCNV', 'tmp'])
+sccnv_resdir = os.path.sep.join([sccnv_parentdir, 'res'])
+# os.makedirs(sccnv_tmpdir, exist_ok=True)
+os.makedirs(sccnv_resdir, exist_ok=True)
+
+rule DNA_tumor_sc_CNV_detection:
+    input: tumor_sc_fastq_files1 # purity < 1.0
+    output: tumor_sc_subclones_json
+    resources: mem_mb = bwa_mem_mb
+    threads: bwa_nthreads
+    run:
+        if len(tumor_sc_fastq_files1) > 0:
+            for fq1, fq2, bam in zip(tumor_sc_fastq_files1, tumor_sc_fastq_files2, tumor_sc_bam_files):
+                #shell('''bwa mem -K 80000000 -t {bwa_nthreads} {HG19_REF} {fq1} {fq2} | {samtools_bin} sort -@ {samtools_nthreads} -o {bam}''')
+                #shell('''bedtools bamtobed -i {bam} > {bam}.bed''')
+                shell('echo Finished generating {bam}.bed')
+            with open(f'{sccnv_parentdir}/cells.list', 'w') as cellslist_file:
+                for bam in tumor_sc_bam_files:
+                    samplename = bam.split(os.path.sep)[-1] # .rsplit('.', 1)[0]
+                    cellslist_file.write(samplename + '.bed\n')
+            ginkgo_sh = os.path.sep.join([script_basedir, 'software', 'ginkgo', 'cli', 'ginkgo.sh'])
+            clustering_py = os.path.sep.join([script_basedir, 'run_sc_clustering.py'])
+            #shell(f'''cd {sccnv_parentdir} && conda run -n neo_cnv_env time bash -evx {ginkgo_sh} --input {sccnv_parentdir} --genome hg19 --binning variable_175000_48_bwa --cells {sccnv_parentdir}/cells.list''')
+            shell(f'''python {clustering_py} -i {sccnv_parentdir}/SegCopy -o {sccnv_parentdir}/SegCopy_subclones.json ''')
+            cluster2filenames = {}
+            with open(f'{sccnv_parentdir}/SegCopy_subclones.json') as f:
+                cluster2filenames = json.load(f)
+            cluster2vcfgz = {}
+            for c, filenames in cluster2filenames.items():
+                pathnames = [os.path.sep.join([sccnv_parentdir, f]) for f in filenames]
+                subclone_bam = f'{sccnv_resdir}/{c}.bam'
+                subclone_vcfgz = f'{sccnv_resdir}/{c}.vcf.gz'
+                #subclone_reheader = f'{sccnv_resdir}/{c}.reheader.tsv'
+                #with open(subclone_reheader, 'w') as file:
+                #    for chridx in range(0, 22 ,1):
+                #        file.write(f'chr{chridx+1}\t{chridx+1}\n')
+                shell(f'''{samtools_bin} merge -f -@ {samtools_nthreads} {subclone_bam} {" ".join(pathnames)} ''')
+                shell(f'''{samtools_bin} index -@ {samtools_nthreads} {subclone_bam} ''')
+                shell(f' {samtools_bin} view -hu -@ {samtools_nthreads} -F 0xD04 {subclone_bam} '
+                      f' | bcftools mpileup --threads {bcftools_nthreads} -a DP,AD -d 9999 -f {REF} -q 0 -Q 0 - -Ou -o - '
+                      #f' | bcftools annotate --rename-chrs {subclone_reheader} - -Oz -o {subclone_vcfgz}'
+                      f' | bcftools view - -Oz -o {subclone_vcfgz}'
+                      f' && bcftools index --threads {bcftools_nthreads} -ft {subclone_vcfgz}')
+                cluster2vcfgz[c] = subclone_vcfgz
+            with open(tumor_sc_subclones_json, 'w') as f: json.dump(cluster2vcfgz, f, indent=2)
+        else:
+            with open(tumor_sc_subclones_json, 'w') as f: json.dump({}, f, indent=2)
 
 hla_fq_r1_fname = F'{PREFIX}.rna_hla_r1.fastq.gz'
 hla_fq_r2_fname = F'{PREFIX}.rna_hla_r2.fastq.gz'
@@ -446,7 +504,22 @@ rule DNA_normal_alignment:
         ' | {samtools_bin} sort -m 4000M -T {dna_normal_bam}.tmp2 -@ {samtools_nthreads} -o - -'
         ' | {samtools_bin} markdup -@ {samtools_nthreads} - {dna_normal_bam}'
         ' && {samtools_bin} index -@ {samtools_nthreads} {dna_normal_bam}'
-    
+
+SNP_VCF = config.get('SNP_VCF', os.path.sep.join([script_basedir, 'database', 'All_20180423.vcf.gz']))
+dna_cnv_pref = F'''{fifo_path_prefix}/{PREFIX}_DNA_tumor_DNA_normal_cnv_{script_start_datetime.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}'''
+dna_cnv_vcf  = F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal_cnv.vcf.gz'
+dna_cnv_tbi = f'{dna_cnv_vcf}.tbi'
+rule DNA_tumor_bulk_CNV_detection:
+    input: dna_tumor_bam, dna_tumor_bai, dna_normal_bam, dna_normal_bai, SNP_VCF
+    output: dna_cnv_vcf, dna_cnv_tbi
+    params: tmp_id = lambda wildcards: f"{script_start_datetime.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
+    resources: mem_mb = 4000
+    threads: 1
+    run:
+        shell(f'''source $(conda info --base)/etc/profile.d/conda.sh ; set -evx ; conda activate neo_cnv_env '''
+        f''' && cnv_facets.R -t {dna_tumor_bam} -n {dna_normal_bam} -vcf {SNP_VCF} -o {dna_cnv_pref} '''
+        f''' && cp {dna_cnv_pref}.vcf.gz {dna_cnv_vcf} && bcftools index -ft {dna_cnv_vcf}''')
+
 gatk_jar=F'{script_basedir}/software/gatk-4.3.0.0/gatk-package-4.3.0.0-local.jar'
 
 dna_vcf=F'{snvindel_dir}/{PREFIX}_DNA_tumor_DNA_normal.vcf'
@@ -814,7 +887,7 @@ logging.debug(F'features_extracted_from_reads_tsv = {features_extracted_from_rea
 #ruleorder: PrioPrep_with_all_TCRs_from_reads > PrioPrep_with_all_TCRs_from_pMHCs
 
 rule PrioPrep_with_all_TCRs_from_reads:
-    input: iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt,
+    input: dna_cnv_vcf, dna_cnv_tbi, tumor_sc_subclones_json, iedb_path, homologous_netmhcpan_txt, homologous_netmhcstabpan_txt,
         dna_snvindel_info_file, rna_snvindel_info_file, fusion_info_file, 
         homologous_prime_txt, hla_short2long_json, homologous_mhcflurry_txt,
         # splicing_info_file
@@ -823,13 +896,17 @@ rule PrioPrep_with_all_TCRs_from_reads:
         shell('python {script_basedir}/parse_netmhcpan.py -f {homologous_peptide_fasta} -n {homologous_netmhcpan_txt} -o {homologous_netmhcpan_filtered_tsv} '
               '-a {binding_affinity_filt_thres} -l {prep_peplens} --keep-identical-MT-and-WT {keep_identical_MT_and_WT} --keep-identical-ET-and-WT {keep_identical_ET_and_WT} --rescue-MT-from-binding-affinity-thres {rescue_MT_from_binding_affinity_thres}')
         if variantcaller == 'mutect2':
-            call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
+            call_with_infolog(F'python {script_basedir}/gather_results.py '
+            f' --dna-cnv-vcf {dna_cnv_vcf} --tumor-sc-subclones-json {tumor_sc_subclones_json} '
+            f' --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' #' --passflag 0x0 '
             F''' {prioritization_function_params.replace('_', '-')}''')
         else:
-            call_with_infolog(F'python {script_basedir}/gather_results.py --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
+            call_with_infolog(F'python {script_basedir}/gather_results.py '
+            f' --dna-cnv-vcf {dna_cnv_vcf} --tumor-sc-subclones-json {tumor_sc_subclones_json} '
+            f' --netmhcstabpan-file {homologous_netmhcstabpan_txt} -i {homologous_netmhcpan_filtered_tsv} -I {iedb_path} '
             F' --prime-file {homologous_prime_txt} --hla-short2long {hla_short2long_json} {homologous_mhcflurry_param} '
             F' -D {dna_snvindel_info_file} -R {rna_snvindel_info_file} -F {fusion_info_file} -m {motif_file} ' # ' -S {splicing_info_file} '
             F' -o {features_extracted_from_reads_tsv} -t {alteration_type} ' # ' --passflag 0x0 '
