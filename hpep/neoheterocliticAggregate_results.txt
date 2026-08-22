@@ -1,0 +1,81 @@
+    A   Av  C   Cv  D   Dv  E   Ev  F  ...   Gv  H   Hv  I   Iv  K   Kv  L   Lv
+0   A   10  C   10  D   10  E   10  F  ...   10  H   10  I   10  K   10  L   10
+1   S   45  V   55  N   35  Q   33  L  ...   28  Q   20  L   25  R   27  I   33
+2   T   48  T   65  E   40  N   42  Y  ...   42  E   38  M   45  Q   60  M   40
+3   P   53  A   67  Q   62  D   47  I  ...   47  N   62  F   52  H   68  F   45
+4   G   57  S   73  T   72  H   53  M  ...   63  R   82  V   52  N   72  V   55
+5   C   93  P   80  S   77  T   83  V  ...   70  K   87  Y   88  E   75  Y   82
+6   V   95  I   99  H   78  K   87  W  ...   73  P   90  T  103  D   85  H   97
+7   D  100  Y  102  G   88  P   90  H  ...   83  D   92  H  113  M   92  Q  105
+8   M  100  N  107  P   92  R  105  C  ...   93  S  105  A  115  T  105  W  110
+9   N  102  F  110  A   93  S  105  T  ...   98  T  105  C  117  S  113  T  113
+10  E  113  G  110  K   95  V  110  R  ...  115  Y  110  K  120  P  115  A  118
+11  Q  113  M  110  R  115  G  120  A  ...  120  M  112  P  120  I  122  K  122
+12  H  123  H  113  C  120  A  122  K  ...  135  V  122  Q  122  L  127  P  122
+13  Y  130  D  120  V  132  M  133  P  ...  138  L  133  R  130  Y  128  R  132
+14  I  137  L  132  M  143  I  150  S  ...  142  I  137  S  132  V  137  C  137
+15  L  143  E  137  Y  158  C  152  Q  ...  155  A  138  E  140  A  143  E  142
+16  W  143  Q  137  I  160  L  153  N  ...  163  G  138  N  143  G  143  N  145
+17  F  158  W  150  L  167  Y  157  E  ...  168  F  153  W  147  F  148  S  153
+18  K  158  R  163  W  180  F  178  G  ...  173  C  172  D  157  W  155  G  168
+19  R  177  K  170  F  183  W  190  D  ...  182  W  175  G  170  C  175  D  172
+
+[20 rows x 20 columns]
+MixMHCPred_aff               0.979  95% CI [0.956, 0.999]  SD 0.030  min 0.933  p 0.0156
+MixMHCpred_motif             0.916  95% CI [0.782, 0.993]  SD 0.157  min 0.600  p 0.0156
+PRIME_immunogenicity         0.956  95% CI [0.900, 0.998]  SD 0.069  min 0.833  p 0.0156
+MHCmotifAtlas_motif          0.978  95% CI [0.946, 1.000]  SD 0.040  min 0.900  p 0.0156
+MHCmotifAtlas_motif_diff     0.804  95% CI [0.579, 0.958]  SD 0.267  min 0.300  p 0.0312
+NetMHCpan_aff                0.945  95% CI [0.901, 0.984]  SD 0.059  min 0.867  p 0.0156
+NetMHCpan_aff_ratio          0.817  95% CI [0.662, 0.957]  SD 0.208  min 0.467  p 0.0312
+netMHCpan_EL                 0.949  95% CI [0.886, 0.993]  SD 0.077  min 0.800  p 0.0156
+MHCflurry_aff                0.959  95% CI [0.916, 0.993]  SD 0.053  min 0.867  p 0.0156
+MHCflurry_presentation       0.964  95% CI [0.923, 0.991]  SD 0.049  min 0.867  p 0.0156
+Dist_bit                     0.279  95% CI [0.185, 0.401]  SD 0.152  min 0.133  p 0.9844
+Dist_conserv                 0.374  95% CI [0.196, 0.552]  SD 0.251  min 0.000  p 0.8906
+MixMHCPred_aff               0.784  95% CI [0.735, 0.845]  SD 0.082  min 0.689  p 0.0078
+MixMHCpred_motif             0.777  95% CI [0.724, 0.832]  SD 0.078  min 0.678  p 0.0078
+PRIME_immunogenicity         0.804  95% CI [0.749, 0.856]  SD 0.079  min 0.691  p 0.0078
+MHCmotifAtlas_motif          0.776  95% CI [0.728, 0.828]  SD 0.073  min 0.693  p 0.0078
+MHCmotifAtlas_motif_diff     0.776  95% CI [0.729, 0.828]  SD 0.073  min 0.693  p 0.0078
+NetMHCpan_aff                0.756  95% CI [0.609, 0.886]  SD 0.206  min 0.462  p 0.0234
+NetMHCpan_aff_ratio          0.756  95% CI [0.608, 0.886]  SD 0.206  min 0.462  p 0.0234
+netMHCpan_EL                 0.751  95% CI [0.608, 0.872]  SD 0.194  min 0.439  p 0.0234
+MHCflurry_aff                0.803  95% CI [0.695, 0.896]  SD 0.148  min 0.540  p 0.0078
+MHCflurry_presentation       0.785  95% CI [0.664, 0.888]  SD 0.165  min 0.496  p 0.0156
+Dist_bit                     0.452  95% CI [0.377, 0.550]  SD 0.129  min 0.316  p 0.8906
+Dist_conserv                 0.716  95% CI [0.607, 0.837]  SD 0.167  min 0.525  p 0.0078
+
+--- paired comparisons across antigens (one-sided, Holm) ---
+MixMHCPred_aff             > MHCflurry_aff              delta -0.018  p 0.7656  Holm 1.0000
+MixMHCPred_aff             > NetMHCpan_aff              delta +0.028  p 0.2344  Holm 1.0000
+MixMHCPred_aff             > netMHCpan_EL               delta +0.033  p 0.3766  Holm 1.0000
+MixMHCPred_aff             > MHCflurry_presentation     delta -0.001  p 0.7109  Holm 1.0000
+MHCmotifAtlas_motif        > NetMHCpan_aff              delta +0.021  p 0.4062  Holm 1.0000
+MixMHCpred_motif           > NetMHCpan_aff              delta +0.021  p 0.4062  Holm 1.0000
+MixMHCPred_aff             > Dist_bit                   delta +0.332  p 0.0156  Holm 0.1250
+MixMHCPred_aff             > Dist_conserv               delta +0.069  p 0.2344  Holm 1.0000
+
+--- across-antigen SD: PWM 0.077 vs NN ensemble 0.184, Mann-Whitney p = 0.0058 ---
+
+--- leave-one-antigen-out: best PWM minus best NN ensemble ---
+exclude AH1-SPSYVYHQF              antigens  6  best PWM 0.823  best NN 0.846  difference -0.024
+exclude CEA-IMIGVLVGV              antigens  6  best PWM 0.809  best NN 0.781  difference +0.028
+exclude HBVpol-GLSRYVARL           antigens  6  best PWM 0.816  best NN 0.797  difference +0.019
+exclude HIVpol-ILKEPVHGV           antigens  6  best PWM 0.786  best NN 0.777  difference +0.009
+exclude MAGEA2-YLQLVFGIEV          antigens  6  best PWM 0.800  best NN 0.820  difference -0.020
+exclude MAGEA3-KVAELVHFL           antigens  6  best PWM 0.791  best NN 0.786  difference +0.005
+exclude WT1-RMFPNAPYL              antigens  6  best PWM 0.802  best NN 0.810  difference -0.007
+
+--- leave-one-study-out: best PWM minus best NN ensemble ---
+exclude He                         antigens  5  best PWM 0.825  best NN 0.863  difference -0.039
+exclude Tangri                     antigens  2  best PWM 0.775  best NN 0.671  difference +0.104
+
+--- MHC-allotype-stratified dataset-level means ---
+H2-Db          n=2   MixMHCPred_aff=0.812  MHCmotifAtlas_motif=0.827  NetMHCpan_aff=0.812  MHCflurry_aff=0.761
+H2-Ld          n=5   MixMHCPred_aff=0.734  MHCmotifAtlas_motif=0.714  NetMHCpan_aff=0.525  MHCflurry_aff=0.540
+HLA-A0201      n=5   MixMHCPred_aff=0.789  MHCmotifAtlas_motif=0.779  NetMHCpan_aff=0.791  MHCflurry_aff=0.863
+
+--- anchor datasets: assayed versus enumerated negatives ---
+assayed      n=2   MHCmotifAtlas_motif=0.950  MixMHCPred_aff=0.967  NetMHCpan_aff=0.883  MHCflurry_aff=0.917
+enumerated   n=12  MHCmotifAtlas_motif=0.990  MixMHCPred_aff=0.981  NetMHCpan_aff=0.968  MHCflurry_aff=0.973
