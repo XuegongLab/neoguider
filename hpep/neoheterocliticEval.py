@@ -167,7 +167,7 @@ def fixed_pos(n): return n
 
 
 METHODS = [
-        'MixMHCPred_aff',
+        'MixMHCpred_aff',
         'MixMHCpred_motif', 
         
         'PRIME_immunogenicity',
@@ -224,7 +224,7 @@ def fill_vals(df3, HLA, motif_dir):
     df3['Identity3'] = df3['Identity'].str.replace('_', '/')
     df3 = df3.sort_values('Identity3') # 
     
-    df3['MixMHCPred_aff']        = df3['PRIME_BArank'].rank(method='first', ascending=True)
+    df3['MixMHCpred_aff']        = df3['PRIME_BArank'].rank(method='first', ascending=True)
     df3['MixMHCpred_motif']      = df3['ETinfoFromMMP'].rank(method='first', ascending=False)    
     
     df3['PRIME_immunogenicity']  = df3['PRIME_rank'].rank(method='first', ascending=True)
@@ -514,25 +514,25 @@ def main():
 # https://www.science.org/doi/10.1126/scitranslmed.aba4380
 'a2.CALR_MUT.H-2-Kb.RRMMRTK-LQGWTEA_positions-all': [
     (BY_MHC, FROM_TRIAL_1, IN_MOUSE, WITH_COMMON_MHC, AT_EVERY_POS, 2022),
-    ('Giroux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RRMMRTK[..]LQGWTEA', 'Neo'),
+    ('Gigoux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RRMMRTK[..]LQGWTEA', 'Neo'),
     [x.strip().upper() for x in '''RMMRfKMRM'''.strip().split() if not x.startswith('#')],
     expand_substrings('RRMMRTKMRMRRMRRTRRKMRRKMSPARPRTSCREACLQGWTEA', 'all', 9)
 ],
 'a2.CALR_MUT.H-2-Kb.RRMMRTK-LQGWTEA_position-6': [
     (BY_MHC, FROM_TRIAL_1, IN_MOUSE, WITH_COMMON_MHC, fixed_pos(6), 2022),
-    ('Giroux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RRMMRTK[..]LQGWTEA~at~position~6', 'Neo'),
+    ('Gigoux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RRMMRTK[..]LQGWTEA~at~position~6', 'Neo'),
     [x.strip().upper() for x in '''RMMRfKMRM'''.strip().split() if not x.startswith('#')],
     expand_substrings('RRMMRTKMRMRRMRRTRRKMRRKMSPARPRTSCREACLQGWTEA', 6, 9)
 ],
 'a2.CALR_MUT.H-2-Kb.RMMRTKMRM_positions-all': [
     (BY_MHC, FROM_TRIAL_1, IN_MOUSE, WITH_COMMON_MHC, AT_EVERY_POS, 2022),
-    ('Giroux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RMMRTKMRM', 'Neo'),
+    ('Gigoux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RMMRTKMRM', 'Neo'),
     [x.strip().upper() for x in '''RMMRfKMRM'''.strip().split() if not x.startswith('#')],
     expand_string('RMMRTKMRM', 'all')
 ],
 'a2.CALR_MUT.H-2-Kb.RMMRTKMRM_position-5': [
     (BY_MHC, FROM_TRIAL_1, IN_MOUSE, WITH_COMMON_MHC, fixed_pos(5), 2022),
-    ('Giroux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RMMRTKMRM~at~position~5', 'Neo'),
+    ('Gigoux et al.', 'H2-Kb', 'CALR_MUT', 'One~mismatch~from~RMMRTKMRM~at~position~5', 'Neo'),
     [x.strip().upper() for x in '''RMMRfKMRM'''.strip().split() if not x.startswith('#')],
     expand_string('RMMRTKMRM', 5)
 ],
@@ -670,7 +670,7 @@ def main():
         RMFPNAwYL
         '''.strip().split() if not x.startswith('#')
     ], 
-    expand_string('RMFPNAPYL', [7, 8])
+    expand_string('RMFPNAPYL', [7, 8]) # Visual inspection of Fig S12 shows that only three peptides at position 8 passed the threshold (the peptide at position 7 almost passed).
 ],
 
 # https://doi.org/10.1158/2767-9764.CRC-23-0384

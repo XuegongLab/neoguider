@@ -56,7 +56,7 @@ sys.path.append(script_dir)
 try:
     from neoheterocliticEval import METHODS, add_asterisks
 except ImportError:                                    # allow standalone use
-    METHODS = ['MixMHCPred_aff', 'MixMHCpred_motif', 'PRIME_immunogenicity',
+    METHODS = ['MixMHCpred_aff', 'MixMHCpred_motif', 'PRIME_immunogenicity',
                'MHCmotifAtlas_motif', 'MHCmotifAtlas_motif_diff',
                'NetMHCpan_aff', 'NetMHCpan_aff_ratio', 'netMHCpan_EL',
                'MHCflurry_aff', 'MHCflurry_presentation',
@@ -68,7 +68,7 @@ except ImportError:                                    # allow standalone use
 # reported output: a position weight matrix scores a peptide as a sum of
 # independent per-residue terms, whereas a neural-network ensemble models the
 # peptide jointly and exposes only an aggregate.
-PWM_METHODS = ['MixMHCPred_aff', 'MixMHCpred_motif', 'PRIME_immunogenicity',
+PWM_METHODS = ['MixMHCpred_aff', 'MixMHCpred_motif', 'PRIME_immunogenicity',
                'MHCmotifAtlas_motif', 'MHCmotifAtlas_motif_diff']
 NN_METHODS  = ['NetMHCpan_aff', 'NetMHCpan_aff_ratio', 'netMHCpan_EL',
                'MHCflurry_aff', 'MHCflurry_presentation']
@@ -241,7 +241,7 @@ def mhc_stratified(tidy, datasets):
         rows.append(row)
         print(F'{allotype:<14} n={wide.shape[0]:<3} ' + '  '.join(
             F'{m}={wide[m].mean():.3f}' for m in
-            ['MixMHCPred_aff', 'MHCmotifAtlas_motif', 'NetMHCpan_aff', 'MHCflurry_aff']
+            ['MixMHCpred_aff', 'MHCmotifAtlas_motif', 'NetMHCpan_aff', 'MHCflurry_aff']
             if m in wide.columns))
     return pd.DataFrame(rows)
 
@@ -278,14 +278,14 @@ def main():
         summarize(wide_facing, 0.5, 'TCR-facing ROC-AUC',
                   args.n_boot, rng, summary_rows)
 
-        pairs = [('MixMHCPred_aff', 'MHCflurry_aff'),
-                 ('MixMHCPred_aff', 'NetMHCpan_aff'),
-                 ('MixMHCPred_aff', 'netMHCpan_EL'),
-                 ('MixMHCPred_aff', 'MHCflurry_presentation'),
+        pairs = [('MixMHCpred_aff', 'MHCflurry_aff'),
+                 ('MixMHCpred_aff', 'NetMHCpan_aff'),
+                 ('MixMHCpred_aff', 'netMHCpan_EL'),
+                 ('MixMHCpred_aff', 'MHCflurry_presentation'),
                  ('MHCmotifAtlas_motif', 'NetMHCpan_aff'),
                  ('MixMHCpred_motif', 'NetMHCpan_aff'),
-                 ('MixMHCPred_aff', 'Dist_bit'),
-                 ('MixMHCPred_aff', 'Dist_conserv')]
+                 ('MixMHCpred_aff', 'Dist_bit'),
+                 ('MixMHCpred_aff', 'Dist_conserv')]
         tables['paired'] = paired_tests(wide_facing, pairs)
         family_consistency(wide_facing)
         tables['loao'] = leave_one_out(tidy, facing, antigen_of, 'antigen')
@@ -301,7 +301,7 @@ def main():
                 index='dataset', columns='method', values='value')
             print(F'{label:<12} n={len(subset):<3} ' + '  '.join(
                 F'{m}={wide[m].mean():.3f}' for m in
-                ['MHCmotifAtlas_motif', 'MixMHCPred_aff', 'NetMHCpan_aff', 'MHCflurry_aff']
+                ['MHCmotifAtlas_motif', 'MixMHCpred_aff', 'NetMHCpan_aff', 'MHCflurry_aff']
                 if m in wide.columns))
 
     if args.scc:

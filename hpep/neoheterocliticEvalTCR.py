@@ -38,7 +38,7 @@ df31 = pd.read_excel('mmc3.xlsx', sheet_name='Individual APL screening', header=
 df33 = pd.read_excel('mmc3.xlsx', sheet_name='Normalized data', header=1)
 df3tcrs = 'B11	B15	B3	F4	E8	B13	H6	G6	F5	H5	B2	B6	B5	E9	E4	G2	B16	B14	B7	B10'.split() # the positive control 'OTI' is excluded
 
-df31['ET_pep'] = [x[1] for x in df21['Sequence'].str.split('-')]
+df31['ET_pep'] = [x[1] for x in df31['Sequence'].str.split('-')] # df21 and df31 have the same Sequence column
 df3end = pd.concat([df31[['Sequence', 'ET_pep']], df33[df3tcrs]], axis=1)
 df3end[df3tcrs] = df3end[df3tcrs] / df3end.iloc[-1][df3tcrs]
 df3end['Signal'] = df3end[df3tcrs].sum(axis=1) / len(df3tcrs)
